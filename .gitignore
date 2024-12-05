@@ -1,6 +1,8 @@
 #files, data, ect
 *.csv
 *.txt
+*.png
+
 
 # History files
 .Rhistory
