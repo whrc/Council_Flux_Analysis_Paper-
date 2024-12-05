@@ -263,28 +263,28 @@ sum(df_2017$FCH4_F_no_NAs)
 #Creates numeric timestamp with the unit of minutes to integrate over half-hourly data
 
 #this references the half hourly increments and takes the diff (so 30 min increments)
-df_2022 <- df_2022 %>%
+df_2019 <- df_2019 %>%
   mutate(time_minutes = as.numeric(difftime(TIMESTAMP, min(TIMESTAMP), units = "mins")))
-df_2022$TIMESTAMP
+df_2019$TIMESTAMP
 
 # Units start as micro-moles of CO2/(m^2/s), converted to Grams of C/m^2/minute, integrated over minutes to get Grams of C/m^2
 
 #creating new column of net C budget in order to make the annual budget bar plots
 #net CO2 
-df_2022 <- df_2022 %>%
+df_2019 <- df_2019 %>%
   mutate(FC_F_no_NAs = ifelse(is.na(FC_F), 0, FC_F * 60 * (1/1000000) * 12))
 
 #Net CO2 flux in g/m2
-net_CO2 <- trapz(df_2022$time_minutes, df_2022$FC_F_no_NAs)
+net_CO2 <- trapz(df_2019$time_minutes, df_2019$FC_F_no_NAs)
 
 # Units start as nano-moles of CH4/(m^2/s), converted to Grams of C/m^2/minute, integrated over minutes to get Grams of C/m^2
 
 #Net CH4 Flux
-df_2022 <- df_2022 %>%
+df_2019 <- df_2019 %>%
   mutate(FCH4_F_no_NAs = ifelse(is.na(FCH4_F), 0, FCH4_F*60*(1/1000000000)*12))
 
 
-net_CH4 <- trapz(df_2022$time_minutes, df_2022$FCH4_F_no_NAs)
+net_CH4 <- trapz(df_2019$time_minutes, df_2019$FCH4_F_no_NAs)
 
 # Used IPCC Sixth Assessment Report (AR6) global warming potentials, 100 year time period - could use paper gwp* or delta equation for future analysis
 
@@ -293,14 +293,14 @@ sum = net_CO2+net_CH4
 
 
 #Dataframe created to generate bar graph
-net_wp_2022 <- data.frame(
+net_wp_2019 <- data.frame(
   Category = c("CO2", "CH4", "Total"),
   Value = c(round(net_CO2, 2), round(net_CH4, 2), round(sum, 2) 
 ))
 
 #Plot here
 
-ggplot(net_wp_2022, aes(x = Category, y = Value)) +
+annual_Cbudget_2019 <- ggplot(net_wp_2019, aes(x = Category, y = Value)) +
   theme_bw()+
   geom_bar(stat = "identity", position = "dodge", fill = "turquoise3") +
   geom_hline(yintercept=0, colour = "black")+
@@ -308,23 +308,38 @@ ggplot(net_wp_2022, aes(x = Category, y = Value)) +
     x = "",
     #y = expression(FCH4~(gCH[4]-C/m^2/s)),
     y = expression(Net~Carbon~Flux~(gC~m^-2~y^-1))) +
-  geom_label(aes(label = Value), vjust = ifelse(net_wp_2022$Value >= 0, -0.7, 1.5), colour = "black", fill ="white")+
+  geom_label(aes(label = Value), vjust = ifelse(net_wp_2019$Value >= 0, -0.7, 1.5), colour = "black", fill ="white")+
   scale_y_continuous(
-    #limits=c(-50, 20),
-     #breaks = seq(-20, 20, 5),  # changing for 2022 
-    #limits = c(-20, 20))+ #changing for year 2022
+     #breaks = seq(-5, 5, 1.5),  # changing for 2019 
+   # limits = c(-2, 5))+ #changing for year 2019
       breaks = seq(-80, 20, 10),  # Set limits for the primary axis - other years go up to -73
     limits = c(-80, 20))+ 
-  labs(title = "Cumulative Annual Carbon Budget for 2022") +#for 2022
-#labs(title = "2022")
+  labs(title = "Cumulative Annual Carbon Budget for 2019") +#for 2019
+#labs(title = "2019")
    theme(
     axis.title.x = element_text(size = 16, face = "bold"),  # Make x-axis title larger and bold
     axis.title.y = element_text(size = 16, face = "bold"),  # Make y-axis title larger and bold
     axis.text.x = element_text(size = 14, face = "bold"),   # Make x-axis text larger and bold
     axis.text.y = element_text(size = 14, face = "bold")    # Make y-axis text larger and bold
-  ) 
+  )# +
+  
+#coord_fixed(ratio = 0.6) #for making small 2019 fig 
 
+annual_Cbudget_2019
 
+```
+#save image to maintain dimensions 
+```{r}
+ggsave(
+  filename = "Annual_Cbudget_2019.png",  # File name and extension
+  plot = annual_Cbudget_2019 ,        # The plot to save (default is the last plot created)
+  width = 5,                 # Width in inches
+  height = 3,                # Height in inches
+  dpi = 600,                 # Resolution in dots per inch
+  units = "cm"               # Units for width and height (can be "in", "cm", or "mm")
+)
+
+#ggsave("my_plot.pdf", width = 8, height = 6, dpi = 300, units = "in")
 ```
 
 #Daily avg sum for each month per year - Net C budget
