@@ -175,7 +175,7 @@ Checking Random Timeseries of GPP, ER (RECO), NEE, and CH4
 #nmol C to g C = 10^-9 * 12 & umol C to g C = 10^-6 * 12
 
 #using the gap-filled data for timeseries so there is continuous data, and for these we use the daily averages calculated before and multiply them by seconds -> min -> hours within a day and convert to g C 
-ggplot(data = df_avg_2017, aes(x=date))+
+annual_timeseries_2019_plot <- ggplot(data = df_avg_2019, aes(x=date))+
   theme_bw()+
   geom_point(aes(y = -GPP_F*60*60*24*(1/1000000)*12, color = "GPP"))+
   geom_point(aes(y = RECO_F*60*60*24*(1/1000000)*12, color = "Respiration")) + 
@@ -191,10 +191,39 @@ ggplot(data = df_avg_2017, aes(x=date))+
                       "NEE" = "salmon", 
                       "CH4" = "mediumorchid"),
             breaks = c("GPP", "Respiration", "NEE", "CH4"))+
-  labs(title = "2017")
+  labs(title = "GPP, Respiration, NEE, and Methane Fluxes: 2019", x = "Date") +
+  
+    # vertical lines for specific events - 2019 - for AGU poster
+  geom_vline(xintercept = as.POSIXct("2019-05-24"))+ #end of winter, DOY 144*
+  geom_vline(xintercept =  as.POSIXct("2019-09-02"))+ #end of growing season,DOY 245* based on looking thru data --> old: DOY 258 #9/15, visual assessment
+  geom_vline(xintercept =  as.POSIXct("2019-10-11")) + #end of Fall Senescence, DOY 284*
 
+
+# # Labels for each vertical line within figure
+annotate("text", size = 3, x = as.POSIXct("2019-03-05"), y = -6, label = "Winter", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2019-07-11"), y = -6, label = "Growing Season", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2019-10-01"), y = -6, label = "Senescence", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2019-12-16"), y = -6, label = "Winter", color = "black")
+
+annual_timeseries_2019_plot 
 
 ```
+#Save timeseries plot 
+```{r}
+ggsave(
+  filename = "annual_timeseries_2019_plot  .png",  # File name and extension
+  plot = annual_timeseries_2019_plot,        # The plot to save (default is the last plot created)
+  width = 20,                 # Width in inches
+  height = 15,                # Height in inches
+  dpi = 600,                 # Resolution in dots per inch
+  units = "cm"               # Units for width and height (can be "in", "cm", or "mm")
+)
+
+#ggsave("my_plot.pdf", width = 8, height = 6, dpi = 300, units = "in")
+```
+
+
+
 # Gap Filling vs Site Data Plot
 
 Shows gap in flux data and compares gap filled and non-gap filled data
@@ -491,7 +520,7 @@ monthly_Cflux_sum_2019_long <- monthly_Cflux_sum_2019 %>%
 
 
 # Create the bar graph with a scaled FCH4_F_N_no_NAs
-ggplot(monthly_Cflux_sum_2019_long, aes(x = factor(month_name, levels = month.name), y = Flux_Sum, fill = Flux_Type)) +
+monthlyC_2019_barplot <- ggplot(monthly_Cflux_sum_2019_long, aes(x = factor(month_name, levels = month.name), y = Flux_Sum, fill = Flux_Type)) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(
     values = c("FC_F_no_NAs" = "turquoise", "FCH4_scaled" = "salmon", "total_Cflux" = "grey"),
@@ -514,7 +543,21 @@ ggplot(monthly_Cflux_sum_2019_long, aes(x = factor(month_name, levels = month.na
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+monthlyC_2019_barplot 
 
+```
+#save image to maintain dimensions 
+```{r}
+ggsave(
+  filename = "monthlyC_2019_barplot .png",  # File name and extension
+  plot = monthlyC_2019_barplot ,        # The plot to save (default is the last plot created)
+  width = 20,                 # Width in inches
+  height = 15,                # Height in inches
+  dpi = 600,                 # Resolution in dots per inch
+  units = "cm"               # Units for width and height (can be "in", "cm", or "mm")
+)
+
+#ggsave("my_plot.pdf", width = 8, height = 6, dpi = 300, units = "in")
 ```
 
 #Comparing gapfilled to non-gapfilled with boxplot
@@ -955,19 +998,19 @@ df_2018 <- df_2018 %>%
 # df_avg_2019$day <- as.POSIXct(df_avg_2019$day)
 
 ## Plot with legend- use only for legend
-ggplot(data = df_avg_2019) +
+seasonalC_2019_plot <- ggplot(data = df_avg_2019) +
   theme_bw() +
   
   # horizontal line at y = 0
   geom_hline(yintercept=0, colour = "black")+
   
   # lines for soil and air temperature 
-  geom_line(aes(x = day, y = TS_3_1_1/15, colour = "15cm Soil Temperature")) + #divided to scale
-  geom_line(aes(x = day, y = TA/15, colour = "Air Temperature")) +
+  geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature")) + #divided to scale
+  geom_line(aes(x = date, y = TA/15, colour = "Air Temperature")) +
   
   
   # NEE (converting from umol/m2/s to gC/m2/day)
-  geom_point(aes(x = day, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE"))+
+  geom_point(aes(x = date, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE"))+
   
   # NEE and temp axis scales
   scale_y_continuous(
@@ -995,6 +1038,21 @@ annotate("text", size = 3, x = as.POSIXct("2019-12-16"), y = -4, label = "Winter
     #Title for the plot 
   labs(title = "Seasonal Trends: 2019", x = "Date") 
 
+seasonalC_2019_plot
+
+```
+
+```{r}
+ggsave(
+  filename = "seasonalC_2019_plot.png",  # File name and extension
+  plot = seasonalC_2019_plot,        # The plot to save (default is the last plot created)
+  width = 20,                 # Width in inches
+  height = 15,                # Height in inches
+  dpi = 600,                 # Resolution in dots per inch
+  units = "cm"               # Units for width and height (can be "in", "cm", or "mm")
+)
+
+#ggsave("my_plot.pdf", width = 8, height = 6, dpi = 300, units = "in")
 ```
 
 ```{r}
@@ -1391,97 +1449,97 @@ Monster_plot <- ggplot(data = df_avg) +
   scale_color_manual(
     name = "",
     values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3", "ERA5 Air Temperature" = "darkgreen"))+
-  
-  # vertical lines for specific events -2017 
-    geom_vline(xintercept = as.POSIXct("2017-05-10"), color = "darkgreen")+ #end of winter, DOY 126 
-   geom_vline(xintercept =  as.POSIXct("2017-09-14"), color = "red")+ #end of growing season, DOY 258
-  geom_vline(xintercept =  as.POSIXct("2017-10-17"), color = "blue") + #end of Fall Senescence, DOY 289
-  
-# Labels for each vertical line within figure 
-annotate("text", size = 4, x = as.POSIXct("2017-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2017-07-06"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2017-09-28"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
-#annotate("text", size = 4, x = as.POSIXct("2017-12-31"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-  
-   # vertical lines for specific events - 2018
-  geom_vline(xintercept = as.POSIXct("2018-05-31"), color = "darkgreen")+ #end of winter, DOY 151*
-   geom_vline(xintercept =  as.POSIXct("2018-09-13"), color = "red")+ #end of growing season, DOY 256*
-  geom_vline(xintercept =  as.POSIXct("2018-10-27"), color = "blue") + #end of Fall Senescence, DOY 300*
-  
+#   
+#   # vertical lines for specific events -2017 
+#     geom_vline(xintercept = as.POSIXct("2017-05-10"), color = "darkgreen")+ #end of winter, DOY 126 
+#    geom_vline(xintercept =  as.POSIXct("2017-09-14"), color = "red")+ #end of growing season, DOY 258
+#   geom_vline(xintercept =  as.POSIXct("2017-10-17"), color = "blue") + #end of Fall Senescence, DOY 289
+#   
 # # Labels for each vertical line within figure 
-annotate("text", size = 4, x = as.POSIXct("2018-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2018-07-19"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2018-10-05"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
-#annotate("text", size = 4, x = as.POSIXct("2018-12-30"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-
-  
-  # vertical lines for specific events - 2019
-  geom_vline(xintercept = as.POSIXct("2019-05-24"), color = "darkgreen")+ #end of winter, DOY 144* 
-  geom_vline(xintercept =  as.POSIXct("2019-09-02"), color = "red")+ #end of growing season,DOY 245* based on looking thru data --> old: DOY 258 #9/15, visual assessment
-  geom_vline(xintercept =  as.POSIXct("2019-10-11"), color = "blue") + #end of Fall Senescence, DOY 284*
-  #geom_vline(xintercept =  as.POSIXct("2019-06-12"))+ #end of snowmelt, DOY 163
-  
+# annotate("text", size = 4, x = as.POSIXct("2017-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2017-07-06"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2017-09-28"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
+# #annotate("text", size = 4, x = as.POSIXct("2017-12-31"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+#   
+#    # vertical lines for specific events - 2018
+#   geom_vline(xintercept = as.POSIXct("2018-05-31"), color = "darkgreen")+ #end of winter, DOY 151*
+#    geom_vline(xintercept =  as.POSIXct("2018-09-13"), color = "red")+ #end of growing season, DOY 256*
+#   geom_vline(xintercept =  as.POSIXct("2018-10-27"), color = "blue") + #end of Fall Senescence, DOY 300*
+#   
+# # # Labels for each vertical line within figure 
+# annotate("text", size = 4, x = as.POSIXct("2018-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2018-07-19"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2018-10-05"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
+# #annotate("text", size = 4, x = as.POSIXct("2018-12-30"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+# 
+#   
+#   # vertical lines for specific events - 2019
+#   geom_vline(xintercept = as.POSIXct("2019-05-24"), color = "darkgreen")+ #end of winter, DOY 144* 
+#   geom_vline(xintercept =  as.POSIXct("2019-09-02"), color = "red")+ #end of growing season,DOY 245* based on looking thru data --> old: DOY 258 #9/15, visual assessment
+#   geom_vline(xintercept =  as.POSIXct("2019-10-11"), color = "blue") + #end of Fall Senescence, DOY 284*
+#   #geom_vline(xintercept =  as.POSIXct("2019-06-12"))+ #end of snowmelt, DOY 163
+#   
+# # # Labels for each vertical line within figure 
+# annotate("text", size = 4, x = as.POSIXct("2019-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2019-07-11"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2019-09-20"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
+# #annotate("text", size = 4, x = as.POSIXct("2019-12-16"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+#   
+#   
+#   
+#     # vertical lines for specific events - 2020
+#   geom_vline(xintercept = as.POSIXct("2020-05-14"), color = "darkgreen")+ #end of winter, DOY 135*
+#   #geom_vline(xintercept =  as.POSIXct("2020-06-12"))+ #end of snowmelt, DOY 
+#   geom_vline(xintercept =  as.POSIXct("2020-09-07"), color = "red")+ #end of growing season, DOY 251*
+#   geom_vline(xintercept =  as.POSIXct("2020-10-25"), color = "blue") + #end of Fall Senescence, DOY 299*
+#   
+# # # Labels for each vertical line within figure
+# annotate("text", size = 4, x = as.POSIXct("2020-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2020-07-10"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2020-10-01"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
+# # annotate("text", size = 3, x = as.POSIXct("2020-12-15"), y = -4, label = "Winter", color = "black", angle = 90) +
+#   
+#   
+#   
+#     # vertical lines for specific events - 2021
+#   geom_vline(xintercept = as.POSIXct("2021-05-21"), color = "darkgreen")+ #end of winter, DOY 141 
+#   geom_vline(xintercept =  as.POSIXct("2021-09-16"), color = "red")+ #end of growing season, DOY 259
+#   geom_vline(xintercept =  as.POSIXct("2021-10-10"), color = "blue") + #end of Fall Senescence, DOY 283
+#   
+# 
+#   
+# # # Labels for each vertical line within figure 
+# annotate("text", size = 4, x = as.POSIXct("2021-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2021-07-10"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2021-09-28"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
+# # annotate("text", size = 3, x = as.POSIXct("2021-12-15"), y = -4, label = "Winter", color = "black", angle = 90) +
+# 
+#   
+#     # vertical lines for specific events - 2022
+#   geom_vline(xintercept = as.POSIXct("2022-05-23"), color = "darkgreen")+ #end of winter, DOY 143 
+#   geom_vline(xintercept =  as.POSIXct("2022-09-01"), color = "red")+ #end of growing season, DOY 244
+#   geom_vline(xintercept =  as.POSIXct("2022-10-08"), color = "blue") + #end of Fall Senescence, DOY 281
+#    #geom_vline(xintercept =  as.POSIXct("2022-06-12"))+ #end of snowmelt, DOY 163
+#   
+#   
 # # Labels for each vertical line within figure 
-annotate("text", size = 4, x = as.POSIXct("2019-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2019-07-11"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2019-09-20"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
-#annotate("text", size = 4, x = as.POSIXct("2019-12-16"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-  
-  
-  
-    # vertical lines for specific events - 2020
-  geom_vline(xintercept = as.POSIXct("2020-05-14"), color = "darkgreen")+ #end of winter, DOY 135*
-  #geom_vline(xintercept =  as.POSIXct("2020-06-12"))+ #end of snowmelt, DOY 
-  geom_vline(xintercept =  as.POSIXct("2020-09-07"), color = "red")+ #end of growing season, DOY 251*
-  geom_vline(xintercept =  as.POSIXct("2020-10-25"), color = "blue") + #end of Fall Senescence, DOY 299*
-  
-# # Labels for each vertical line within figure
-annotate("text", size = 4, x = as.POSIXct("2020-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2020-07-10"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2020-10-01"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
-# annotate("text", size = 3, x = as.POSIXct("2020-12-15"), y = -4, label = "Winter", color = "black", angle = 90) +
-  
-  
-  
-    # vertical lines for specific events - 2021
-  geom_vline(xintercept = as.POSIXct("2021-05-21"), color = "darkgreen")+ #end of winter, DOY 141 
-  geom_vline(xintercept =  as.POSIXct("2021-09-16"), color = "red")+ #end of growing season, DOY 259
-  geom_vline(xintercept =  as.POSIXct("2021-10-10"), color = "blue") + #end of Fall Senescence, DOY 283
-  
-
-  
+# annotate("text", size = 4, x = as.POSIXct("2022-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2022-07-10"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2022-09-20"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
+#  #annotate("text", size = 4, x = as.POSIXct("2022-12-15"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+# 
+#   
+#   
+#   # vertical lines for specific events - 2023 - data ends 9/1/2023
+#   geom_vline(xintercept = as.POSIXct("2023-06-06"), color = "darkgreen")+ #end of winter, DOY 157 
+#   #geom_vline(xintercept =  as.POSIXct("2023-08-27"))+ #end of growing season-->not enough to estimate 
+#   #geom_vline(xintercept =  as.POSIXct("2023-10-7")) + #end of Fall Senescence, not enough to estimate 
+#      #geom_vline(xintercept =  as.POSIXct("2023-06-12"))+ #end of snowmelt, DOY 163
+#   
 # # Labels for each vertical line within figure 
-annotate("text", size = 4, x = as.POSIXct("2021-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2021-07-10"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2021-09-28"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
-# annotate("text", size = 3, x = as.POSIXct("2021-12-15"), y = -4, label = "Winter", color = "black", angle = 90) +
-
-  
-    # vertical lines for specific events - 2022
-  geom_vline(xintercept = as.POSIXct("2022-05-23"), color = "darkgreen")+ #end of winter, DOY 143 
-  geom_vline(xintercept =  as.POSIXct("2022-09-01"), color = "red")+ #end of growing season, DOY 244
-  geom_vline(xintercept =  as.POSIXct("2022-10-08"), color = "blue") + #end of Fall Senescence, DOY 281
-   #geom_vline(xintercept =  as.POSIXct("2022-06-12"))+ #end of snowmelt, DOY 163
-  
-  
-# Labels for each vertical line within figure 
-annotate("text", size = 4, x = as.POSIXct("2022-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2022-07-10"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2022-09-20"), y = 2.5, label = "Senescence", color = "black", angle = 90) +
- #annotate("text", size = 4, x = as.POSIXct("2022-12-15"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-
-  
-  
-  # vertical lines for specific events - 2023 - data ends 9/1/2023
-  geom_vline(xintercept = as.POSIXct("2023-06-06"), color = "darkgreen")+ #end of winter, DOY 157 
-  #geom_vline(xintercept =  as.POSIXct("2023-08-27"))+ #end of growing season-->not enough to estimate 
-  #geom_vline(xintercept =  as.POSIXct("2023-10-7")) + #end of Fall Senescence, not enough to estimate 
-     #geom_vline(xintercept =  as.POSIXct("2023-06-12"))+ #end of snowmelt, DOY 163
-  
-# Labels for each vertical line within figure 
- annotate("text", size = 4, x = as.POSIXct("2023-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
-annotate("text", size = 4, x = as.POSIXct("2023-07-10"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
-#    annotate("text", size = 3, x = as.POSIXct("2023-09-15"), y = -3, label = "End of Data (9/1/2023)", color = "black", angle = 90)+
+#  annotate("text", size = 4, x = as.POSIXct("2023-02-05"), y = 2.5, label = "Winter", color = "black", angle = 90) +
+# annotate("text", size = 4, x = as.POSIXct("2023-07-10"), y = 2.5, label = "Growing Season", color = "black", angle = 90) +
+# #    annotate("text", size = 3, x = as.POSIXct("2023-09-15"), y = -3, label = "End of Data (9/1/2023)", color = "black", angle = 90)+
 
   
     #Title for the plot 
@@ -1494,7 +1552,7 @@ Monster_plot
 #save image to maintain dimensions 
 ```{r}
 ggsave(
-  filename = "2017-2023_Seasonal_Trends.png",  # File name and extension
+  filename = "2017-2023_Seasonal_Trends2.png",  # File name and extension
   plot = Monster_plot,        # The plot to save (default is the last plot created)
   width = 60,                 # Width in inches
   height = 17,                # Height in inches
