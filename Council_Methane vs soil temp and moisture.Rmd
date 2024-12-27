@@ -220,11 +220,11 @@ ggplot(comparison, aes(x = FCH4, y = predicted_FCH4_RF)) +
 
 
 ```
-#comparing predicted CH4 from RF and lm to actual CH4 data 
+#comparing predicted CH4 from RF and lm from test Data to actual CH4 data 
 ```{r}
 #FCH4 vs FCH4 from RF, looking at comparison of test data 
 summary(lm(testData$FCH4 ~ testData$predicted_FCH4_RF))
-#Resukts: not a great fit 
+#Results: not a great fit 
 #slope = 0.85; Multiple R-squared:  0.3049,	Adjusted R-squared:  0.3048 
 #F-statistic:  2168 on 1 and 4943 DF,  p-value: < 2.2e-16
 
@@ -287,7 +287,7 @@ ggplot(data = testData,aes(FCH4, predicted_FCH4_lm))+theme_bw()+
   # annotate(geom = 'text',x = 50,y = -15,label=expression(Slope~"= 1.01"),size = 3)+
   # theme(text = element_text(size = 8))
 
-  
+  #FCH4 data vs predicted FCH4_RF from testData 
   ggplot(data = testData,aes(FCH4, predicted_FCH4_RF))+theme_bw()+
   geom_hline(yintercept = 0,lty=2)+
   geom_vline(xintercept = 0,lty=2)+
