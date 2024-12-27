@@ -54,6 +54,8 @@ df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfi
 
 #calculate the correlations between FCH4, TS_3_1_1, and SWC_3_1_1:
 ```{r}
+#these TS and SWC are measurements from tussock area of site 
+
 # Calculate correlations of FCH4 and soil temp, SWC
 cor(df$FCH4, df$TS_3_1_1, use = "complete.obs") #uses only rows with no missing values in any of the variables being correlated, as specified by the equation 
 cor(df$FCH4, df$SWC_3_1_1, use = "complete.obs")
@@ -79,7 +81,7 @@ ggplot(df, aes(x = interaction, y = FCH4)) + geom_point() + geom_smooth(method =
 
 ```
 
-#build a predictive model, use linear model as starting point 
+#predictive model, trying linear model as starting point 
 ```{r}
 # Linear model - soil temp, SWC, and interaction 
 model <- lm(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction, data = df)
@@ -89,10 +91,8 @@ summary(model)
 df$predicted_FCH4_lm <- predict(model, newdata = df)
 
 #Results:
-
-# TS_3_1_1:  -1.4649, indicating that for each unit increase in soil temperature, the methane flux (FCH4) decreases by approximately 1.4649 units, holding other variables constant. p= (<2e-16) - SIG  **but a dec in methane with inc in temp??? not expecting that result..inc temp should inc methane emissions 
-# SWC_3_1_1: The coefficient for soil moisture is -0.0001 and p=0.9,NOT sig 
-# interaction: 0.0352, so pos correlation but very weak; but p  <2e-16 so sig 
+# TS_3_1_1:  -1.4649, as temp inc, methane dec? p= (<2e-16) - SIG  **not expecting that result, esp since plot shows pos trend..? inc temp should inc methane emissions # SWC_3_1_1: The coefficient for soil moisture is -0.0001 and p=0.9,NOT sig 
+# interaction: 0.0352, R2 = 0.011 so pos correlation but very weak; but p  <2e-16 - SIG*
 
 # Linear model 2 - soil temp only 
 model2 <- lm(FCH4 ~ TS_3_1_1, data = df)
@@ -113,6 +113,17 @@ summary(model3)
 # Predict missing values
 df$predicted_FCH4.3 <- predict(model3, newdata = df)
 
+
+# Linear model - soil temp and interaction 
+model4 <- lm(FCH4 ~ TS_3_1_1 + interaction, data = df)
+summary(model)
+
+# Predict missing values
+df$predicted_FCH4.4 <- predict(model4, newdata = df)
+#Results: same as model(1)
+#Multiple R-squared:  0.1161,	Adjusted R-squared:  0.116 
+#F-statistic:  1083 on 3 and 24733 DF,  p-value: < 2.2e-16
+
 ```
 #RMSE of various linear model options
 ####evaluate the model using RMSE(measures the magnitude of errors between predicted and actual values; lower is better fit of model to data)
@@ -131,7 +142,9 @@ print(paste("RMSE: ", rmse)) #"RMSE:  9.39753297747576"
 rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4.3)^2, na.rm = TRUE))
 print(paste("RMSE: ", rmse)) #"RMSE:  9.24675505010849"
 
-#Didn't try just SWC bc it didn't seem to have a sig effect or correlation with CH4
+#soil temp and interaction
+rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4.4)^2, na.rm = TRUE))
+print(paste("RMSE: ", rmse)) #"RMSE:  9.01373897029865" --> same as first lm model --> confirms SWC doesn't sig impact model, therefore not running model with just SWC/don't need SWC in this model 
 
 ```
 #If linear models don't work well, try random forest but use interaction effect? 
