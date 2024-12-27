@@ -1,0 +1,317 @@
+---
+title: "Council CH4 and temp / moisture" #playing around with empirical model using soil temp and soil moisture for methane 
+output: html_document
+date: "2024-12-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+# Set working directory and then Load data
+
+```{r}
+#original half-hourly dataframe 
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+#needs continuous day variable
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#needs continuous day variable
+df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+```
+
+
+#calculate the correlations between FCH4, TS_3_1_1, and SWC_3_1_1:
+```{r}
+# Calculate correlations of FCH4 and soil temp, SWC
+cor(df$FCH4, df$TS_3_1_1, use = "complete.obs") #uses only rows with no missing values in any of the variables being correlated, as specified by the equation 
+cor(df$FCH4, df$SWC_3_1_1, use = "complete.obs")
+
+# Interaction term of soil temp and SWC 
+df$interaction <- df$TS_3_1_1 * df$SWC_3_1_1
+cor(df$FCH4, df$interaction, use = "complete.obs")
+
+#Results: no strong correlations - all very weak pos but interaction a bit better of a fit 
+
+# [1] 0.1981594 FCH4 vs temp
+# [1] 0.153488 FCH4 vs SWC
+# [1] 0.2642889 FCH4 vs interaction of temp and SWC
+```
+
+#Plot to visualize 
+```{r}
+# Scatter plots of correlations 
+ggplot(df, aes(x = TS_3_1_1, y = FCH4)) + geom_point() + geom_smooth(method = "lm")
+ggplot(df, aes(x = SWC_3_1_1, y = FCH4)) + geom_point() + geom_smooth(method = "lm")
+ggplot(df, aes(x = interaction, y = FCH4)) + geom_point() + geom_smooth(method = "lm") #interaction term works best, but corr = 0.26
+
+
+```
+
+#build a predictive model, use linear model as starting point 
+```{r}
+# Linear model - soil temp, SWC, and interaction 
+model <- lm(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction, data = df)
+summary(model)
+
+# Predict missing values
+df$predicted_FCH4_lm <- predict(model, newdata = df)
+
+#Results:
+
+# TS_3_1_1:  -1.4649, indicating that for each unit increase in soil temperature, the methane flux (FCH4) decreases by approximately 1.4649 units, holding other variables constant. p= (<2e-16) - SIG  **but a dec in methane with inc in temp??? not expecting that result..inc temp should inc methane emissions 
+# SWC_3_1_1: The coefficient for soil moisture is -0.0001 and p=0.9,NOT sig 
+# interaction: 0.0352, so pos correlation but very weak; but p  <2e-16 so sig 
+
+# Linear model 2 - soil temp only 
+model2 <- lm(FCH4 ~ TS_3_1_1, data = df)
+summary(model2)
+
+#Results: 
+#TS_3_1_1     est =0.35596    sE=0.01120   p= <2e-16 ***; Multiple R-squared:  0.03927,	Adjusted R-squared:  0.03923 
+# Predict missing values
+df$predicted_FCH4.2 <- predict(model2, newdata = df)
+
+# Linear model 3 - interaction only 
+model3 <- lm(FCH4 ~ interaction, data = df)
+summary(model3)
+
+#Results: 
+#interaction est=0.0088479  SE=0.0002053   p= <2e-16 ***; Multiple R-squared:  0.06985,	Adjusted R-squared:  0.06981 
+
+# Predict missing values
+df$predicted_FCH4.3 <- predict(model3, newdata = df)
+
+```
+#RMSE of various linear model options
+####evaluate the model using RMSE(measures the magnitude of errors between predicted and actual values; lower is better fit of model to data)
+```{r}
+# Calculate RMSE - lower RMSE = better fit 
+
+#soil temp, SWC, and interaction --> slightly better than the other two
+rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4_lm)^2, na.rm = TRUE))
+print(paste("RMSE: ", rmse)) # "RMSE:  9.01373878828402"
+
+#soil temp only 
+rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4.2)^2, na.rm = TRUE))
+print(paste("RMSE: ", rmse)) #"RMSE:  9.39753297747576"
+
+#interaction only 
+rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4.3)^2, na.rm = TRUE))
+print(paste("RMSE: ", rmse)) #"RMSE:  9.24675505010849"
+
+#Didn't try just SWC bc it didn't seem to have a sig effect or correlation with CH4
+
+```
+#If linear models don't work well, try random forest but use interaction effect? 
+```{r}
+# This chunk is useful for getting an initial sense of how well the Random Forest model performs on the entire dataset. However, it doesn't provide a robust evaluation since it uses the same data for both training and prediction, which can lead to overfitting and therefore also a RMSE that looks better than it should be - that is why this output seems to perform so well, but shouldn't be trusted until trained on a portion of the df and tested on the other portion 
+
+# Load necessary library
+library(randomForest)
+
+# set up random forest model 
+rf_model <- randomForest(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction, data = df, na.action = na.omit)
+df$predicted_FCH4_rf <- predict(rf_model, newdata = df)
+
+# Calculate RMSE
+rmse_rf <- sqrt(mean((df$FCH4 - df$predicted_FCH4_rf)^2, na.rm = TRUE))
+print(paste("RMSE (Random Forest): ", rmse_rf)) # "RMSE (Random Forest):  4.54702260438728"  --> improved RMSE by a lot but this is not on tested data, so ignore this chunk and its results 
+```
+#Train new random forest model 
+```{r}
+# This chunk splits the dataset into training and testing sets, trains the Random Forest model on the training set, and then evaluates its performance on the test set. It calculates both RMSE and R-squared to assess the model's accuracy. *Produces a higher but more accurate RMSE and R-squared value 
+
+#*note, output here is "predicted_CH4_RF" 
+
+# Load necessary libraries
+library(tidyverse)
+library(randomForest)
+library(caret)
+
+
+# Create the interaction term
+df$interaction <- df$TS_3_1_1 * df$SWC_3_1_1
+
+# Drop rows with NA in FCH4
+df <- df %>% drop_na(FCH4)
+df <- df %>% drop_na(SWC_3_1_1)
+df <- df %>% drop_na(TS_3_1_1)
+df <- df %>% drop_na(interaction)
+
+# Split the data into training and testing sets
+set.seed(123) #seed 123 is what we use in our processing code 
+trainIndex <- createDataPartition(df$FCH4, p = .8, list = FALSE)
+trainData <- df[trainIndex,]
+testData <- df[-trainIndex,]
+
+# Train a Random Forest model
+rf_model_training <- randomForest(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction, data = trainData, na.action = na.omit)
+
+# Predict on the test set
+testData$predicted_FCH4_RF <- predict(rf_model_training, newdata = testData)
+
+# Calculate RMSE between the true data and predicted data
+rmse_rf <- sqrt(mean((testData$FCH4 - testData$predicted_FCH4_RF)^2))
+print(paste("RMSE (Random Forest): ", rmse_rf))
+#Results:  "RMSE (Random Forest):  7.96643546914752"--> does improve model a bit compared to just the lm 
+
+# Calculate R-squared
+r2_rf <- cor(testData$FCH4, testData$predicted_FCH4_RF)^2
+print(paste("R-squared (Random Forest): ", r2_rf))
+#Results: "R-squared (Random Forest):  0.304920313430615"
+```
+
+#Comparing RF modeled data to actual data 
+```{r}
+# Compare actual vs predicted values
+comparison <- testData %>% select(FCH4, predicted_FCH4_RF)
+print(head(comparison))
+#don't compare very well....
+
+
+
+summary(lm(testData$FCH4 ~ testData$predicted_FCH4_RF))
+#Results: not a great fit 
+#slope = 0.85; Multiple R-squared:  0.3049,	Adjusted R-squared:  0.3048 
+#F-statistic:  2168 on 1 and 4943 DF,  p-value: < 2.2e-16
+
+# Plot the comparison
+ggplot(comparison, aes(x = FCH4, y = predicted_FCH4_RF)) +
+  geom_point(alpha = 0.3) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted Methane Flux (FCH4)",
+       x = "Actual FCH4",
+       y = "Predicted FCH4 from RF training") +
+   annotate(geom = 'text',x = 50, y = -10,label=expression(R^2~"= 0.3"),size = 3)+ 
+     annotate(geom = 'text',x = 50, y = -15,label= "slope = 0.85",size = 3)+ 
+  theme_minimal()
+
+
+```
+#comparing predicted CH4 from RF and lm to actual CH4 data 
+```{r}
+#FCH4 vs FCH4 from RF, looking at comparison of test data 
+summary(lm(testData$FCH4 ~ testData$predicted_FCH4_RF))
+#Resukts: not a great fit 
+#slope = 0.85; Multiple R-squared:  0.3049,	Adjusted R-squared:  0.3048 
+#F-statistic:  2168 on 1 and 4943 DF,  p-value: < 2.2e-16
+
+# Plot the comparison of CH4 and predicted_FCH4_rf from random forest 
+ggplot(testData, aes(x = FCH4, y = predicted_FCH4_RF)) +
+  geom_point(alpha = 0.3) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted Methane Flux (FCH4)",
+       x = "Actual FCH4",
+       y = "Predicted FCH4_rf") +
+    annotate(geom = 'text',x = 50, y = -10,label=expression(R^2~"= 0.3"),size = 3)+ 
+     annotate(geom = 'text',x = 50, y = -15,label= "slope = 0.85",size = 3)+ 
+  annotate(geom = 'text',x = 57, y = -10,label= "RMSE = 7.97",size = 3)+ 
+  theme_minimal()
+
+
+#testing actual vs predicted CH4 from original df 
+model5 <- lm(FCH4 ~ predicted_FCH4_lm, data = df)
+summary(model5)
+# Results: slope = 1; Multiple R-squared:  0.1161,	Adjusted R-squared:  0.1161 
+#F-statistic:  3250 on 1 and 24735 DF,  p-value: < 2.2e-16
+
+
+# Plot the comparison of actual CH4 and predicted CH4 from lm from orig df
+ggplot(df, aes(x = FCH4, y = predicted_FCH4_lm)) +
+  geom_point(alpha = 0.3) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted Methane Flux (FCH4)",
+       x = "Actual FCH4",
+       y = "Predicted FCH4_LM") +
+     annotate(geom = 'text',x = 50, y = 0,label=expression(R^2~"= 0.12"),size = 3)+ 
+     annotate(geom = 'text',x = 50, y = 1,label= "slope = 1",size = 3)+ 
+   annotate(geom = 'text',x = 50, y = -1,label= "RMSE = 9.01",size = 3)+ 
+  theme_minimal()
+
+
+#Need to merge df before this can work 
+# Plot the comparison of predicted CH4_lm and predicted_FCH4_rf
+# ggplot(df, aes(x = predicted_FCH4_lm, y = predicted_FCH4_RF)) +
+#   geom_point(alpha = 0.3) +
+#   geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+#   labs(title = "Actual vs Predicted Methane Flux (FCH4)",
+#        x = "predicted FCH4",
+#        y = "Predicted FCH4_rf") +
+#   theme_minimal()
+
+#CH4 data vs predicted FCH4_lm from the testdata 
+ggplot(data = testData,aes(FCH4, predicted_FCH4_lm))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1) +
+  annotate(geom = 'text',x = 50, y = 0,label=expression(R^2~"= 0.12"),size = 3)+ 
+     annotate(geom = 'text',x = 50, y = 1,label= "slope = 1",size = 3)+ 
+   annotate(geom = 'text',x = 50, y = -1,label= "RMSE = 9.01",size = 3) # +
+    # scale_x_continuous(limits = c(-50,150),expression('Random Forest predicted FCH4  ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+    # scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance FCH4 ('*mu*mol~CO[2]~m^-2~s^-1*')'))#+
+  # annotate(geom = 'text',x = 50, y = -8,label=expression(R^2~"= 0.47"),size = 3)+
+  # annotate(geom = 'text',x = 50,y = -15,label=expression(Slope~"= 1.01"),size = 3)+
+  # theme(text = element_text(size = 8))
+
+  
+  ggplot(data = testData,aes(FCH4, predicted_FCH4_RF))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1) +
+    annotate(geom = 'text',x = 50, y = -10,label=expression(R^2~"= 0.3"),size = 3)+ 
+     annotate(geom = 'text',x = 50, y = -15,label= "slope = 0.85",size = 3)+ 
+  annotate(geom = 'text',x = 65, y = -10,label= "RMSE = 7.97",size = 3)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
