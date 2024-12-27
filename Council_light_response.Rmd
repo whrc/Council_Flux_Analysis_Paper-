@@ -154,26 +154,42 @@ ggplot(data = gs)+
 
 #−NEE = αPPFD/(1−(PPFD/PPFDref)+αPPFD/GPPref)−Reco
 ```{r}
+#where did these constants come from? 
 α = 0.007827
 PPFDref = 1500
 GPPref = 3.225959
 
+#have no idea what this part of the code is doing - will plot but is not fit with a line 
 lr.line = predict(lr)
 
 plot(lr.line)
 fit = lr$m$fitted()
 
+#this won't work 
 lr$
 ggplot(data = gs)+
-  geom_point(aes(PPFD_IN,FC,col=TA))+
-  geom_smooth(formula = y ~ α*x / (1−(x/PPFDref) + α*x/GPPref) - RECO)
+  geom_point(aes(x= PPFD_IN,y= FC,col=TA))+
+  geom_smooth(formula = y ~ α*x / (1− (x/PPFDref) + α*x/GPPref) - RECO)
 
 
 
 #Won't plot correctly, can't find "RECO" though it's in the gs df 
+summary(gs$RECO)
+
 ggplot(data = gs) +
   geom_point(aes(x = PPFD_IN, y = FC, color = TA)) +
-  geom_smooth(aes(x = PPFD_IN, y = FC), method = "lm", formula = y ~ α * x / (1 - (x / PPFDref) + α * x / GPPref) - RECO)
+  geom_smooth(aes(x = PPFD_IN, y = FC), method = "lm", formula = y ~ α * PPFD_IN / (1 - (PPFD_IN / PPFDref) + α * PPFD_IN / GPPref) - RECO)
+
+
+
+lr = light.response(data = gs,NEE = 'FC',Reco = 'RECO',PPFD = 'PPFD_IN',PPFD_ref = 1500)
+lr
+fit = lr$m$fitted()
+
+ggplot(data = gs)+
+  geom_point(aes(PPFD_IN,FC,col=TA))+
+  geom_line(aes(PPFD_IN,-fit),col='red') +
+  geom_line(aes(PPFD_IN, lr.line, col = 'blue'))
 ```
 
 
