@@ -65,6 +65,12 @@ sum(is.na(df$TS_4_1_1)) #52796 NA's in temp by foot of EC tower
 sum(is.na(df$TS_5_1_1)) #new temp in latest upload with 2023 data, don't have info on what it is yet** 
 
 
+#SWC also broken up by location
+#  SWC_1_1_1 % Soil water content (15cm depth) – margin pond
+# SWC_2_1_1 % Soil water content (15cm depth) – lichen/berries
+# SWC_3_1_1 % Soil water content (15cm depth) - tussock
+
+
 ```
 
 ```{r}
