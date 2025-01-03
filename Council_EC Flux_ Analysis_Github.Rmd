@@ -43,16 +43,19 @@ Sys.setenv(TZ='UTC')
 # Set working directory and then Load data
 
 ```{r}
+#using the ".2" version to reflect the updated SWC used in RF 
+
 #original half-hourly dataframe 
-df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 #needs continuous day variable
-df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 #needs continuous day variable
-df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-
+#original half-hourly dataframe 
+dforig = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 ```
 
 
@@ -104,6 +107,14 @@ year_df <- function(df, year) {
     filter(format(date, "%Y") == as.character(year)) %>%
     mutate(DOY = yday(date))
 }
+
+#for orig
+
+year_df2 <- function(df, year) {
+  dforig %>%
+    filter(format(date, "%Y") == as.character(year)) %>%
+    mutate(DOY = yday(date))
+}
 ```
 
 #Creates data frames of each year containing the daily averages of each value- useful for focusing on one year at a time
@@ -124,6 +135,7 @@ df_avg_2023 <- year_df(df_avg, 2023)
 
 #map out the timestamp of the half-hourly dataset
 df$date <- as.POSIXct(df$date, format = "%Y-%m-%d %H:%M:%OS") #yr month day hour min sec
+dforig$date <- as.POSIXct(df$date, format = "%Y-%m-%d %H:%M:%OS") #yr month day hour min sec
 
 df_2017 <- year_df(df, 2017)
 df_2018 <- year_df(df, 2018)
@@ -133,6 +145,8 @@ df_2021 <- year_df(df, 2021)
 df_2022 <- year_df(df, 2022)
 df_2023 <- year_df(df, 2023)
 
+df_2017orig <- year_df2(dforig, 2017)
+df_2019orig <- year_df2(dforig, 2019)
 
 #map out the timestamp of the monthly dataset
 df_monthly_avg$date <- as.POSIXct(df_monthly_avg$date, format = "%Y-%m-%d") #yr month
@@ -147,6 +161,12 @@ df_monthly_2023 <- year_df(df_monthly_avg, 2023)
 
 
 ```
+
+
+
+
+
+
 
 #ERA5 air temp vs site air temp 
 ####Since I'll be using ERA5 air temp to supplement the missing temp gaps in the site data, need to check agreement 
@@ -217,7 +237,7 @@ annual_timeseries_2019_plot
 #Save timeseries plot 
 ```{r}
 ggsave(
-  filename = "annual_timeseries_2019_plot  .png",  # File name and extension
+  filename = "annual_timeseries_2019_plot.2  .png",  # File name and extension
   plot = annual_timeseries_2019_plot,        # The plot to save (default is the last plot created)
   width = 20,                 # Width in inches
   height = 15,                # Height in inches
@@ -238,39 +258,50 @@ Shows gap in flux data and compares gap filled and non-gap filled data
 #Uses Half-Hourly data - units of umol/m^2/s
 
 #have to tell R what format the timestamp is in so it can parse out the dates 
-df_2019$TIMESTAMP <- as.POSIXct(df_2019$TIMESTAMP, format="%Y-%m-%d %H:%M:%S")
+df_2023$TIMESTAMP <- as.POSIXct(df_2023$TIMESTAMP, format="%Y-%m-%d %H:%M:%S")
 
 #plot half-hourly FCO2 data with the gap-filled data to compare 
-ggplot(data = df_2019)+
+ggplot(data = df_2023)+
   geom_hline(yintercept = 0)+
   geom_point(aes(TIMESTAMP,FC_F,col='RF Gapfilled'))+
   geom_point(aes(TIMESTAMP,FC,col='Original'))+
   scale_y_continuous(limits=c(-10,10))+
-  scale_x_datetime(limits = as.POSIXct(c('2019-01-01','2019-12-01')))+ 
+  scale_x_datetime(limits = as.POSIXct(c('2023-01-01','2023-12-01')))+ 
   labs(#y = "CO2 Flux (umol/m2/s) ", 
        y = expression(CO[2]~Flux~(umolCO[2]~m^-2~y^-1)),
        x = "Time") +
   scale_color_manual(values=c('black','red'))+
   theme_bw()+
-  #geom_vline(xintercept = as.POSIXct("2019-07-05"))+
-  labs(title = "Random Forest Gapfill vs Site Data: 2019")
+  #geom_vline(xintercept = as.POSIXct("2023-07-05"))+
+  labs(title = "Random Forest Gapfill vs Site Data: 2023")
 
 
 #plot half-hourly FCH4 data with the gap-filled data to compare 
-ggplot(data = df_2019)+
+ggplot(data = df_2023)+
   geom_hline(yintercept = 0)+
   geom_point(aes(TIMESTAMP,FCH4_F,col='RF Gapfilled'))+
   geom_point(aes(TIMESTAMP,FCH4,col='Original'))+
   #scale_y_continuous(limits=c(-10,10))+
-  scale_x_datetime(limits = as.POSIXct(c('2019-01-01','2019-12-01')))+ 
+  scale_x_datetime(limits = as.POSIXct(c('2023-01-01','2023-12-01')))+ 
   labs(#y = "FCH4 Flux (nmol/m2/s)"
         y = expression(CH[4]~Flux~(nmolCH[4]~m^-2~y^-1)),
         x = "Time") +
   scale_color_manual(values=c('black','red'))+
   theme_bw()+
-  #geom_vline(xintercept = as.POSIXct("2019-07-05"))+
-  labs(title = "Random Forest Gapfill vs Site Data: 2019")
+  #geom_vline(xintercept = as.POSIXct("2023-07-05"))+
+  labs(title = "Random Forest Gapfill vs Site Data: 2023")
     
+```
+#checking out old vs new datasets since it seems adj the SWC may have changed a lot of the predicted CO2 fluxes 
+```{r}
+ggplot(data = df_2017, aes(x=TIMESTAMP, y = FC_F )) + geom_point() + labs(title = "FC_F after SWC adj")
+ggplot(data = df_2017orig, aes(x=date, y = FC_F)) + geom_point() + labs(title = "FC_F before SWC adj")
+
+
+ggplot(data = df_2017, aes(x=TIMESTAMP, y = FCH4_F )) + geom_point() + labs(title = "FCH4_F after SWC adj")
+ggplot(data = df_2017orig, aes(x=date, y = FCH4_F)) + geom_point() + labs(title = "FCH4_F before SWC adj")
+#yes, we can see here that there are much greater fluxes in the orig, with the old SWC used to train RF, compared to the new, which used "tussock" SWC to train RF 
+
 ```
 
 # Annual Net C Budget - converting units and checking sums 
@@ -281,16 +312,29 @@ _no_NAs is used for other years of data where NAs are present in gapfilled data
 #checking the budgets with the sum function to double check the results of the bar plots in code chunk below 
 
 # Net CO2 Flux - multiply by 30 to represent per half hour --> can use this with "sum" function to double check the results of the plots for the yearly budgets 
-df_2017 <- df_2017 %>%
+df_2019 <- df_2019 %>%
   mutate(FC_F_no_NAs = ifelse(is.na(FC_F), 0, FC_F * 60 * 30* (1/1000000) * 12))
 #sum of the flux 
-sum(df_2017$FC_F_no_NAs)
+sum(df_2019$FC_F_no_NAs)
 
 #Net CH4 flux --> to check results of bar plots with the sum function
-df_2017 <- df_2017 %>%
+df_2019 <- df_2019 %>%
   mutate(FCH4_F_no_NAs = ifelse(is.na(FCH4_F), 0, FCH4_F*60*30*(1/1000000000)*12))
 #sum - yearly budget 
-sum(df_2017$FCH4_F_no_NAs)
+sum(df_2019$FCH4_F_no_NAs)
+
+
+# Net CO2 Flux - multiply by 30 to represent per half hour --> can use this with "sum" function to double check the results of the plots for the yearly budgets 
+df_2019orig <- df_2019orig %>%
+  mutate(FC_F_no_NAs = ifelse(is.na(FC_F), 0, FC_F * 60 * 30* (1/1000000) * 12))
+#sum of the flux 
+sum(df_2019orig$FC_F_no_NAs)
+
+#Net CH4 flux --> to check results of bar plots with the sum function
+df_2019orig <- df_2019orig %>%
+  mutate(FCH4_F_no_NAs = ifelse(is.na(FCH4_F), 0, FCH4_F*60*30*(1/1000000000)*12))
+#sum - yearly budget 
+sum(df_2019orig$FCH4_F_no_NAs)
 ```
 
 #### Net C Budgets: Annual bar plot
@@ -363,6 +407,9 @@ annual_Cbudget_2019 <- ggplot(net_wp_2019, aes(x = Category, y = Value)) +
 annual_Cbudget_2019
 
 ```
+
+
+
 #save image to maintain dimensions 
 ```{r}
 ggsave(
