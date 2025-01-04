@@ -189,7 +189,7 @@ Air_temp_test= ggplot(data = df,aes(TA,TA_ERA5))+theme_bw()+
 Air_temp_test #great agreement, just like Kyle said 
 ```
 
-# Timeseries plot - just to check things out 
+# Timeseries plot - annual 
 
 Convert the data from umol or nmol C/m2/s to g C/m2/day 
 
@@ -201,7 +201,7 @@ Checking Random Timeseries of GPP, ER (RECO), NEE, and CH4
 #nmol C to g C = 10^-9 * 12 & umol C to g C = 10^-6 * 12
 
 #using the gap-filled data for timeseries so there is continuous data, and for these we use the daily averages calculated before and multiply them by seconds -> min -> hours within a day and convert to g C 
-annual_timeseries_2019_plot <- ggplot(data = df_avg_2019, aes(x=date))+
+annual_timeseries_2023_plot <- ggplot(data = df_avg_2023, aes(x=date))+
   theme_bw()+
   geom_point(aes(y = -GPP_F*60*60*24*(1/1000000)*12, color = "GPP"))+
   geom_point(aes(y = RECO_F*60*60*24*(1/1000000)*12, color = "Respiration")) + 
@@ -217,21 +217,26 @@ annual_timeseries_2019_plot <- ggplot(data = df_avg_2019, aes(x=date))+
                       "NEE" = "salmon", 
                       "CH4" = "mediumorchid"),
             breaks = c("GPP", "Respiration", "NEE", "CH4"))+
-  labs(title = "GPP, Respiration, NEE, and Methane Fluxes: 2019", x = "Date") +
+  labs(title = "GPP, Respiration, NEE, and Methane Fluxes: 2023", x = "Date") #+
   
-    # vertical lines for specific events - 2019 - for AGU poster
-  geom_vline(xintercept = as.POSIXct("2019-05-24"))+ #end of winter, DOY 144*
-  geom_vline(xintercept =  as.POSIXct("2019-09-02"))+ #end of growing season,DOY 245* based on looking thru data --> old: DOY 258 #9/15, visual assessment
-  geom_vline(xintercept =  as.POSIXct("2019-10-11")) + #end of Fall Senescence, DOY 284*
 
+annual_timeseries_2023_plot 
 
-# # Labels for each vertical line within figure
-annotate("text", size = 3, x = as.POSIXct("2019-03-05"), y = -6, label = "Winter", color = "black") +
-annotate("text", size = 3, x = as.POSIXct("2019-07-11"), y = -6, label = "Growing Season", color = "black") +
-annotate("text", size = 3, x = as.POSIXct("2019-10-01"), y = -6, label = "Senescence", color = "black") +
-annotate("text", size = 3, x = as.POSIXct("2019-12-16"), y = -6, label = "Winter", color = "black")
+#below this line, adj per each year's seasonal delineations as noted in code chunks below 
 
-annual_timeseries_2019_plot 
+#     # vertical lines for specific events - 2019 - for AGU poster
+#   geom_vline(xintercept = as.POSIXct("2019-05-24"))+ #end of winter, DOY 144*
+#   geom_vline(xintercept =  as.POSIXct("2019-09-02"))+ #end of growing season,DOY 245* based on looking thru data --> old: DOY 258 #9/15, visual assessment
+#   geom_vline(xintercept =  as.POSIXct("2019-10-11")) + #end of Fall Senescence, DOY 284*
+# 
+# 
+# # # Labels for each vertical line within figure
+# annotate("text", size = 3, x = as.POSIXct("2019-03-05"), y = -6, label = "Winter", color = "black") +
+# annotate("text", size = 3, x = as.POSIXct("2019-07-11"), y = -6, label = "Growing Season", color = "black") +
+# annotate("text", size = 3, x = as.POSIXct("2019-10-01"), y = -6, label = "Senescence", color = "black") +
+# annotate("text", size = 3, x = as.POSIXct("2019-12-16"), y = -6, label = "Winter", color = "black")
+# 
+# annual_timeseries_2019_plot 
 
 ```
 #Save timeseries plot 
