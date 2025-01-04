@@ -270,7 +270,7 @@ print(paste("RMSE: ", rmse)) #"RMSE:  9.24675505010849"
 
 #soil temp and interaction
 rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4.4)^2, na.rm = TRUE))
-print(paste("RMSE: ", rmse)) #"RMSE:  9.01373897029865" --> same as first lm model --> confirms SWC doesn't sig impact model, therefore not running model with just SWC/don't need SWC in this model 
+print(paste("RMSE: ", rmse)) #"RMSE:  9.01373897029865" --> same as first lm model --> SWC appears not to have sig impact on model fit ?
 
 ```
 #If linear models don't work well, try random forest but use interaction effect? 
