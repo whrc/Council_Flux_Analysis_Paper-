@@ -830,10 +830,14 @@ labs(title = "2017")
 #these look wonky, may have to clean more to get this to look better**
 
 ```
+
+
 # Cleaned up seasonal delineations - swap out years 
 
 
 ```{r}
+#Used this to explore where the seasonal delineations may lie -- code for actual figures in the chunks below 
+
 ggplot(data = df_avg_2023) +
   theme_bw() +
   
@@ -903,7 +907,7 @@ labs(title = "2023")
 
 ####Seasonal Plots with temp and NEE for each year
 
-Definition of seasons: 3+ days of FC_F<0 (negative) for growing season, 3+ days of mostly pos NEE for end of growing season, and 3+ days of air temperature <0 for winter. Gaps are senescence and spring (?) - no snowmelt data 
+Definition of seasons: 3+ days of FC_F<0 (negative) for growing season, 3+ days of mostly pos NEE for end of growing season, and 3+ days of air temperature <0 for winter. Gaps are senescence and spring (?) - no snowmelt data for Council  
 
 ####2017 Seasonal plot
 ```{r}
@@ -927,6 +931,7 @@ ggplot(data = df_avg_2017) +
   geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature")) + #divided to scale
   geom_line(aes(x = date, y = TA/15, colour = "Air Temperature")) +
   geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
+
   
    # NEE (converting from umol/m2/s to gC/m2/day)
   geom_point(aes(x = date, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE"))+
@@ -940,7 +945,7 @@ ggplot(data = df_avg_2017) +
   # color legend for the lines
   scale_color_manual(
     name = "",
-    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3", "ERA5 Air Temperature" = "darkgreen"))+
+    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3", "ERA5 Air Temperature" = "darkgreen"))+ 
   
   # vertical lines for specific events
   geom_vline(xintercept = as.POSIXct("2017-05-10"))+ #end of winter, DOY 126 
@@ -1483,10 +1488,11 @@ annotate("text", size = 3, x = as.POSIXct("2023-07-10"), y = -4, label = "Growin
 
 ```
 
-#TO DO
 ```{r}
-#don't think data is complete enough to calc this year's budget -- not yet done for 2023
 # Add seasonal delineations to the daily average dataframe 
+
+#don't think data is complete enough to calc this 2023 year's budget 
+
 
 # df_avg_2023 <- df_avg_2023 %>%
 #   mutate(
@@ -1653,45 +1659,7 @@ ggsave(
 ```
 
 
-
-#### Add Seasons to Dataframes
-####tried to incorporate those in yearly code chunks above so this is not needed
-
-``` {r}
-# 
-# #will have to do this for every year since I have multi-yr data, and each year will vary a little
-# 
-# # Definition of seasons in the daily average dataframe 
-# 
-# df_avg_2023 <- df_avg_2023 %>%
-#   mutate(
-#       season = case_when(
-#       (DOY >= 249 & DOY <= 294) ~ 'Fall Senescence',
-#       (DOY >= 125 & DOY <= 162) ~ 'Snow Melt',
-#       (DOY >= 163 & DOY <= 248) ~ 'Growing Season',
-#       (DOY >= 295 | DOY <= 124) ~ 'Winter',
-#       TRUE ~ NA_character_
-#     )
-#   )
-# 
-# 
-# # Definition of seasons in the half-hourly dataframe 
-# 
-# df_2023 <- df_2023 %>%
-#   mutate(
-#       season = case_when(
-#       (DOY >= 249 & DOY <= 294) ~ 'Fall Senescence',
-#       (DOY >= 125 & DOY <= 162) ~ 'Snow Melt',
-#       (DOY >= 163 & DOY <= 248) ~ 'Growing Season',
-#       (DOY >= 295 | DOY <= 124) ~ 'Winter',
-#       TRUE ~ NA_character_
-#     )
-#   )
-
-```
-
-
-# Seasonal Correlations
+# TO DO: Seasonal Correlations
 
 correlation between variables in growing season
 
@@ -1780,15 +1748,13 @@ Use half-hourly data to calculate net co2 budgets by season Average rate per day
 
 ## NEE************************
 
-Plot 3 in Ameriflux poster
-
 Finds the net CO2 exchange of each season as defined above
 
 ```{r}
-seasonal_integrals <- function(df_2020) {
+seasonal_integrals <- function(df_2022) {
   
   # Calculate integral (sum) for each season
-  integrals <- df_2020 %>%
+  integrals <- df_2022 %>%
     group_by(season) %>%
     summarise(integral_value = sum(FC_F, na.rm = TRUE)) %>%
     ungroup() %>%
@@ -1802,21 +1768,21 @@ seasonal_integrals <- function(df_2020) {
   return(integrals)
 }
 
-seasonal_integrals_2020 <- seasonal_integrals(df_2020)
+seasonal_integrals_2022 <- seasonal_integrals(df_2022)
 
 #reorders seasons to timeline order
-seasonal_integrals_2020$season <- factor(seasonal_integrals_2020$season, levels = c("Growing Season", "Fall Senescence", "Winter"))
+seasonal_integrals_2022$season <- factor(seasonal_integrals_2022$season, levels = c("Growing Season", "Fall Senescence", "Winter"))
 
-seasonal_2020 <-ggplot(seasonal_integrals_2020, aes(x = season, y = integral_value)) +
+seasonal_2022 <-ggplot(seasonal_integrals_2022, aes(x = season, y = integral_value)) +
   theme_bw()+
   geom_hline(yintercept=0, colour="black")+
   geom_bar(stat = "identity", position = "dodge", fill = "turquoise3") +
   labs(
     x = " ",
     y = expression("Net CO"[2] * " Flux (g C m"^-2*")"),
-    title = expression("Net CO"[2] * " Flux by Season: 2020")
+    title = expression("Net CO"[2] * " Flux by Season: 2022")
   ) +
-  geom_label(aes(label = integral_value), vjust = ifelse(seasonal_integrals_2020$integral_value >= 0, -0.7, 1.5), colour = "black", fill ="white")+
+  geom_label(aes(label = integral_value), vjust = ifelse(seasonal_integrals_2022$integral_value >= 0, -0.7, 1.5), colour = "black", fill ="white")+
   scale_y_continuous(limits=c(-200, 200)) +
   theme(
     axis.title.x = element_text(size = 16, face = "bold"),  # Make x-axis title larger and bold
@@ -1825,7 +1791,7 @@ seasonal_2020 <-ggplot(seasonal_integrals_2020, aes(x = season, y = integral_val
     axis.text.y = element_text(size = 14, face = "bold")    # Make y-axis text larger and bold
   )
 
-seasonal_2020
+seasonal_2022
 ```
 
 
@@ -1844,7 +1810,7 @@ ggsave(
 ```
 
 
-
+#TO DO 
 
 
 ## GPP
@@ -1968,7 +1934,7 @@ seasonalCH4_2022 <- ggplot(seasonal_integrals_2022, aes(x = season, y = integral
     title = expression("Net CH"[4] * " Flux by Season: 2022")
   ) +
   geom_label(aes(label = integral_value), vjust = ifelse(seasonal_integrals_2022$integral_value >= 0, -0.7, 1.5), colour = "black", fill ="white")+
-  scale_y_continuous(limits=c(-10, 10)) +
+  scale_y_continuous(limits=c(0, 6)) +
    theme(
     axis.title.x = element_text(size = 16, face = "bold"),  # Make x-axis title larger and bold
     axis.title.y = element_text(size = 16, face = "bold"),  # Make y-axis title larger and bold
