@@ -4,6 +4,9 @@ output: html_document
 date: "2024-12-02"
 ---
 
+#Notes on site: Wind direction primarily blows from NW, except for Dec - Mar, when it primarily blows from SE direction. The site is largely tussock tundra but to the south there is thermokarst 
+
+
 ## based on Dani's Churchill CO2 Analysis code on github 
 
 ```{r setup, include=FALSE}
@@ -48,14 +51,14 @@ Sys.setenv(TZ='UTC')
 #original half-hourly dataframe 
 df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-#needs continuous day variable
+#needs continuous day variable - daily avg, calculated in processing steps
 df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-#needs continuous day variable
+#monthly avg, calculated in processing steps 
 df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-#original half-hourly dataframe 
-dforig = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+#original half-hourly dataframe using the SWC1
+#dforig = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 ```
 
 
@@ -108,13 +111,13 @@ year_df <- function(df, year) {
     mutate(DOY = yday(date))
 }
 
-#for orig
+#for orig dataset using SWC1
 
-year_df2 <- function(df, year) {
-  dforig %>%
-    filter(format(date, "%Y") == as.character(year)) %>%
-    mutate(DOY = yday(date))
-}
+# year_df2 <- function(df, year) {
+#   dforig %>%
+#     filter(format(date, "%Y") == as.character(year)) %>%
+#     mutate(DOY = yday(date))
+# }
 ```
 
 #Creates data frames of each year containing the daily averages of each value- useful for focusing on one year at a time
@@ -135,7 +138,7 @@ df_avg_2023 <- year_df(df_avg, 2023)
 
 #map out the timestamp of the half-hourly dataset
 df$date <- as.POSIXct(df$date, format = "%Y-%m-%d %H:%M:%OS") #yr month day hour min sec
-dforig$date <- as.POSIXct(df$date, format = "%Y-%m-%d %H:%M:%OS") #yr month day hour min sec
+#dforig$date <- as.POSIXct(df$date, format = "%Y-%m-%d %H:%M:%OS") #yr month day hour min sec
 
 df_2017 <- year_df(df, 2017)
 df_2018 <- year_df(df, 2018)
@@ -145,19 +148,20 @@ df_2021 <- year_df(df, 2021)
 df_2022 <- year_df(df, 2022)
 df_2023 <- year_df(df, 2023)
 
-df_2017orig <- year_df2(dforig, 2017)
-df_2019orig <- year_df2(dforig, 2019)
+#comparing to previous data using the SWC1
+# df_2017orig <- year_df2(dforig, 2017)
+# df_2019orig <- year_df2(dforig, 2019)
 
-#map out the timestamp of the monthly dataset
-df_monthly_avg$date <- as.POSIXct(df_monthly_avg$date, format = "%Y-%m-%d") #yr month
-
-df_monthly_2017 <- year_df(df_monthly_avg, 2017)
-df_monthly_2018 <- year_df(df_monthly_avg, 2018)
-df_monthly_2019 <- year_df(df_monthly_avg, 2019)
-df_monthly_2020 <- year_df(df_monthly_avg, 2020)
-df_monthly_2021 <- year_df(df_monthly_avg, 2021)
-df_monthly_2022 <- year_df(df_monthly_avg, 2022)
-df_monthly_2023 <- year_df(df_monthly_avg, 2023)
+#map out the timestamp of the monthly dataset  --> not currently using, have been using aggregate functions in codes below but keeping for reference 
+# df_monthly_avg$date <- as.POSIXct(df_monthly_avg$date, format = "%Y-%m-%d") #yr month
+# 
+# df_monthly_2017 <- year_df(df_monthly_avg, 2017)
+# df_monthly_2018 <- year_df(df_monthly_avg, 2018)
+# df_monthly_2019 <- year_df(df_monthly_avg, 2019)
+# df_monthly_2020 <- year_df(df_monthly_avg, 2020)
+# df_monthly_2021 <- year_df(df_monthly_avg, 2021)
+# df_monthly_2022 <- year_df(df_monthly_avg, 2022)
+# df_monthly_2023 <- year_df(df_monthly_avg, 2023)
 
 
 ```
@@ -344,16 +348,16 @@ _no_NAs is used for other years of data where NAs are present in gapfilled data
 #checking the budgets with the sum function to double check the results of the bar plots in code chunk below 
 
 # Net CO2 Flux - multiply by 30 to represent per half hour --> can use this with "sum" function to double check the results of the plots for the yearly budgets 
-df_2017 <- df_2017 %>%
+df_2023 <- df_2023 %>%
   mutate(FC_F_no_NAs = ifelse(is.na(FC_F), 0, FC_F * 60 * 30* (1/1000000) * 12))
 #sum of the flux 
-sum(df_2017$FC_F_no_NAs)
+sum(df_2023$FC_F_no_NAs)
 
 #Net CH4 flux --> to check results of bar plots with the sum function
-df_2017 <- df_2017 %>%
+df_2023 <- df_2023 %>%
   mutate(FCH4_F_no_NAs = ifelse(is.na(FCH4_F), 0, FCH4_F*60*30*(1/1000000000)*12))
 #sum - yearly budget 
-sum(df_2017$FCH4_F_no_NAs)
+sum(df_2023$FCH4_F_no_NAs)
 
 
 
@@ -377,28 +381,28 @@ sum(df_2017orig$FCH4_F_no_NAs)
 #Creates numeric timestamp with the unit of minutes to integrate over half-hourly data
 
 #this references the half hourly increments and takes the diff (so 30 min increments)
-df_2022 <- df_2022 %>%
+df_2023 <- df_2023 %>%
   mutate(time_minutes = as.numeric(difftime(TIMESTAMP, min(TIMESTAMP), units = "mins")))
-df_2022$TIMESTAMP
+df_2023$TIMESTAMP
 
 # Units start as micro-moles of CO2/(m^2/s), converted to Grams of C/m^2/minute, integrated over minutes to get Grams of C/m^2
 
 #creating new column of net C budget in order to make the annual budget bar plots
 #net CO2 
-df_2022 <- df_2022 %>%
+df_2023 <- df_2023 %>%
   mutate(FC_F_no_NAs = ifelse(is.na(FC_F), 0, FC_F * 60 * (1/1000000) * 12))
 
 #Net CO2 flux in g/m2
-net_CO2 <- trapz(df_2022$time_minutes, df_2022$FC_F_no_NAs)
+net_CO2 <- trapz(df_2023$time_minutes, df_2023$FC_F_no_NAs)
 
 # Units start as nano-moles of CH4/(m^2/s), converted to Grams of C/m^2/minute, integrated over minutes to get Grams of C/m^2
 
 #Net CH4 Flux
-df_2022 <- df_2022 %>%
+df_2023 <- df_2023 %>%
   mutate(FCH4_F_no_NAs = ifelse(is.na(FCH4_F), 0, FCH4_F*60*(1/1000000000)*12))
 
 
-net_CH4 <- trapz(df_2022$time_minutes, df_2022$FCH4_F_no_NAs)
+net_CH4 <- trapz(df_2023$time_minutes, df_2023$FCH4_F_no_NAs)
 
 # Used IPCC Sixth Assessment Report (AR6) global warming potentials, 100 year time period - could use paper gwp* or delta equation for future analysis
 
@@ -407,14 +411,14 @@ sum = net_CO2+net_CH4
 
 
 #Dataframe created to generate bar graph
-net_wp_2022 <- data.frame(
+net_wp_2023 <- data.frame(
   Category = c("CO2", "CH4", "Total"),
   Value = c(round(net_CO2, 2), round(net_CH4, 2), round(sum, 2) 
 ))
 
 #Plot here
 
-annual_Cbudget_2022 <- ggplot(net_wp_2022, aes(x = Category, y = Value)) +
+annual_Cbudget_2023 <- ggplot(net_wp_2023, aes(x = Category, y = Value)) +
   theme_bw()+
   geom_bar(stat = "identity", position = "dodge", fill = "turquoise3") +
   geom_hline(yintercept=0, colour = "black")+
@@ -422,14 +426,14 @@ annual_Cbudget_2022 <- ggplot(net_wp_2022, aes(x = Category, y = Value)) +
     x = "",
     #y = expression(FCH4~(gCH[4]-C/m^2/s)),
     y = expression(Net~Carbon~Flux~(gC~m^-2~y^-1))) +
-  geom_label(aes(label = Value), vjust = ifelse(net_wp_2022$Value >= 0, -0.7, 1.5), colour = "black", fill ="white")+
+  geom_label(aes(label = Value), vjust = ifelse(net_wp_2023$Value >= 0, -0.7, 1.5), colour = "black", fill ="white")+
   scale_y_continuous(
-     #breaks = seq(-5, 5, 1.5),  # changing for 2022 
-   # limits = c(-2, 5))+ #changing for year 2022
+     #breaks = seq(-5, 5, 1.5),  # changing for 2023 
+   # limits = c(-2, 5))+ #changing for year 2023
       breaks = seq(-80, 20, 10),  # Set limits for the primary axis - other years go up to -73
     limits = c(-80, 50))+ 
-  labs(title = "Cumulative Annual Carbon Budget for 2022") +#for 2022
-#labs(title = "2022")
+  labs(title = "Cumulative Annual Carbon Budget for 2023") +#for 2023
+#labs(title = "2023")
    theme(
     axis.title.x = element_text(size = 16, face = "bold"),  # Make x-axis title larger and bold
     axis.title.y = element_text(size = 16, face = "bold"),  # Make y-axis title larger and bold
@@ -437,16 +441,14 @@ annual_Cbudget_2022 <- ggplot(net_wp_2022, aes(x = Category, y = Value)) +
     axis.text.y = element_text(size = 14, face = "bold")    # Make y-axis text larger and bold
   )# +
   
-#coord_fixed(ratio = 0.6) #for making small 2022 fig 
+#coord_fixed(ratio = 0.6) #for making small 2023 fig 
 
-annual_Cbudget_2022
+annual_Cbudget_2023
 
 ```
 
 
-
-
-#save image to maintain dimensions 
+#save image to maintain dimensions and resolution  
 ```{r}
 ggsave(
   filename = "Annual_Cbudget_2019.png",  # File name and extension
@@ -466,150 +468,142 @@ ggsave(
 #If using the daily avg data from the timeAverage daily dataframe 
 
 #convert from umol CO2/m2/s to gCO2/m2/day
-df_avg_2019 <- df_avg_2019 %>%
+df_avg_2023 <- df_avg_2023 %>%
   mutate(FC_F_no_NAs = ifelse(is.na(FC_F), 0, FC_F * 60 * 60 * 24 * (1/1000000) * 12))
 
 #convert from nano-mol CH4/m2/s to gCH4/m2/day
-df_avg_2019 <- df_avg_2019 %>%
+df_avg_2023 <- df_avg_2023 %>%
   mutate(FCH4_F_no_NAs = ifelse(is.na(FCH4_F), 0, FCH4_F * 60 * 60 * 24 * (1/1000000000) * 12))
 
 # Ensure the 'date' column is in Date format if it isn't already
-#df_avg_2018$date <- as.Date(df_avg_2018$date)
+#df_avg_2023$date <- as.Date(df_avg_2023$date)
 
 # Extract the year and month to create a grouping column
-df_avg_2019$year_month <- format(df_avg_2019$date, "%Y-%m")
+df_avg_2023$year_month <- format(df_avg_2023$date, "%Y-%m")
 
 # Calculate the sum of carbon emissions (g C/m²/month) for each month - this is not working now...
-monthly_CO2sum_2019 <- aggregate(FC_F_no_NAs ~ year_month, data = df_avg_2019, sum, na.rm = TRUE)
-monthly_CH4sum_2019 <- aggregate(FCH4_F_no_NAs ~ year_month, data = df_avg_2019, sum, na.rm = TRUE)
+monthly_CO2sum_2023 <- aggregate(FC_F_no_NAs ~ year_month, data = df_avg_2023, sum, na.rm = TRUE)
+monthly_CH4sum_2023 <- aggregate(FCH4_F_no_NAs ~ year_month, data = df_avg_2023, sum, na.rm = TRUE)
 
 # View the resulting dataframe with monthly sums
-# monthly_CO2sum_2019
-# monthly_CH4sum_2019
+# monthly_CO2sum_2023
+# monthly_CH4sum_2023
 
 #To find monthly sum of CO2 and CH4 together 
 # Calculate the sum of carbon emissions (g C/m²/month) and methane emissions (g CH4/m²/month) for each month
-monthly_Cflux_sum_2019 <- aggregate(cbind(FC_F_no_NAs, FCH4_F_no_NAs) ~ year_month, data = df_avg_2019, sum, na.rm = TRUE)
+monthly_Cflux_sum_2023 <- aggregate(cbind(FC_F_no_NAs, FCH4_F_no_NAs) ~ year_month, data = df_avg_2023, sum, na.rm = TRUE)
 
 # View the resulting dataframe with monthly sums
-monthly_Cflux_sum_2019
+monthly_Cflux_sum_2023
 
 #save table of monthly C flux budgets per year 
-#write.csv(monthly_Cflux_sum_2019, file = "monthly_Cflux_sum_2019.csv", row.names = FALSE)
+#write.csv(monthly_Cflux_sum_2023, file = "monthly_Cflux_sum_2023.csv", row.names = FALSE)
 
 #double check the monthly sums 
 #extract month
-df_avg_2019$month <- as.numeric(format(df_avg_2019$date, "%m"))
+df_avg_2023$month <- as.numeric(format(df_avg_2023$date, "%m"))
  
 #filter out by month - October = 10
-sum_october_2019 <- df_avg_2019[month == 10, .(monthly_sum = sum(FC_F_no_NAs, na.rm = TRUE))]
+sum_october_2023 <- df_avg_2023[month == 10, .(monthly_sum = sum(FC_F_no_NAs, na.rm = TRUE))]
 
 # Print the result
-sum_october_2019
+sum_october_2023
 
 #sum - check sum to match yearly budget 
-sum(df_avg_2019$FC_F_no_NAs)
-sum(df_2019$FC_F_no_NAs)
+sum(df_avg_2023$FC_F_no_NAs)
+sum(df_avg_2023$FCH4_F_no_NAs)
+
 ```
 
 
 ```{r}
-#If using the HH data -- but these are redundant & should match the monthly averages from the daily data in code chunk above
-
-#convert from umol CO2/m2/s to gCO2/m2/HH if not done so already - skip if already done 
-df_2019 <- df_2019 %>%
-  mutate(FC_F_no_NAs = ifelse(is.na(FC_F), 0, FC_F * 60 * 30 * (1/1000000) * 12))
-
-#convert from nano-mol CH4/m2/s to gCH4/m2/HH if not done so already - skip if already done
-df_2019 <- df_2019 %>%
-  mutate(FCH4_F_no_NAs = ifelse(is.na(FCH4_F), 0, FCH4_F * 60 * 30 * (1/1000000000) * 12))
-
-# Ensure the 'date' column is in Date format if it isn't already
-#df_avg_2019$date <- as.Date(df_avg_2019$date)
-
-# Extract the year and month to create a grouping column
-df_2019$year_month <- format(df_2019$date, "%Y-%m")
-
-# Calculate the sum of carbon emissions (g C/m²/month) for each month
-monthly_HHCO2sum_2019 <- aggregate(FC_F_no_NAs ~ year_month, data = df_avg_2019, sum, na.rm = TRUE)
-monthly_HHCH4sum_2019 <- aggregate(FCH4_F_no_NAs ~ year_month, data = df_avg_2019, sum, na.rm = TRUE)
-
-# View the resulting dataframe with monthly sums
-monthly_HHCO2sum_2019
-monthly_HHCH4sum_2019
-
-#To find monthly sum of CO2 and CH4 together 
-# Calculate the sum of carbon emissions (g C/m²/month) and methane emissions (g CH4/m²/month) for each month
-monthly_HHCflux_sum_2019 <- aggregate(cbind(FC_F_no_NAs, FCH4_F_no_NAs) ~ year_month, data = df_avg_2019, sum, na.rm = TRUE)
-
-# View the resulting dataframe with monthly sums
-monthly_HHCflux_sum_2019
-
-#save table of monthly C flux budgets per year 
-#write.csv(monthly_HHCflux_sum_2019, file = "monthly_HH_Cflux_sum_2019.csv", row.names = FALSE)
-
-
+# #If using the HH data -- but these are redundant & should match the monthly averages from the daily data in code chunk above
+# 
+# #convert from umol CO2/m2/s to gCO2/m2/HH if not done so already - skip if already done 
+# df_2019 <- df_2019 %>%
+#   mutate(FC_F_no_NAs = ifelse(is.na(FC_F), 0, FC_F * 60 * 30 * (1/1000000) * 12))
+# 
+# #convert from nano-mol CH4/m2/s to gCH4/m2/HH if not done so already - skip if already done
+# df_2019 <- df_2019 %>%
+#   mutate(FCH4_F_no_NAs = ifelse(is.na(FCH4_F), 0, FCH4_F * 60 * 30 * (1/1000000000) * 12))
+# 
+# # Ensure the 'date' column is in Date format if it isn't already
+# #df_avg_2019$date <- as.Date(df_avg_2019$date)
+# 
+# # Extract the year and month to create a grouping column
+# df_2019$year_month <- format(df_2019$date, "%Y-%m")
+# 
+# # Calculate the sum of carbon emissions (g C/m²/month) for each month
+# monthly_HHCO2sum_2019 <- aggregate(FC_F_no_NAs ~ year_month, data = df_avg_2019, sum, na.rm = TRUE)
+# monthly_HHCH4sum_2019 <- aggregate(FCH4_F_no_NAs ~ year_month, data = df_avg_2019, sum, na.rm = TRUE)
+# 
+# # View the resulting dataframe with monthly sums
+# monthly_HHCO2sum_2019
+# monthly_HHCH4sum_2019
+# 
+# #To find monthly sum of CO2 and CH4 together 
+# # Calculate the sum of carbon emissions (g C/m²/month) and methane emissions (g CH4/m²/month) for each month
+# monthly_HHCflux_sum_2019 <- aggregate(cbind(FC_F_no_NAs, FCH4_F_no_NAs) ~ year_month, data = df_avg_2019, sum, na.rm = TRUE)
+# 
+# # View the resulting dataframe with monthly sums
+# monthly_HHCflux_sum_2019
+# 
+# #save table of monthly C flux budgets per year 
+# #write.csv(monthly_HHCflux_sum_2019, file = "monthly_HH_Cflux_sum_2019.csv", row.names = FALSE)
 
 ```
 
 #### Net C Budgets per month bar plot 
 ```{r}
-# Used IPCC Sixth Assessment Report (AR6) global warming potentials of CH4 compared to CO2, 100 year time period 
-
-# Extract the month name from the year_month column
-monthly_Cflux_sum_2019$month_name <- format(as.Date(paste0(monthly_Cflux_sum_2019$year_month, "-01")), "%B")
-
-
-#CH4 warming potential - optional
-monthly_Cflux_sum_2019 <- monthly_Cflux_sum_2019 %>%
-  mutate(CH4_CO2e = FCH4_F_no_NAs*27.2) 
-
-#sum of CO2 and CH4 fluxes
-monthly_Cflux_sum_2019 <- monthly_Cflux_sum_2019 %>%
-  mutate(total_Cflux = FC_F_no_NAs + FCH4_F_no_NAs)
-
-#reshape the df into a long format so you can plot CO2, CH4, and the sum per month on the same figure 
-
-# Load necessary libraries
+# Load necessary libraries for reshaping datasets 
 library(ggplot2)
 library(tidyr)
 library(dplyr)
 
-# Reshape the data to a long format
-monthly_Cflux_sum_2019_long <- monthly_Cflux_sum_2019 %>%
-  pivot_longer(cols = c(FC_F_no_NAs, FCH4_F_no_NAs, total_Cflux), 
-               names_to = "Flux_Type", 
-               values_to = "Flux_Sum")
+#CH4 warming potential --> Used IPCC Sixth Assessment Report (AR6) global warming potentials of CH4 compared to CO2, 100 year time period 
+# monthly_Cflux_sum_2022 <- monthly_Cflux_sum_2022 %>%
+#   mutate(CH4_CO2e = FCH4_F_no_NAs*27.2) 
 
-# Create the bar graph
-ggplot(monthly_Cflux_sum_2019_long, aes(x = factor(month_name, levels = month.name), y = Flux_Sum, fill = Flux_Type)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = c("FC_F_no_NAs" = "turquoise", "FCH4_F_no_NAs" = "salmon", "total_Cflux" = "grey")) +
-  labs(x = "Month", y = "C Flux (g/m²/month)", 
-       title = "Monthly CO2 and CH4 Flux Sums for 2019",
-       fill = "C flux") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+# Extract the month name from the year_month column
+monthly_Cflux_sum_2023$month_name <- format(as.Date(paste0(monthly_Cflux_sum_2023$year_month, "-01")), "%B")
+
+#sum of CO2 and CH4 fluxes
+monthly_Cflux_sum_2023 <- monthly_Cflux_sum_2023 %>%
+  mutate(total_Cflux = FC_F_no_NAs + FCH4_F_no_NAs)
+
+#reshape the df into a long format so you can plot CO2, CH4, and the sum per month on the same figure 
+# # Reshape the data to a long format
+# monthly_Cflux_sum_2023_long <- monthly_Cflux_sum_2023 %>%
+#   pivot_longer(cols = c(FC_F_no_NAs, FCH4_F_no_NAs, total_Cflux), 
+#                names_to = "Flux_Type", 
+#                values_to = "Flux_Sum")
+
+# Bar graph --> methane very small here so see code below for a scaled fig 
+# ggplot(monthly_Cflux_sum_2023_long, aes(x = factor(month_name, levels = month.name), y = Flux_Sum, fill = Flux_Type)) +
+#   geom_bar(stat = "identity", position = "dodge") +
+#   scale_fill_manual(values = c("FC_F_no_NAs" = "turquoise", "FCH4_F_no_NAs" = "salmon", "total_Cflux" = "grey")) +
+#   labs(x = "Month", y = "C Flux (g/m²/month)", 
+#        title = "Monthly CO2 and CH4 Flux Sums for 2023",
+#        fill = "C flux") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 #Methane is very small compared to CO2, so make a scaling factor and new fig with a secondary axis 
-
 # Scale the methane values (FCH4_F_no_NAs) by a factor, e.g., 100
 scaling_factor <- 30
-monthly_Cflux_sum_2019$FCH4_scaled <- monthly_Cflux_sum_2019$FCH4_F_no_NAs * scaling_factor
+monthly_Cflux_sum_2023$FCH4_scaled <- monthly_Cflux_sum_2023$FCH4_F_no_NAs * scaling_factor
 
 # Reshape the data to a long format
-monthly_Cflux_sum_2019_long <- monthly_Cflux_sum_2019 %>%
+monthly_Cflux_sum_2023_long <- monthly_Cflux_sum_2023 %>%
   select(-FCH4_F_no_NAs) %>% # Exclude the unwanted column
   pivot_longer(cols = c(FC_F_no_NAs, total_Cflux, FCH4_scaled), 
                names_to = "Flux_Type", 
                values_to = "Flux_Sum")
 
-
-
 # Create the bar graph with a scaled FCH4_F_N_no_NAs
-monthlyC_2019_barplot <- ggplot(monthly_Cflux_sum_2019_long, aes(x = factor(month_name, levels = month.name), y = Flux_Sum, fill = Flux_Type)) +
+monthlyC_2023_barplot <- ggplot(monthly_Cflux_sum_2023_long, aes(x = factor(month_name, levels = month.name), y = Flux_Sum, fill = Flux_Type)) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(
     values = c("FC_F_no_NAs" = "turquoise", "FCH4_scaled" = "salmon", "total_Cflux" = "grey"),
@@ -620,21 +614,23 @@ monthlyC_2019_barplot <- ggplot(monthly_Cflux_sum_2019_long, aes(x = factor(mont
   scale_y_continuous(
     #name = "CO2 Flux (g C/m²/month)", 
     name = expression(CO[2]~Flux~(gC~m^-2~month^-1)),
-       breaks = seq(-55, 30, 5),  # Set limits for the primary axis
-    limits = c(-55, 30),  # Explicitly set limits for the primary axis
+       breaks = seq(-50, 30, 5),  # Set limits for the primary axis
+    limits = c(-50, 30),  # Explicitly set limits for the primary axis
     sec.axis = sec_axis(~ . / scaling_factor, name = expression(Methane~Flux~(gC~m^-2~month^-1)),breaks = seq(-1, 1, 0.25))
   ) +
     #y = expression(CH[4]~Flux~(nmolCH[4]~m^-2~y^-1)),
   labs(x = "Month", y = "C Flux (g/m²/month)", 
-       title = "Monthly C Fluxes for 2019",
-       #title = "Monthly CO2 and CH4 Flux Sums for 2019",
+       title = "Monthly C Fluxes for 2023",
+       #title = "Monthly CO2 and CH4 Flux Sums for 2023",
        fill = "C flux") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-monthlyC_2019_barplot 
+monthlyC_2023_barplot 
 
 ```
+
+
 #save image to maintain dimensions 
 ```{r}
 ggsave(
@@ -648,6 +644,8 @@ ggsave(
 
 #ggsave("my_plot.pdf", width = 8, height = 6, dpi = 300, units = "in")
 ```
+
+
 
 #Comparing gapfilled to non-gapfilled with boxplot
 
@@ -697,22 +695,23 @@ ggplot(df_2017, aes(x = as.factor(month), y = FCH4_F_no_NAs)) +
 
 #convert CO2 data from umolC/m2/s to gC/m2/day 
 #net CO2 flux - gapfilled
-df_avg_2019 <- df_avg_2019 %>%
+df_avg_2023 <- df_avg_2023 %>%
   mutate(FC_F_no_NAs = ifelse(is.na(FC_F), 0, FC_F * 60 * 60 * 24* (1/1000000) * 12))
 #net CO2 flux not gapfilled
-df_avg_2019 <- df_avg_2019 %>%
+df_avg_2023 <- df_avg_2023 %>%
   mutate(FC_no_NAs = ifelse(is.na(FC), 0, FC * 60 * 60 * 24 * (1/1000000) * 12))
 
 
 # CH4 Units start as nano-moles of CH4/(m^2/s), converted to gC/m^2/day
 #Net CH4 Flux - gapfilled
-df_avg_2019 <- df_avg_2019 %>%
+df_avg_2023 <- df_avg_2023 %>%
   mutate(FCH4_F_no_NAs = ifelse(is.na(FCH4_F), 0, FCH4_F * 60 * 60 * 24 * (1/1000000000) * 12))
 #net CH4 flux not gapfilled
-df_avg_2019 <- df_avg_2019 %>%
+df_avg_2023 <- df_avg_2023 %>%
   mutate(FCH4_no_NAs = ifelse(is.na(FCH4), 0, FCH4 * 60 * 60 * 24* (1/1000000000) * 12))
 
-########################################################################################################################
+###############################################
+
 # Extract the month as a numeric value
 df_avg_2023$month <- format(df_avg_2023$date, "%m") 
 
@@ -735,7 +734,6 @@ ggplot(df_avg_2023, aes(x = as.factor(month), y = FCH4_F_no_NAs)) +
 #just checking sums here 
 # Filter the dataframe for October 2023 and calculate the sum of FC_F_no NAs
 sum_october_2023 <- sum(df_avg_2023$FC_F_no_NAs[format(df_avg_2023$date, "%Y-%m") == "2023-10"], na.rm = TRUE)
-
 # Print the result
 sum_october_2023
 
@@ -744,6 +742,8 @@ avg_dec_2023 <- mean(df_avg_2023$FC_F_no_NAs[format(df_avg_2023$date, "%Y-%m") =
 avg_dec_2023
 
 ```
+
+
 
 #Dailv avg boxplot of gapfilled vs not gapfilled
 ```{r}
