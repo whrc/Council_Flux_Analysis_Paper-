@@ -45,8 +45,8 @@ df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/counci
 #needs continuous day variable
 df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-#needs continuous day variable
-df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+#needs continuous day variable --> here for reference but mainly have been using the aggregate function in R to do this 
+#df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 
 #Notes:
@@ -69,7 +69,7 @@ df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfi
 
 
 #calculate the correlations between FCH4, TS_3_1_1, and SWC_3_1_1:
-#### correlation coefficients explain the strength and direction of a correlation, but not the magnitude of change (like the slope from an lm analysis does) and not the goodness of fit of the model (R2)
+#### correlation coefficients explain the strength and direction of a correlation --> **not the magnitude of change (like the slope from an lm analysis does) and not the goodness of fit of the model (R2)
 ```{r}
 #these TS and SWC are measurements from tussock area of site 
 
@@ -129,7 +129,7 @@ cor(df$FCH4, df$interaction_liBer, use = "complete.obs")
 # Scatter plots of correlations - tussock 
 ggplot(df, aes(x = TS_3_1_1, y = FCH4)) + geom_point() + geom_smooth(method = "lm")
 ggplot(df, aes(x = SWC_3_1_1, y = FCH4)) + geom_point() + geom_smooth(method = "lm")
-ggplot(df, aes(x = interaction, y = FCH4)) + geom_point() + geom_smooth(method = "lm") 
+ggplot(df, aes(x = interaction_tuss, y = FCH4)) + geom_point() + geom_smooth(method = "lm") 
 
 
 # Scatter plots of correlations - pond margin 
