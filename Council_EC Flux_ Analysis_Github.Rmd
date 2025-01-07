@@ -138,7 +138,7 @@ df_avg_2023 <- year_df(df_avg, 2023)
 
 #map out the timestamp of the half-hourly dataset
 df$date <- as.POSIXct(df$date, format = "%Y-%m-%d %H:%M:%OS") #yr month day hour min sec
-#dforig$date <- as.POSIXct(df$date, format = "%Y-%m-%d %H:%M:%OS") #yr month day hour min sec
+#dforig$date <- as.POSIXct(df$date, format = "%Y-%m-%d %H:%M:%OS") #yr month day hour min sec --> dataset using SWC_1
 
 df_2017 <- year_df(df, 2017)
 df_2018 <- year_df(df, 2018)
@@ -148,8 +148,9 @@ df_2021 <- year_df(df, 2021)
 df_2022 <- year_df(df, 2022)
 df_2023 <- year_df(df, 2023)
 
-#comparing to previous data using the SWC1
+#for comparing some years to previous data using the SWC1
 # df_2017orig <- year_df2(dforig, 2017)
+# df_2018orig <- year_df2(dforig, 2018)
 # df_2019orig <- year_df2(dforig, 2019)
 
 #map out the timestamp of the monthly dataset  --> not currently using, have been using aggregate functions in codes below but keeping for reference 
