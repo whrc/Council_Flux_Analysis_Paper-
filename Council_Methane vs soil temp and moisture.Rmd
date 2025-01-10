@@ -439,7 +439,7 @@ summary(model13.2) #R2 = 0.106, p<0.001; Residual standard error: 8.973 on 21657
 ```{r}
 #Had Claude help with setting up a df for comparison of temp and FCH4
 
-# First, let's create a list of all your temperature variables
+# First, let's create a list of all temperature variables
 temp_vars <- c("TS_1_1_1", "TS_2_1_1", "TS_3_1_1", "TS_4_1_1", "TS_5_1_1")
 
 # Create empty vectors to store results
@@ -488,7 +488,7 @@ print(results_sorted)
 ```{r}
 #Had Claude help with setting up a df for comparison of temp and FCH4
 
-# First, let's create a list of all your temperature variables
+# First, let's create a list of all  temperature variables
 swc_vars <- c("SWC_1_1_1", "SWC_2_1_1", "SWC_3_1_1")
 
 # Create empty vectors to store results
@@ -610,7 +610,7 @@ summary(model_full_tuss)
 # Soil water content alone isn't significant (p = 0.975)
 # The interaction is significantly positive (0.0352)
 # This tells us that the effect of temperature on methane flux depends on soil moisture levels
-# This second approach with model_comparisons will show you:
+# This second approach with model_comparisons will show:
 # 
 # Main effect of temperature
 # Main effect of soil water content
@@ -1041,17 +1041,17 @@ print(round(transition_point, 2))
 # Temperature increases lead to decreased methane flux
 # This likely occurs because drier conditions limit methanogenic activity
 # 
-# Above 41.62% soil moisture:# 
+# Above 41.62% soil moisture: 
 # Temperature increases lead to increased methane flux
 # This makes sense ecologically as methanogens require both warmth and anaerobic (wet) conditions
 # 
-# This matches well with your moisture distribution:
+# This matches well with themoisture distribution:
 # 
 # 25th percentile (13.7%): well below threshold → negative temperature effect
 # Median (55%) and 75th percentile (59.4%): well above threshold → positive temperature effect
 # Mean (41.16%): remarkably close to the transition point!
 
-#This suggests your site experiences both moisture-limited and temperature-limited methane production, depending on conditions. 
+#This suggests the site experiences both moisture-limited and temperature-limited methane production, depending on conditions. 
 
 ```
 
@@ -2116,7 +2116,7 @@ varImpPlot(rf_model)
 # 
 # SWC and TS showing similar importance
 # Interaction term slightly more important
-# This supports your earlier findings about the complex interplay between temperature and moisture
+# This supports earlier findings about the complex interplay between temperature and moisture
 
 #performs a bit worse than the era5 data 
 
@@ -2129,7 +2129,7 @@ varImpPlot(rf_model)
 #OOB ntrees
 
 ```{r}
-#interaction term in your ERA5 dataset, for reference: TS_SWC_interact
+#interaction term in ERA5 dataset, for reference: TS_SWC_interact
 
 #for reference, since we already subsetted a constrained dataset in previous code chunks 
 # cc = df_era2[complete.cases(df_era2$fch4),]
