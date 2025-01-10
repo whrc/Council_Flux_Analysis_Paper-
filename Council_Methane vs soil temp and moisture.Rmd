@@ -2,7 +2,23 @@
 title: "Council CH4 and temp / moisture" #playing around with empirical model using soil temp and soil moisture for methane 
 output: html_document
 date: "2024-12-26"
+#Notes on SWC and temp:
+
+#SWC
+#SWC also broken up by location, just like temp 
+#  SWC_1_1_1 % Soil water content (15cm depth) – margin pond
+# SWC_2_1_1 % Soil water content (15cm depth) – lichen/berries
+# SWC_3_1_1 % Soil water content (15cm depth) - tussock ***** switch to using this one ** (used SWC1 before, by margin pond, switching to SWC3, tussock)
+
+#Temp
+#quick look at the different temp profiles (all at 15 cm depth, diff locations)
+# sum(is.na(df$TS_1_1_1)) #60277 NA's in temp by margin pond 
+# sum(is.na(df$TS_2_1_1)) #48729 NA's in temp  by lichen/berries  
+# sum(is.na(df$TS_3_1_1)) #50445 NA's in temp by tussock 
+# sum(is.na(df$TS_4_1_1)) #52796 NA's in temp by foot of EC tower
+# sum(is.na(df$TS_5_1_1)) #new temp in latest upload with 2023 data, don't have info on what it is yet** 
 ---
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -37,35 +53,100 @@ Sys.setenv(TZ='UTC')
 
 # Set working directory and then Load data
 
+TO DO: re-running all these with SWC_3 (tussock) version of dataset - KK 1/7/2025 **use the era dataset** 
+
 ```{r}
-#original half-hourly dataframe 
-df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+#Initially ran all these models on the gapfilled data, need to re-run using the era_mod data******** 
+
+#changed to "council_gapfilled_clean_2017_2023_for analysis.2.csv" --> .2 indicates updated dataset with SWC_3 tussock 
+
+#half-hourly dataframe --> gapfilled 
+#df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 
-#needs continuous day variable
-df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
-
-#needs continuous day variable --> here for reference but mainly have been using the aggregate function in R to do this 
-#df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
-
-
-#Notes:
-#SWC
-#SWC also broken up by location
-#  SWC_1_1_1 % Soil water content (15cm depth) – margin pond
-# SWC_2_1_1 % Soil water content (15cm depth) – lichen/berries
-# SWC_3_1_1 % Soil water content (15cm depth) - tussock ***** switch to using this one ** (used SWC1 before, by margin pond, switching to SWC3, tussock)
-
-#Temp
-#quick look at the different temp profiles (all at 15 cm depth, diff locations)
-# sum(is.na(df$TS_1_1_1)) #60277 NA's in temp by margin pond 
-# sum(is.na(df$TS_2_1_1)) #48729 NA's in temp  by lichen/berries  
-# sum(is.na(df$TS_3_1_1)) #50445 NA's in temp by tussock 
-# sum(is.na(df$TS_4_1_1)) #52796 NA's in temp by foot of EC tower
-# sum(is.na(df$TS_5_1_1)) #new temp in latest upload with 2023 data, don't have info on what it is yet** 
+#daily avg dataframe --> gapfilled 
+#df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 
 ```
+
+#ERA dataset 
+####Prepping the era dataset to use to train RF too -- calc vpd and RF for SWC gapfilling, just like in the processing steps 
+```{r}
+#ERA-5 dataset for RF training - just like in step 2 of the processing code -- uses the same dataset used in the beginning of step 2 
+df_era = fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2016_2023_era.csv") #using the re-cleaned df from Dani 
+
+#subset out by which has complete air t data 
+df_era = df_era[complete.cases(df_era$airt.eramod),]
+
+#create subset of the variables wanted for training RF 
+df_era2 = data.frame(df_era$date,df_era$FC.c,df_era$FCH4.c,
+                 df_era$airt.eramod, df_era$wd, df_era$cardinal_direction, df_era$rh.eramod,df_era$rad.eramod,
+                 df_era$ws.eramod,df_era$tsoil.eramod,#df_era$SWC_1_1_1.c,df_era$SWC_2_1_1.c, 
+                 df_era$SWC_3_1_1.c, #SWC 3 = the tussock location 
+                 df_era$h.eramod,df_era$le.eramod)
+
+#rename for easier names
+names(df_era2) = c('date','nee',"fch4",'tair', 'wd', 'cardDir','rh','rg','ws','tsoil','swc','h','le')
+
+#make card dir as factor - 8 levels 
+df_era2$cardDir <- as.factor(df_era2$cardDir)
+
+#calculate VPD from air t and RH
+svp = 610.7*10^((7.5*df_era2$tair)/(237.3+df_era2$tair))
+df_era2$vpd = ((100 - df_era2$rh)/100)*svp  
+
+#Train RF to fill in SWC (using SWC3, tussocklocation*)
+
+set.seed(123)#sets the start point of models, good for repeatability
+cc = df_era2[complete.cases(df_era2$swc),]#create a gap free data set of the target variable
+
+#use 80% of data set as training set and 20% as test set
+sample = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+train  = cc[sample, ]
+test   = cc[!sample, ]
+
+#compare to ensure all data sets are representative of total data
+hist(cc$swc)
+hist(train$swc)
+hist(test$swc)
+
+#run random forest to predict missing SWC values ################################################
+library(randomForest)
+
+rf.swc = randomForest(formula = swc ~ tair + rh + rg + ws + wd + tsoil + vpd + le + h,data = train,ntree = 150)
+#tried various tree numbers, no sig improvement after 300....very minimal diff between 150 and 300, and 150 looks slightly better.
+
+#predict it on the full data set
+swc.rf = predict(object = rf.swc,newdata = df_era2)
+df_era2$swc.rf = swc.rf 
+
+#time series plot of gap filled vs real
+ggplot(data = df_era2)+
+  geom_point(aes(date,swc.rf*100,col='RF'))+
+  geom_point(aes(date,swc*100,col='Measured'))+
+  scale_y_continuous("SWC (%)")
+
+
+#validation dataset from only test data
+val = merge(test,df_era2,by = "date",all.x = T)
+
+ggplot(data = val,aes(swc.rf,swc.x))+theme_bw()+geom_abline(slope = 1,intercept = 0,col='red')+
+  geom_point(alpha=0.1)+
+  scale_x_continuous(limits = c(0,70),"RF SWC (%)")+
+  scale_y_continuous(limits = c(0,70),"Measured SWC (%)")
+
+#summary stats on gap filling
+summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.97, slope = 1.02
+
+#create final gap free soil moisture
+df_era2$swc = ifelse(is.na(df_era2$swc),df_era2$swc.rf,df_era2$swc)
+
+```
+
+
+#Correlations - measured data 
+#Here I use original SWC_3 and soil Temp_3 data and the original FCH4 data (not gapfilled)  
 
 
 #calculate the correlations between FCH4, TS_3_1_1, and SWC_3_1_1:
@@ -83,8 +164,8 @@ cor(df$FCH4, df$interaction_tuss, use = "complete.obs")
 
 #Results: no strong correlations - all very weak pos but interaction a bit better of a fit 
 
-# [1] 0.1981594 FCH4 vs temp
-# [1] 0.153488 FCH4 vs SWC
+# [1]  0.1981594 FCH4 vs temp
+# [1] 0.153488FCH4 vs SWC
 # [1] 0.2642889 FCH4 vs interaction of temp and SWC
 
 
@@ -101,9 +182,9 @@ cor(df$FCH4, df$SWC_1_1_1, use = "complete.obs")
 df$interaction_pond <- df$TS_1_1_1 * df$SWC_1_1_1
 cor(df$FCH4, df$interaction_pond, use = "complete.obs")
 #Results:
-# [1] 0.2358536
-# [1] 0.232435
-# [1] 0.3072315 --> corr best with interaction btwn temp and SWC
+# [1] 0.2358536 FCH4 v temp
+# [1] 0.232435 FCH4 v SWC
+# [1]  0.3072315  FCH4 v interaction --> corr best with interaction btwn temp and SWC
 
 
 #measurements from lichen/berries for both temp and SWC 
@@ -116,11 +197,20 @@ cor(df$FCH4, df$SWC_2_1_1, use = "complete.obs")
 df$interaction_liBer <- df$TS_2_1_1 * df$SWC_2_1_1
 cor(df$FCH4, df$interaction_liBer, use = "complete.obs")
 #Results:
-# [1] 0.1786063
-# [1] 0.1145262
-# [1] 0.2269394 #best with interaction effect 
+# [1] 0.1786063FCH4 v temp
+# [1] 0.1145262 FCH4 v SWC
+# [1]  0.2269394 FCH4 v interaction --> corr best with interaction btwn temp and SWC
 
 #Note: best correlation between FCH4 and temp/SWC came from margin pond location, and included the interaction of temp and SWC, but corr = 0.307
+
+
+#There is a temp for EC tower (TS_4), but no corresponding SWC for this location 
+cor(df$FCH4, df$TS_4_1_1, use = "complete.obs") 
+#Result: 0.200699
+
+#There is a TS_5, but didn't note a notation on what that actually is --> didn't see an updated user guide as of early Dec (? check again*?)******************************
+cor(df$FCH4, df$TS_5_1_1, use = "complete.obs") 
+#Result: 0.1553307
 
 ```
 
@@ -143,69 +233,1987 @@ ggplot(df, aes(x = SWC_2_1_1, y = FCH4)) + geom_point() + geom_smooth(method = "
 ggplot(df, aes(x = interaction_liBer, y = FCH4)) + geom_point() + geom_smooth(method = "lm") 
 
 ```
-#lm of relationshipsfrom dataset; testing all soil and SWC locations 
+#Correlations - era 5 and fch4 (not gapfilled methane)
+#calculate the correlations between fch4, tsoil, swc (era-gapfilled swc):
+
 ```{r}
-#df without NAs 
-df_clean <- na.omit(df[, c("FCH4", "TS_3_1_1", "TS_2_1_1", "TS_1_1_1" )])
+#era tsoil and swc 
 
-#these results of using df with or without NA's = same stats 
-model1 <-lm(FCH4 ~ TS_3_1_1, data = df_clean)
-summary(model1) 
+# Calculate correlations of fch4 and soil temp, SWC
+cor(df_era2$fch4, df_era2$tsoil, use = "complete.obs") 
+cor(df_era2$fch4, df_era2$swc, use = "complete.obs") 
 
-#temp - tussock
-model2 <-lm(FCH4 ~ TS_3_1_1, data = df)
-summary(model1) #slope = 0.48; R2 = 0.06, p <0.001; Residual standard error: 9.259
-
-#temp - lichen and berries 
-model3 <-lm(FCH4 ~ TS_2_1_1, data = df)
-summary(model3) #slope = 0.36; R2 = 0.03, p <0.001; Residual standard error: 9.453
-
-#temp - pond margin
-model4 <-lm(FCH4 ~ TS_1_1_1, data = df)
-summary(model4) #slope = 0.35; R2 = 0.05; p <0.001; Residual standard error: 9.304 
-
-#SWC - tussock
-model5 <-lm(FCH4 ~ SWC_3_1_1, data = df)
-summary(model5) #slope = 0.07; R = 0.02; p <0.001; Residual standard error: 9.474 
-
-#SWC - lichen and berries
-model6 <-(lm(FCH4 ~ SWC_2_1_1, data = df))
-summary(model6) #slope = 0.06; R2 = 0.01; p<0.001; Residual standard error: 9.543
-
-#SWC - pond margin 
-model7 <-lm(FCH4 ~ SWC_1_1_1, data = df)
-summary(model7) #slope = 0.12; R2 = 0.05; p<0.001; Residual standard error: 9.312
-
-#interaction - tussock 
-model8 <-lm(FCH4 ~ interaction_tuss, data = df)
-summary(model8) #slope = 0.0088; R2 = 0.0698; p<0.001; Residual standard error: 9.247 
-
-#interaction - pond margin 
-model9 <-lm(FCH4 ~ interaction_pond, data = df)
-summary(model9) #slope = 0.009; R2 = 0.09; p<0.001; Residual standard error: 9.111
-
-#interaction - lichen and berries 
-model10 <-lm(FCH4 ~ interaction_liBer, data = df)
-summary(model10) #slope = 0.01; R2 = 0.05; p<0.001; Residual standard error: 9.357
+#Results
+# [1] 0.1741951
+# [1] 0.153366
 
 
-
-model11 <-lm(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction_tuss, data = df)
-summary(model11) #R2 = 0.11; p<0.001
-
-model12 <-lm(FCH4 ~ TS_2_1_1 + SWC_2_1_1 + interaction_liBer, data = df)
-summary(model12) #R2 = 0.06, p<0.001
-
-model13 <-lm(FCH4 ~ TS_1_1_1 + SWC_1_1_1 + interaction_pond, data = df)
-summary(model13) #R2 = 0.11, p<0.001
+# Interaction term of soil temp and SWC 
+df_era2$interaction_era <- df_era2$tsoil * df_era2$swc
+cor(df_era2$fch4, df_era2$interaction_era, use = "complete.obs") 
+#Results: [1] 0.2358751 --> best with interaction 
 
 
-#TO DO, look at RSMEs again
+# Scatter plots of correlations
+ggplot(df_era2, aes(x = tsoil, y = fch4)) + geom_point() + geom_smooth(method = "lm")
+ggplot(df_era2, aes(x = swc, y = fch4)) + geom_point() + geom_smooth(method = "lm")
+ggplot(df_era2, aes(x = interaction_era, y = fch4)) + geom_point() + geom_smooth(method = "lm") 
 
 ```
 
 
-#predictive model, trying linear model as starting point 
+#lm of relationshipsfrom dataset; testing era tsoil & swc, and all measured soil and SWC locations 
+```{r}
+#era_5 df 
+model_era.temp <-lm(fch4 ~ tsoil, data = df_era2)
+summary(model_era.temp) # R2 = 0.03; slope = 0.35; Residual standard error: 9.456 on 25599 degrees of freedom
+
+model_era.swc <-lm(fch4 ~ swc, data = df_era2)
+summary(model_era.swc) # R2 = 0.02; slope = 0.077; Residual standard error: 9.489 on 25599 degrees of freedom
+
+#using calculated interaction term
+model_era.interaction <-lm(fch4 ~ interaction_era, data = df_era2)
+summary(model_era.interaction) # R2 = 0.05; slope = 0.009; Residual standard error: 9.332 on 25599 degrees of freedom
+
+#using interaction in formula --> probably better than trying to create a static interaction term ** 
+model_era.interaction2 <-lm(fch4 ~ tsoil*swc, data = df_era2)
+summary(model_era.interaction2) # R2 = 0.11; slope = 0.046; Residual standard error: 9.047 on 25597 degrees of freedom
+#Coefficients:
+#              Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)  4.445198   0.160939  27.620  < 2e-16 ***
+# tsoil       -2.075853   0.051266 -40.492  < 2e-16 ***
+# swc          0.025811   0.003842   6.719 1.87e-11 ***
+# tsoil:swc    0.046281   0.000969  47.760  < 2e-16 ***
+
+
+###############using measured temp and swc data (not gapfilled)##################################################
+
+#df without NAs 
+df_clean <- na.omit(df[, c("FCH4", "TS_3_1_1", "TS_2_1_1", "TS_1_1_1", "TS_4_1_1", "TS_5_1_1", "SWC_1_1_1", "SWC_2_1_1", "SWC_3_1_1" )])
+df_clean$interaction_tuss <- df_clean$TS_3_1_1 * df_clean$SWC_3_1_1 #tussock
+df_clean$interaction_pond <- df_clean$TS_1_1_1 * df_clean$SWC_1_1_1 #margin pond
+df_clean$interaction_liBer <- df_clean$TS_2_1_1 * df_clean$SWC_2_1_1 #lichen/berries 
+
+
+#these results of using df with or without NA's, just to see  --> was recommended to just use original df, with NAs, rather than exclude all rows with NAs, and let the lm work around NAs 
+# model1 <-lm(FCH4 ~ TS_3_1_1, data = df_clean)
+# summary(model1) #slope = 0.46; R2 = 0.063; p<0.001
+
+#temp - tussock
+model2 <-lm(FCH4 ~ TS_3_1_1, data = df)
+summary(model2) #slope = 0.355; R2 = 0.039, p <0.001; Residual standard error: 9.398 on 24735 degrees of freedom
+
+
+#temp - lichen and berries - orig data with NAs
+model3 <-lm(FCH4 ~ TS_2_1_1, data = df)
+summary(model3) #slope = 0.36; R2 = 0.03, p <0.001; Residual standard error: 9.453 on 25567 degrees of freedom
+
+#temp - lichen and berries - df_clean
+# model3.2 <-lm(FCH4 ~ TS_2_1_1, data = df_clean)
+# summary(model3.2) #slope = 0.51; R2 = 0.054, p <0.001; Residual standard error: 9.235 on 21659 degrees of freedom
+
+
+#temp - pond margin
+model4 <-lm(FCH4 ~ TS_1_1_1, data = df)
+summary(model4) #slope = 0.35; R2 = 0.05; p <0.001; Residual standard error: 9.304 on 23383 degrees of freedom
+
+#temp - pond margin - df_clean
+# model4.2 <-lm(FCH4 ~ TS_1_1_1, data = df_clean)
+# summary(model4.2) #slope = 0.339; R2 = 0.053; p <0.001; Residual standard error: 9.237 on 21659 degrees of freedom
+
+#SWC - tussock
+model5 <-lm(FCH4 ~ SWC_3_1_1, data = df)
+summary(model5) #slope = 0.07; R = 0.02; p <0.001; Residual standard error: 9.474 on 24735 degrees of freedom
+
+#SWC - tussock - df_clean
+model5.2 <-lm(FCH4 ~ SWC_3_1_1, data = df_clean)
+summary(model5.2) #slope = 0.12; R = 0.050; p <0.001; Residual standard error: 9.253 on 21659 degrees of freedom
+
+#SWC - lichen and berries
+model6 <-(lm(FCH4 ~ SWC_2_1_1, data = df))
+summary(model6) #slope = 0.06; R2 = 0.01; p<0.001; Residual standard error: 9.543 on 25574 degrees of freedom
+
+
+#SWC - lichen and berries - df_clean
+model6.2 <-(lm(FCH4 ~ SWC_2_1_1, data = df_clean))
+summary(model6.2) #slope = 0.099; R2 = 0.0279; p<0.001; Residual standard error: 9.361 on 21659 degrees of freedom
+
+
+#SWC - pond margin 
+model7 <-lm(FCH4 ~ SWC_1_1_1, data = df)
+summary(model7) #slope = 0.12; R2 = 0.05; p<0.001; Residual standard error: 9.312 on 23383 degrees of freedom
+
+#SWC - pond margin - df_clean
+model7.2 <-lm(FCH4 ~ SWC_1_1_1, data = df_clean)
+summary(model7.2) #slope = 0.11; R2 = 0.05; p<0.001; Residual standard error: 9.249 on 21659 degrees of freedom
+
+#interaction - tussock 
+model8 <-lm(FCH4 ~ interaction_tuss, data = df)
+summary(model8) #slope = 0.0088; R2 = 0.0698; p<0.001; Residual standard error: 9.247 on 24735 degrees of freedom
+
+#interaction - tussock - df_clean
+model8.2 <-lm(FCH4 ~ interaction_tuss, data = df_clean)
+summary(model8.2) #slope = 0.0099; R2 = 0.089; p<0.001; Residual standard error: 9.06 on 21659 degrees of freedom
+
+#interaction - pond margin 
+model9 <-lm(FCH4 ~ interaction_pond, data = df)
+summary(model9) #slope = 0.009; R2 = 0.09; p<0.001; Residual standard error: 9.111 on 23383 degrees of freedom
+
+#interaction - pond margin - df_clean
+model9.2 <-lm(FCH4 ~ interaction_pond, data = df_clean)
+summary(model9.2) #slope = 0.009; R2 = 0.089; p<0.001; Residual standard error: 9.058 on 21659 degrees of freedom
+
+#interaction - lichen and berries 
+model10 <-lm(FCH4 ~ interaction_liBer, data = df)
+summary(model10) #slope = 0.01; R2 = 0.05; p<0.001; Residual standard error: 9.357 on 25567 degrees of freedom
+
+#interaction - lichen and berries - df_clean
+# model10.2 <-lm(FCH4 ~ interaction_liBer, data = df_clean)
+# summary(model10.2) #slope = 0.01; R2 = 0.06; Residual standard error: 9.179 on 21659 degrees of freedom
+
+
+
+model11 <-lm(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction_tuss, data = df)
+summary(model11) #R2 = 0.11; p<0.001; Residual standard error: 9.014 on 24733 degrees of freedom
+# Coefficients:
+#                    Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)       6.0166656  0.1528678  39.359   <2e-16 ***
+# TS_3_1_1         -1.4648912  0.0407837 -35.919   <2e-16 ***
+# SWC_3_1_1        -0.0001117  0.0035354  -0.032    0.975    
+# interaction_tuss  0.0351855  0.0007784  45.204   <2e-16 ***
+
+# model11.2 <-lm(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction_tuss, data = df_clean)
+# summary(model11.2)#R2 = 0.11, p<0.001; Residual standard error: 8.938 on 21657 degrees of freedom
+# Coefficients:
+#                    Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)       4.3219769  0.1917367  22.541  < 2e-16 ***
+# TS_3_1_1         -0.9661740  0.0490227 -19.709  < 2e-16 ***
+# SWC_3_1_1         0.0311463  0.0041743   7.462 8.87e-14 ***
+# interaction_tuss  0.0259342  0.0009284  27.936  < 2e-16 ***
+
+
+
+model12 <-lm(FCH4 ~ TS_2_1_1 + SWC_2_1_1 + interaction_liBer, data = df)
+summary(model12) #R2 = 0.06, p<0.001; Residual standard error: 9.276 on 25565 degrees of freedom
+# Coefficients:
+#                     Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)        6.9142444  0.1461682  47.303  < 2e-16 ***
+# TS_2_1_1          -0.8599749  0.0409944 -20.978  < 2e-16 ***
+# SWC_2_1_1         -0.0157729  0.0041144  -3.834 0.000127 ***
+# interaction_liBer  0.0290912  0.0009354  31.101  < 2e-16 ***
+
+
+# model12.2 <-lm(FCH4 ~ TS_2_1_1 + SWC_2_1_1 + interaction_liBer, data = df_clean)
+# summary(model12.2) #R2 = 0.068, p<0.001; Residual standard error: 9.164 on 21657 degrees of freedom
+# Coefficients:
+#                    Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)        5.015642   0.181865  27.579  < 2e-16 ***
+# TS_2_1_1          -0.262805   0.053300  -4.931 8.26e-07 ***
+# SWC_2_1_1          0.023859   0.004734   5.040 4.70e-07 ***
+# interaction_liBer  0.016202   0.001194  13.571  < 2e-16 ***
+
+
+
+model13 <-lm(FCH4 ~ TS_1_1_1 + SWC_1_1_1 + interaction_pond, data = df)
+summary(model13) #R2 = 0.11, p<0.001; Residual standard error: 9.02 on 23381 degrees of freedom
+# Coefficients:
+#                    Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)       4.2040048  0.1734745   24.23   <2e-16 ***
+# TS_1_1_1         -0.3445701  0.0259391  -13.28   <2e-16 ***
+# SWC_1_1_1         0.0401979  0.0039777   10.11   <2e-16 ***
+# interaction_pond  0.0148246  0.0005721   25.91   <2e-16 ***
+
+
+model13.2 <-lm(FCH4 ~ TS_1_1_1 + SWC_1_1_1 + interaction_pond, data = df_clean)
+summary(model13.2) #R2 = 0.106, p<0.001; Residual standard error: 8.973 on 21657 degrees of freedom
+# Coefficients:
+#                    Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)       4.0542518  0.1760912   23.02   <2e-16 ***
+# TS_1_1_1         -0.2956529  0.0264095  -11.20   <2e-16 ***
+# SWC_1_1_1         0.0424171  0.0040384   10.50   <2e-16 ***
+# interaction_pond  0.0137075  0.0005888   23.28   <2e-16 ***
+
+
+```
+#Comprehensive list of LM results of FCH4 and diff temps - measured data 
+```{r}
+#Had Claude help with setting up a df for comparison of temp and FCH4
+
+# First, let's create a list of all your temperature variables
+temp_vars <- c("TS_1_1_1", "TS_2_1_1", "TS_3_1_1", "TS_4_1_1", "TS_5_1_1")
+
+# Create empty vectors to store results
+r_squared <- numeric(length(temp_vars))
+adj_r_squared <- numeric(length(temp_vars))
+slopes <- numeric(length(temp_vars))
+n_obs <- numeric(length(temp_vars))
+p_values <- numeric(length(temp_vars))
+
+# Run models and store results
+for(i in seq_along(temp_vars)) {
+    # Create formula
+    formula <- as.formula(paste("FCH4 ~", temp_vars[i]))
+    
+    # Fit model
+    model <- lm(formula, data = df)
+    
+    # Store results
+    r_squared[i] <- summary(model)$r.squared
+    adj_r_squared[i] <- summary(model)$adj.r.squared
+    slopes[i] <- coef(model)[2]
+    n_obs[i] <- nobs(model)
+    p_values[i] <- summary(model)$coefficients[2,4]
+}
+
+# Create results dataframe
+results <- data.frame(
+    Temperature = temp_vars,
+    R_squared = round(r_squared, 4),
+    Adj_R_squared = round(adj_r_squared, 4),
+    Slope = round(slopes, 4),
+    N_observations = n_obs,
+    P_value = format(p_values, scientific = TRUE),
+    stringsAsFactors = FALSE
+)
+
+# Sort by R-squared to see which temperature has strongest relationship
+results_sorted <- results[order(-results$R_squared),]
+
+# View results
+print(results_sorted)
+
+#Shows TS_1 (pond) actually has strongest R2 at 0.05, followed by TS_4 at 0.04
+```
+#Comprehensive list of LM results of FCH4 and diff SWC locations - measured data 
+```{r}
+#Had Claude help with setting up a df for comparison of temp and FCH4
+
+# First, let's create a list of all your temperature variables
+swc_vars <- c("SWC_1_1_1", "SWC_2_1_1", "SWC_3_1_1")
+
+# Create empty vectors to store results
+r_squared <- numeric(length(swc_vars))
+adj_r_squared <- numeric(length(swc_vars))
+slopes <- numeric(length(swc_vars))
+n_obs <- numeric(length(swc_vars))
+p_values <- numeric(length(swc_vars))
+
+# Run models and store results
+for(i in seq_along(swc_vars)) {
+    # Create formula
+    formula <- as.formula(paste("FCH4 ~", swc_vars[i]))
+    
+    # Fit model
+    model <- lm(formula, data = df)
+    
+    # Store results
+    r_squared[i] <- summary(model)$r.squared
+    adj_r_squared[i] <- summary(model)$adj.r.squared
+    slopes[i] <- coef(model)[2]
+    n_obs[i] <- nobs(model)
+    p_values[i] <- summary(model)$coefficients[2,4]
+}
+
+# Create results dataframe
+results <- data.frame(
+    SWC = swc_vars,
+    R_squared = round(r_squared, 4),
+    Adj_R_squared = round(adj_r_squared, 4),
+    Slope = round(slopes, 4),
+    N_observations = n_obs,
+    P_value = format(p_values, scientific = TRUE),
+    stringsAsFactors = FALSE
+)
+
+# Sort by R-squared to see which swcerature has strongest relationship
+results_sorted <- results[order(-results$R_squared),]
+
+# View results
+print(results_sorted)
+
+#shows SWC_1 has strongest R2 at 0.05, followed by SWC3 (tussock) at 0.02
+```
+#Comprehensive list of LM results of FCH4 and temp*SWC interaction only - measured data 
+```{r}
+# Create paired lists of temperature and SWC variables
+temp_vars <- c("TS_1_1_1", "TS_2_1_1", "TS_3_1_1")
+swc_vars <- c("SWC_1_1_1", "SWC_2_1_1", "SWC_3_1_1")
+locations <- c("pond", "liBer", "tuss")
+
+# Create empty vectors to store results
+r_squared <- numeric(length(temp_vars))
+adj_r_squared <- numeric(length(temp_vars))
+slopes <- numeric(length(temp_vars))
+n_obs <- numeric(length(temp_vars))
+p_values <- numeric(length(temp_vars))
+
+# First, create the interaction terms
+for(i in seq_along(temp_vars)) {
+    interaction_name <- paste0("interaction_", locations[i])
+    df[[interaction_name]] <- df[[temp_vars[i]]] * df[[swc_vars[i]]]
+}
+
+# Run models and store results
+for(i in seq_along(locations)) {
+    # Get interaction variable name
+    int_var <- paste0("interaction_", locations[i])
+    
+    # Create formula
+    formula <- as.formula(paste("FCH4 ~", int_var))
+    
+    # Fit model
+    model <- lm(formula, data = df)
+    
+    # Store results
+    r_squared[i] <- summary(model)$r.squared
+    adj_r_squared[i] <- summary(model)$adj.r.squared
+    slopes[i] <- coef(model)[2]
+    n_obs[i] <- nobs(model)
+    p_values[i] <- summary(model)$coefficients[2,4]
+}
+
+# Create results dataframe
+results <- data.frame(
+    Location = locations,
+    R_squared = round(r_squared, 4),
+    Adj_R_squared = round(adj_r_squared, 4),
+    Slope = round(slopes, 4),
+    N_observations = n_obs,
+    P_value = format(p_values, scientific = TRUE),
+    stringsAsFactors = FALSE
+)
+
+# Sort by R-squared
+results_sorted <- results[order(-results$R_squared),]
+
+# View results
+print(results_sorted)
+```
+#Comprehensive list of full interaction model LM results of FCH4 and temp, SWC, temp*SWC interaction - measured data 
+```{r}
+#Testing single interaction vs full interaction models 
+
+####Testing for tussock location (T3 and SWC3)
+
+#single interaction - only looking at interaction via interaction term, not each singular variable and the interaction
+summary(model8)
+
+# Full interaction model
+model_full_tuss <- lm(FCH4 ~ TS_3_1_1 * SWC_3_1_1, data = df)
+summary(model_full_tuss)
+# This is equivalent to: FCH4 ~ TS_3_1_1 + SWC_3_1_1 + TS_3_1_1:SWC_3_1_1 = full interaction model, which includes singluar effects and interaction effect 
+
+
+#Results:
+# Full Interaction Model (R² = 0.1161):
+# Temperature has a significant negative main effect (-1.4649)
+# Soil water content alone isn't significant (p = 0.975)
+# The interaction is significantly positive (0.0352)
+# This tells us that the effect of temperature on methane flux depends on soil moisture levels
+# This second approach with model_comparisons will show you:
+# 
+# Main effect of temperature
+# Main effect of soil water content
+# Their interaction effect
+# Overall model fit via R2, p, and residual std error 
+
+# We can add this to our systematic comparison:
+model_comparisons <- list()
+for(i in seq_along(locations)) {
+    formula <- as.formula(paste("FCH4 ~", temp_vars[i], "*", swc_vars[i]))
+    model_comparisons[[locations[i]]] <- lm(formula, data = df)
+}
+
+# View summaries
+lapply(model_comparisons, summary)
+
+#Results: R2 all very weak, highest = 0.11; but all p < 0.001 SIG
+
+
+```
+####Visualizing Interaction between tsoil and tsoil from ERA5
+```{r}
+#For reference, full interaction model from era_5 dataset:
+
+#model_era.interaction2 <-lm(fch4 ~ tsoil*swc, data = df_era2)
+ # R2 = 0.11; slope = 0.046; Residual standard error: 9.047 on 25597 degrees of freedom
+# Residuals:
+#     Min      1Q  Median      3Q     Max 
+# -60.829  -5.109  -1.340   3.931  79.130 
+#Coefficients:
+#              Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)  4.445198   0.160939  27.620  < 2e-16 ***
+# tsoil       -2.075853   0.051266 -40.492  < 2e-16 ***
+# swc          0.025811   0.003842   6.719 1.87e-11 ***
+# tsoil:swc    0.046281   0.000969  47.760  < 2e-16 ***
+
+
+# For better visualization of overall trend of tsoil and tsoilinteraction
+ggplot(df_era2, aes(x = tsoil, y = fch4, color = swc)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm") +
+  theme_minimal() +
+  labs(title = "Methane Flux vs Temperature_era",
+       subtitle = "Colored by Soil Water Content",
+       x = "Temperature",
+       y = "Methane Flux")
+
+
+#This code breaks SWC into 3 even levels (low, intermediate, high) to show the change in temp relationship depending on SWC
+ggplot(df_era2, aes(x = tsoil, y = fch4)) +
+  geom_point(aes(color = swc), alpha = 0.3) +
+  geom_smooth(aes(group = cut(swc, breaks = 3)), method = "lm") +
+  theme_minimal() +
+  labs(title = "Methane Flux vs Temperature",
+       subtitle = "Colored by Soil Water Content",
+       x = "Temperature (°C)",
+       y = "Methane Flux",
+       color = "Soil Water Content")
+
+summary(df_era2$tsoil)
+ #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # -7.846  -1.972  -0.987   1.521   5.846  16.447 
+
+summary(df_era2$swc)
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   # 5.00    9.60   25.50   32.72   57.32   71.60 
+
+#Figure & summary takeaways:
+
+# - A wide range of methane flux values (-60 to 79)
+#- temp ranges from -7.8 to 16.47 C, and swc ranges from 5% to 71.6%
+# -Soil water content (SWC) shown by color gradient (darker = lower, lighter = higher)
+# -A slight positive trend overall, but with substantial scatter
+# 
+# 
+# The full interaction model results:
+# -Negative main effect of temperature (-2.07) --> p<0.001 --> sig 
+# -very weak, pos effect of swc (0.0258) --> p<0.001 --> sig 
+# -very slight positive interaction effect (0.046) --> p<0.001 --> sig 
+
+
+# At low SWC values, increasing temperature might decrease methane flux (negative main effect)
+# At high SWC values, increasing temperature increases methane flux (positive interaction overcomes negative main effect)
+
+# Darker points (low SWC): slight downward trend with temperature
+# Lighter points (high SWC): upward trend with temperature
+# The crossing of trend lines around moderate temperatures --> but lines cross at two different temps/swc indicating perhaps more than a single threshold & different moisture levels may have different "crossover / threshold" temps --> effect of temp on methane varies non-linearly with moisture
+
+#Calculating the threshold of the switch in temp:swc relationship --> here the threshold is higher than when using measured data (~41%) (in code chunks below)
+# Temperature effect = -2.076 + (0.046 × SWC)
+# At the threshold, this equals zero:
+# -2.076 + (0.046 × SWC) = 0
+# 0.046 × SWC = 2.076
+# SWC = 2.076/0.046 = 45.13% --. but since there seem to be two thresholds, going to try to calc the thresholds at diff temps
+```
+####Methane and moisture relationship at diff temps - ERA5
+```{r}
+# Create temperature bins
+df_era2$temp_bin <- cut(df_era2$tsoil, 
+                       breaks = c(-8, -4, 0, 4, 8, 16.5),  # Changed from 16 to 16.5
+                       labels = c("Very Cold (-8 to -4°C)",
+                                "Cold (-4 to 0°C)",
+                                "Cool (0 to 4°C)",
+                                "Warm (4 to 8°C)",
+                                "Warmest (8 to 16.5°C)"))
+
+#Code for if you need more flexibility in the bins
+# Adjust the breaks to cover the full range
+# df_era2$temp_bin <- cut(df_era2$tsoil, 
+#                        breaks = c(-Inf, -4, 0, 4, 8, Inf), --> allows for it to scale to the datapoints present 
+#                        labels = c("Very Cold (< -4°C)",
+#                                 "Cold (-4 to 0°C)",
+#                                 "Cool (0 to 4°C)",
+#                                 "Warm (4 to 8°C)",
+#                                 "Hot (> 8°C)"))
+
+# Create plot for each temperature range
+ggplot(df_era2, aes(x = swc, y = fch4, color = tsoil)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm", se = TRUE) +
+  facet_wrap(~temp_bin, scales = "free") +
+  scale_color_viridis_c() +
+  labs(title = "Methane Flux vs Soil Moisture by Temperature Range",
+       x = "Soil Water Content (%)",
+       y = "Methane Flux",
+       color = "Temperature (°C)") +
+  theme_minimal()
+
+# Calculate relationships for each bin
+temp_bin_models <- df_era2 %>%
+  group_by(temp_bin) %>%
+  summarise(
+    n = n(),
+    correlation = cor(swc, fch4, use = "complete.obs"),
+    slope = coef(lm(fch4 ~ swc))[2]
+  )
+
+#Results:
+# Very Cold (-8 to -4°C):
+# 
+# Relatively flat relationship with moisture
+# Less scatter in the data
+# Consistent low-level methane emissions
+# 
+# Cold (-4 to 0°C):
+# 
+# Slight positive relationship with moisture
+# More variability in emissions
+# Higher maximum emissions than very cold conditions
+# 
+# Cool (0 to 4°C):
+# 
+# Nearly flat relationship
+# Increased variability
+# Some high emission events
+# 
+# Warm (4 to 8°C):
+# 
+# Wider range of moisture conditions
+# Slight positive trend
+# Much more variability in emissions
+# 
+# Warmest (8 to 16°C):
+# 
+# Strongest positive relationship with moisture
+# Highest variability
+# Highest potential for large emission events
+# 
+# Key Patterns:
+# 
+# Temperature amplifies the moisture effect
+# More variability as temperature increases
+# Moisture becomes more important in warmer conditions
+# Also interesting to note that these warmest points: All occur at relatively high SWC (around 58%); Show relatively high methane flux (mean ~29); Have relatively low variability in SWC (58-58.8%)
+# From this we see:
+# Temperature effects may change based on moisture levels
+# Moisture effects may become more important at higher temperatures
+
+```
+####Relationship stats for each temp bin
+```{r}
+# Calculate relationship statistics for each bin
+temp_bin_stats <- df_era2 %>%
+  group_by(temp_bin) %>%
+  summarise(
+    n = n(),  # number of observations
+    correlation = cor(swc, fch4, use = "complete.obs"),  # correlation coefficient
+    mean_flux = mean(fch4, na.rm = TRUE),  # mean methane flux
+    sd_flux = sd(fch4, na.rm = TRUE),  # standard deviation of flux
+    mean_swc = mean(swc, na.rm = TRUE),  # mean soil water content
+    # Get linear model coefficients
+    slope = coef(lm(fch4 ~ swc))[2],
+    r_squared = summary(lm(fch4 ~ swc))$r.squared
+  ) %>%
+  arrange(temp_bin)
+
+# Print results in a nice format
+print(temp_bin_stats)
+
+#Results
+#Highest variability in methane flux at coldest temps and warmest temps (also correlates with least swc and most swc)
+#Strongest correlation at warm (4 - 8C), but all correlations are weak 
+#Mean flux is actually highest at the coldest (and driest) temp bin ***
+#Steepest slope occurs at warmest temp (8 - 16.5C) & also has highest R2 (0.085) --> but still very poor fit 
+#but also least number of observations in very cold temp bin (2314) vs others (ranging from 66795 - 11020), maybe this affected the means 
+
+
+#Examining the very cold temp bin some more
+# Look at very cold conditions in detail
+very_cold <- df_era2[df_era2$temp_bin == "Very Cold (-8 to -4°C)", ]
+
+# Create histogram of methane flux in very cold conditions
+ggplot(very_cold, aes(x = fch4)) +
+  geom_histogram(binwidth = 1) +
+  labs(title = "Distribution of Methane Flux in Very Cold Conditions",
+       x = "Methane Flux",
+       y = "Count") +
+  theme_minimal()
+
+# Get more detailed statistics
+summary(very_cold$fch4)
+
+# Look at relationship between SWC and flux in very cold conditions
+ggplot(very_cold, aes(x = swc, y = fch4)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm") +
+  labs(title = "Methane Flux vs SWC in Very Cold Conditions",
+       x = "Soil Water Content (%)",
+       y = "Methane Flux") +
+  theme_minimal()
+
+#The few but fairly large outliers in this temp bin are likely inflating the mean methane flux, and there is a large number of NAs in this temp bin --> maybe look at medians? Using medians will help reduce the influence of those extreme values and might give us a more realistic picture of typical methane flux patterns across temperature ranges
+
+# Calculate median statistics for each bin
+temp_bin_medians <- df_era2 %>%
+  group_by(temp_bin) %>%
+  summarise(
+    n = n(),
+    median_flux = median(fch4, na.rm = TRUE),
+    q25_flux = quantile(fch4, 0.25, na.rm = TRUE),  # 25th percentile
+    q75_flux = quantile(fch4, 0.75, na.rm = TRUE),  # 75th percentile
+    median_swc = median(swc, na.rm = TRUE),
+    n_missing = sum(is.na(fch4))  # Count NAs
+  ) %>%
+  arrange(temp_bin)
+
+print(temp_bin_medians)
+
+#Very cold has highest median flux (18.9) and also lowest swc (6%) --> also has highest proportion of missing data / NAs (~87%) when you compare n to n_missing --> probably have to take this with a grain of salt, though it is interesting to see the highest emission potential to possibly occur at the coldest and driest time? --> talk to Kyle about this? 
+#Second highest median flux is warmest/hot (9.8)
+#highest median swc (59%) occurs at cool temp bin (0-4C)
+#Temperature Progression: Cold → Cool → Warm → Warmest/Hot --> Median flux: 4.89 → 5.77 → 7.60 → 9.80
+#Sharp divide in median SWC: Cold conditions: 6.35-11.06% vs Cool & Warmer conditions: 57.65-59.30%
+
+```
+####Methane and temp relationship at diff SWC - binning - ERA5
+```{r}
+#Check spread of data to get accurate bins 
+summary(df_era2$swc)
+
+# Create SWC bins
+df_era2$swc_bin <- cut(df_era2$swc, 
+                       breaks = c(0, 20, 40, 60, 80),
+                       labels = c("Very Dry (0-20%)",
+                                "Dry (20-40%)",
+                                "Wet (40-60%)",
+                                "Very Wet (60-80%)"))
+
+# Calculate statistics for each SWC bin
+swc_bin_stats <- df_era2 %>%
+  group_by(swc_bin) %>%
+  summarise(
+    n = n(),
+    median_flux = median(fch4, na.rm = TRUE),
+    q25_flux = quantile(fch4, 0.25, na.rm = TRUE),
+    q75_flux = quantile(fch4, 0.75, na.rm = TRUE),
+    median_temp = median(tsoil, na.rm = TRUE),
+    n_missing = sum(is.na(fch4))
+  ) %>%
+  arrange(swc_bin)
+
+# Create plot for each moisture range
+ggplot(df_era2, aes(x = tsoil, y = fch4, color = swc)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm", se = TRUE) +
+  facet_wrap(~swc_bin, scales = "free") +
+  scale_color_viridis_c() +
+  labs(title = "Methane Flux vs Temperature by Moisture Range",
+       x = "Soil Temperature (°C)",
+       y = "Methane Flux",
+       color = "SWC (%)") +
+  theme_minimal()
+```
+####Relationship stats for each SWC bin
+```{r}
+# Calculate relationship statistics for each bin
+swc_bin_stats <- df_era2 %>%
+  group_by(swc_bin) %>%
+  summarise(
+    n = n(),  # number of observations
+    correlation = cor(tsoil, fch4, use = "complete.obs"),  # correlation coefficient
+    mean_flux = mean(fch4, na.rm = TRUE),  # mean methane flux
+    sd_flux = sd(fch4, na.rm = TRUE),  # standard deviation of flux
+    mean_tsoil = mean(tsoil, na.rm = TRUE),  # mean temp
+    # Get linear model coefficients
+    slope = coef(lm(fch4 ~ tsoil))[2],
+    r_squared = summary(lm(fch4 ~ tsoil))$r.squared
+  ) %>%
+  arrange(swc_bin)
+
+# Print results in a nice format
+print(swc_bin_stats)
+
+#Results
+#highest methane flux at very wet (60-80%), at a mean temp of 5.7C 
+#negative relationship at very dry swc, positive relationship at wetter swc 
+#relationship seems to switch around SWC = 40%
+#This contrasts with what we saw when we binned by temperature, possibly pointing out how the outliers in the very cold temp bin are skewing the methane fluxes there and need to be taken with a grain of salt...SWC binning is less influenced by extreme temp values (mor even distribution of data, large sample sizes i.e., less proportional missing data)
+
+
+```
+
+
+
+#### Measured data 
+####Interaction between Temp and SWC at tussock location (TS3, SWC3)
+
+```{r}
+# For better visualization
+
+ggplot(df, aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm") +
+  theme_minimal() +
+  labs(title = "Methane Flux vs Temperature",
+       subtitle = "Colored by Soil Water Content",
+       x = "Temperature",
+       y = "Methane Flux")
+
+#This code break SWC into 3 even levels (low, intermediate, high) to show the change in temp relationship depending on SWC
+
+ggplot(df, aes(x = TS_3_1_1, y = FCH4)) +
+  geom_point(aes(color = SWC_3_1_1), alpha = 0.3) +
+  geom_smooth(aes(group = cut(SWC_3_1_1, breaks = 3)), method = "lm") +
+  theme_minimal() +
+  labs(title = "Methane Flux vs Temperature",
+       subtitle = "Colored by Soil Water Content",
+       x = "Temperature (°C)",
+       y = "Methane Flux",
+       color = "Soil Water Content")
+
+#Figure takeaways:
+
+# - A wide range of methane flux values (-50 to 100)
+# -Temperature range from about -10°C to 20°C
+# -Soil water content (SWC) shown by color gradient (darker = lower, lighter = higher)
+# -More data points/higher variance in methane flux at higher temperatures
+# -A slight positive trend overall, but with substantial scatter
+# 
+# 
+# The full interaction model results show why this pattern occurs:
+# -Negative main effect of temperature (-1.4649) --> sig 
+# -Non-significant main effect of SWC alone (-0.0001; p=0.97)
+# -positive interaction effect (0.0352) --> sig 
+
+
+# At low SWC values, increasing temperature might decrease methane flux (negative main effect)
+# At high SWC values, increasing temperature increases methane flux (positive interaction overcomes negative main effect)
+# The relationship between temperature and methane flux gets stronger as soil moisture increases
+
+# The lowest SWC group (darkest points) shows a slightly negative or flat relationship with temperature
+# The highest SWC group (lightest points) shows a stronger positive relationship with temperature
+# The middle SWC group shows an intermediate slope
+
+
+#Trying to calc temp effects / slopes at different SWC using the full interaction model: "model_full_tuss <- lm(FCH4 ~ TS_3_1_1 * SWC_3_1_1, data = df)"
+# The effect of temperature on methane flux at any given SWC value is:
+# Temperature Effect = β₁ + β₃(SWC value)
+# where β₁ is the temperature coefficient (-1.4649) and β₃ is the interaction coefficient (0.0352)
+
+
+# First, let's look at the distribution of SWC_3_1_1 values
+summary(df$SWC_3_1_1)
+# Get quantiles of SWC for representative values
+quantiles <- quantile(df$SWC_3_1_1, probs = c(0.25, 0.5, 0.75), na.rm = TRUE)
+
+# Calculate temperature effects
+low_effect <- -1.4649 + (0.0352 * quantiles[1])
+med_effect <- -1.4649 + (0.0352 * quantiles[2])
+high_effect <- -1.4649 + (0.0352 * quantiles[3])
+
+# Create results dataframe
+results <- data.frame(
+   SWC_Level = c("Low (25%)", "Medium (50%)", "High (75%)"),
+   SWC_Value = round(quantiles, 2),
+   Temp_Effect = round(c(low_effect, med_effect, high_effect), 3)
+)
+
+print(results)
+
+#Results:
+
+# These results tell us something very interesting about how soil moisture modifies the temperature effect on methane flux:
+# 
+# At Low Moisture (13.7%):
+#   - Temperature effect is negative (-0.983)
+#   -Meaning: For every 1°C increase in temperature, methane flux decreases by about 0.98 units when soil is dry
+# 
+# 
+# At Medium Moisture (55%):# 
+#   -Temperature effect becomes positive (0.471)
+#   -Meaning: For every 1°C increase, methane flux increases by about 0.47 units at median moisture
+# 
+# 
+# At High Moisture (59.4%):# 
+#   -Even stronger positive effect (0.626)
+#   -Meaning: For every 1°C increase, methane flux increases by about 0.63 units in wet conditions
+
+
+
+#Calc the transtion point when the soil moisture level where temp starts having a pos effect on methane flux 
+# Solve: -1.4649 + (0.0352 * SWC) = 0
+transition_point <- 1.4649/0.0352
+print(round(transition_point, 2))
+#Result: 41.62
+
+#Below 41.62% soil moisture:
+# Temperature increases lead to decreased methane flux
+# This likely occurs because drier conditions limit methanogenic activity
+# 
+# Above 41.62% soil moisture:# 
+# Temperature increases lead to increased methane flux
+# This makes sense ecologically as methanogens require both warmth and anaerobic (wet) conditions
+# 
+# This matches well with your moisture distribution:
+# 
+# 25th percentile (13.7%): well below threshold → negative temperature effect
+# Median (55%) and 75th percentile (59.4%): well above threshold → positive temperature effect
+# Mean (41.16%): remarkably close to the transition point!
+
+#This suggests your site experiences both moisture-limited and temperature-limited methane production, depending on conditions. 
+
+```
+
+########Interaction effects at lichen/berries location (TS2, SWC2)
+```{r}
+# For pond margin (TS_1_1_1 * SWC_1_1_1)
+model_full_pond <- lm(FCH4 ~ TS_1_1_1 * SWC_1_1_1, data = df)
+summary(model_full_pond)
+
+#Results:
+#Transition point = 0.3445701/0.0148246 = 23.24% SWC
+# All coefficients highly significant
+# Positive main effect of SWC (0.0402)
+
+# For lichen/berries (TS_2_1_1 * SWC_2_1_1)
+model_full_liber <- lm(FCH4 ~ TS_2_1_1 * SWC_2_1_1, data = df)
+summary(model_full_liber)
+
+#Results:
+#Transition point = 0.8599749/0.0290912 = 29.56% SWC
+#all coeffs highly significant 
+
+
+
+# Results Comparing all three locations:
+# 
+# 1. Moisture thresholds for positive temperature effects:
+# 
+# Tussock: 41.62% SWC (highest threshold)
+# Lichen/berries: 29.56% SWC
+# Pond margin: 23.24% SWC (lowest threshold)
+#  
+# 2. Sensitivity to temperature (interaction coefficients):
+# 
+# Tussock: 0.0352 (strongest)
+# Lichen/berries: 0.0291
+# Pond margin: 0.0148 (weakest)
+
+#Takeaways: 
+# Pond margins respond positively to temperature at lower moisture levels
+# Tussocks need higher moisture for positive temperature effects
+# Each microsite has its own distinct threshold
+# All sites show the moisture-dependent temperature effect, but at different strengths
+
+
+
+#Figure for margin pond 
+ggplot(df, aes(x = TS_1_1_1, y = FCH4)) +
+  geom_point(aes(color = SWC_1_1_1), alpha = 0.3) +
+  geom_smooth(aes(group = cut(SWC_1_1_1, breaks = 3)), method = "lm") +
+  theme_minimal() +
+  labs(title = "Methane Flux vs Temperature at Margin Pond",
+       subtitle = "Colored by Soil Water Content",
+       x = "Temperature (°C)",
+       y = "Methane Flux",
+       color = "Soil Water Content")
+
+#Figure for lichen and berries 
+ggplot(df, aes(x = TS_2_1_1, y = FCH4)) +
+  geom_point(aes(color = SWC_2_1_1), alpha = 0.3) +
+  geom_smooth(aes(group = cut(SWC_2_1_1, breaks = 3)), method = "lm") +
+  theme_minimal() +
+  labs(title = "Methane Flux vs Temperature at Lichen/Berries",
+       subtitle = "Colored by Soil Water Content",
+       x = "Temperature (°C)",
+       y = "Methane Flux",
+       color = "Soil Water Content")
+
+# Get SWC distributions for each location
+summary(df$SWC_1_1_1)  # pond
+summary(df$SWC_2_1_1)  # lichen/berries
+
+# Calculate transition points for each location
+# Transition = -β₁/β₃ (where β₁ is temp coefficient and β₃ is interaction)
+```
+#Comparative figures
+```{r}
+# Create the plot with explicit faceting
+# Create three separate dataframes for cleaner plotting
+tussock_data <- df[!is.na(df$TS_3_1_1) & !is.na(df$SWC_3_1_1) & !is.na(df$FCH4), ]
+pond_data <- df[!is.na(df$TS_1_1_1) & !is.na(df$SWC_1_1_1) & !is.na(df$FCH4), ]
+liber_data <- df[!is.na(df$TS_2_1_1) & !is.na(df$SWC_2_1_1) & !is.na(df$FCH4), ]
+
+# Create a long format dataset for faceting
+plot_data <- rbind(
+  data.frame(Temp = tussock_data$TS_3_1_1, SWC = tussock_data$SWC_3_1_1, 
+             FCH4 = tussock_data$FCH4, Site = "Tussock"),
+  data.frame(Temp = pond_data$TS_1_1_1, SWC = pond_data$SWC_1_1_1, 
+             FCH4 = pond_data$FCH4, Site = "Pond Margin"),
+  data.frame(Temp = liber_data$TS_2_1_1, SWC = liber_data$SWC_2_1_1, 
+             FCH4 = liber_data$FCH4, Site = "Lichen/Berries")
+)
+
+# Create the plot with explicit faceting
+ggplot(plot_data, aes(x = Temp, y = FCH4, color = SWC)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(aes(group = cut(SWC, breaks = 3)), method = "lm") +
+  facet_wrap(~Site, ncol = 3) +  # Force 3 columns
+  theme_minimal() +
+  labs(title = "Temperature Effects on Methane Flux Across Microsites",
+       subtitle = "Colored by Soil Water Content (%)",
+       x = "Temperature (°C)",
+       y = "Methane Flux",
+       color = "Soil Water Content (%)") +
+  theme(legend.position = "right",
+        strip.text = element_text(size = 12, face = "bold"),
+        panel.spacing = unit(2, "lines")) +  # Add more space between panels
+  scale_color_viridis_c()  # Use viridis color scale for better visibility
+
+# Add vertical lines for transition points
+geom_vline(data = data.frame(
+    Site = c("Tussock", "Pond Margin", "Lichen/Berries"),
+    threshold = c(41.62, 23.24, 29.56)
+  ),
+  aes(xintercept = threshold),
+  linetype = "dashed",
+  alpha = 0.5
+)
+
+
+
+#Comparative figure: 
+# This should create a panel plot showing all three locations side by side, with:
+# 
+# Points colored by soil moisture
+# Trend lines for different moisture levels
+# Vertical lines showing transition points
+# Same scale for easy comparison
+
+# First create the faceted plot without the vertical lines
+p <- ggplot(plot_data, aes(x = Temp, y = FCH4)) +
+  # Points with color by SWC
+  geom_point(aes(color = SWC), alpha = 0.3) +
+  # Smooth lines with explicit grouping
+  geom_smooth(aes(group = cut(SWC, breaks = 3, labels = c("Low", "Medium", "High"))), 
+             method = "lm") +
+  # Facet by site
+  facet_wrap(~Site, ncol = 3) +
+  # Theme and labels
+  theme_minimal() +
+  labs(title = "Temperature Effects on Methane Flux Across Microsites",
+       subtitle = "Colored by Soil Water Content (%)",
+       x = "Temperature (°C)",
+       y = "Methane Flux",
+       color = "Soil Water Content (%)") +
+  theme(legend.position = "right",
+        strip.text = element_text(size = 12, face = "bold")) +
+  scale_color_viridis_c()
+
+# Add transition points
+thresholds <- data.frame(
+  Site = c("Tussock", "Pond Margin", "Lichen/Berries"),
+  threshold = c(41.62, 23.24, 29.56)
+)
+
+# Add vertical lines to the plot --> shows where temp switches from negative to positive based on SWC
+p + geom_vline(data = thresholds, 
+               aes(xintercept = threshold), 
+               linetype = "dashed", 
+               color = "red", 
+               alpha = 0.5)
+
+#Fig interpretation
+# Lichen/Berries:
+# 
+# Typically drier (more purple points)
+# Transition point at 29.56% SWC (red dashed line)
+# More gradual change in temperature effects with moisture
+# 
+# Pond Margin:
+# 
+# More variable moisture (mix of colors)
+# Earliest transition point at 23.24% SWC
+# Most consistent positive temperature effect above the threshold
+# Smoother transitions between moisture levels
+# 
+# Tussock:
+# 
+# Generally wetter (more yellow/green points)
+# Highest transition point at 41.62% SWC
+# Shows the most dramatic shift in temperature effects
+# Strongest negative effect when dry, strongest positive effect when wet
+# 
+# Common patterns across all sites:
+# 
+# Similar range of methane flux values (-50 to 100)
+# Temperature ranges consistent across sites
+# All show the moisture-dependent temperature effect, but with site-specific thresholds
+
+
+
+#Adding labels to the thresholds
+# Create the base plot as before
+# Create thresholds dataframe with better positioned labels
+thresholds <- data.frame(
+  Site = c("Tussock", "Pond Margin", "Lichen/Berries"),
+  threshold = c(41.62, 23.24, 29.56),
+  label = sprintf("SWC = %.1f%%", c(41.62, 23.24, 29.56)),
+  y = 75  # Lowered from 80 to avoid plot margins
+)
+
+# Create the base plot
+p <- ggplot(plot_data, aes(x = Temp, y = FCH4)) +
+  geom_point(aes(color = SWC), alpha = 0.3) +
+  geom_smooth(aes(group = cut(SWC, breaks = 3, labels = c("Low", "Medium", "High"))), 
+             method = "lm") +
+  facet_wrap(~Site, ncol = 3) +
+  theme_minimal() +
+  labs(title = "Temperature Effects on Methane Flux Across Microsites",
+       subtitle = "Colored by Soil Water Content (%)",
+       x = "Temperature (°C)",
+       y = "Methane Flux",
+       color = "Soil Water Content (%)") +
+  theme(legend.position = "right",
+        strip.text = element_text(size = 12, face = "bold")) +
+  scale_color_viridis_c()
+#############################################################################
+# Add lines and better positioned labels
+# p + 
+#   geom_vline(data = thresholds, 
+#              aes(xintercept = threshold), 
+#              linetype = "dashed", 
+#              color = "red", 
+#              alpha = 0.5) +
+#   geom_label(data = thresholds,  # Changed from geom_text to geom_label
+#             aes(x = threshold, y = y, label = label),
+#             hjust = -0.1,
+#             size = 3,
+#             fill = "white",      # Add white background
+#             alpha = 0.8,         # Slight transparency
+#             label.padding = unit(0.2, "lines"))  # Add padding around text
+####################################################################################
+
+#This expands the view so you can see the threshold labels 
+p + 
+  geom_vline(data = thresholds, 
+             aes(xintercept = threshold), 
+             linetype = "dashed", 
+             color = "red", 
+             alpha = 0.5) +
+  geom_label(data = thresholds,  
+            aes(x = threshold, y = y, label = label),
+            hjust = -0.1,
+            size = 3,
+            fill = "white",      
+            alpha = 0.8,         
+            label.padding = unit(0.2, "lines")) +
+  coord_cartesian(clip = "off")  # Ensure elements outside the plot area are displayed
+
+
+
+```
+#TO DO: do this also with the era data? or are relationships so low, we can reasonably assume those models won't fit well either, and move on to RF 
+
+#Empirical model experimentation with Claude
+
+###Piecewise model
+
+```{r}
+# Since we know the threshold is at 41.62% SWC, we could create a piecewise model
+model_tussock_low <- lm(FCH4 ~ TS_3_1_1, data = df[df$SWC_3_1_1 <= 41.62, ])
+model_tussock_high <- lm(FCH4 ~ TS_3_1_1, data = df[df$SWC_3_1_1 > 41.62, ])
+```
+
+```{r}
+# Set a random seed for reproducibility
+set.seed(123)  # This ensures we get the same random split every time we run the code
+
+# Create index for random 80% selection
+train_index <- sample(1:nrow(df), 0.8 * nrow(df))
+
+# Create training and testing datasets
+train_df <- df[train_index, ]
+test_df <- df[-train_index, ]  # The [-train_index] selects all rows NOT in train_index
+
+
+#Break apart the model by low SWC and high SWC, so we can capture the diff temp relationships based on SWC
+
+# Now let's create our piecewise model with the training data
+# First for low moisture conditions (≤ 41.62% SWC)
+model_tussock_low <- lm(FCH4 ~ TS_3_1_1, 
+                       data = train_df[train_df$SWC_3_1_1 <= 41.62, ])
+
+# Then for high moisture conditions (> 41.62% SWC)
+model_tussock_high <- lm(FCH4 ~ TS_3_1_1, 
+                        data = train_df[train_df$SWC_3_1_1 > 41.62, ])
+
+# Let's look at the model summaries
+summary(model_tussock_low)
+summary(model_tussock_high)
+
+# Now test the models on our test dataset
+# First, split test data by threshold
+test_low <- test_df[test_df$SWC_3_1_1 <= 41.62, ]
+test_high <- test_df[test_df$SWC_3_1_1 > 41.62, ]
+
+# Make predictions
+predictions_low <- predict(model_tussock_low, newdata = test_low)
+predictions_high <- predict(model_tussock_high, newdata = test_high)
+
+# Calculate RMSE (Root Mean Square Error) for each condition
+rmse_low <- sqrt(mean((test_low$FCH4 - predictions_low)^2, na.rm = TRUE))
+print(rmse_low)
+rmse_high <- sqrt(mean((test_high$FCH4 - predictions_high)^2, na.rm = TRUE))
+print(rmse_high)
+
+#Results interpretation:
+# Low Moisture Conditions (SWC ≤ 41.62%):
+# 
+# Negative temperature effect: -0.365 units of FCH4 per °C
+# Baseline (intercept) of 7.055
+# R² = 0.023 (explains 2.3% of variance)
+# RMSE = 8.82
+
+# High Moisture Conditions (SWC > 41.62%):
+# 
+# Positive temperature effect: +0.476 units of FCH4 per °C
+# Baseline (intercept) of 6.353
+# R² = 0.057 (explains 5.7% of variance)
+# RMSE = 9.22
+
+# Key Insights:
+# 
+# The sign flip in temperature effect confirms our earlier findings
+# Similar RMSE values suggest consistent model performance across conditions
+# Low R² values indicate other factors might be important
+
+
+#Visualize 
+
+# Create prediction plots
+# For low moisture conditions
+plot_low <- ggplot() +
+  geom_point(data = test_low, aes(x = TS_3_1_1, y = FCH4), alpha = 0.3, color = "blue") +
+  geom_line(data = test_low, aes(x = TS_3_1_1, y = predictions_low), color = "red") +
+  labs(title = "Low Moisture Predictions (SWC ≤ 41.62%)",
+       x = "Temperature (°C)",
+       y = "Methane Flux") +
+  theme_minimal()
+
+# For high moisture conditions
+plot_high <- ggplot() +
+  geom_point(data = test_high, aes(x = TS_3_1_1, y = FCH4), alpha = 0.3, color = "green") +
+  geom_line(data = test_high, aes(x = TS_3_1_1, y = predictions_high), color = "red") +
+  labs(title = "High Moisture Predictions (SWC > 41.62%)",
+       x = "Temperature (°C)",
+       y = "Methane Flux") +
+  theme_minimal()
+
+# Display plots side by side
+library(gridExtra)
+grid.arrange(plot_low, plot_high, ncol = 2)
+```
+####Visualizing on 1:1
+```{r}
+# Combine predictions and actual values for both conditions
+eval_low <- data.frame(
+  predicted = predictions_low,
+  actual = test_low$FCH4
+)
+
+eval_high <- data.frame(
+  predicted = predictions_high,
+  actual = test_high$FCH4
+)
+
+# Create evaluation plots
+# For low moisture
+eval_plot_low <- ggplot(eval_low, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.3, color = "blue") +
+  geom_smooth(method = "lm", color = "red") +  # Add regression line
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed") +  # Add 1:1 line
+  labs(title = "Model Evaluation - Low Moisture",
+       x = "Observed Methane Flux",
+       y = "Predicted Methane Flux") +
+  theme_minimal()
+
+# For high moisture
+eval_plot_high <- ggplot(eval_high, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.3, color = "green") +
+  geom_smooth(method = "lm", color = "red") +  # Add regression line
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed") +  # Add 1:1 line
+  labs(title = "Model Evaluation - High Moisture",
+       x = "Observed Methane Flux",
+       y = "Predicted Methane Flux") +
+  theme_minimal()
+
+# Calculate evaluation metrics ---------> old, look at this and compare with below 
+# For low moisture
+eval_model_low <- lm(predicted ~ actual, data = eval_low)
+r2_low <- summary(eval_model_low)$r.squared
+slope_low <- coef(eval_model_low)[2]
+
+# For high moisture
+eval_model_high <- lm(predicted ~ actual, data = eval_high)
+r2_high <- summary(eval_model_high)$r.squared
+slope_high <- coef(eval_model_high)[2]
+
+# Add R² and slope to plots
+eval_plot_low <- eval_plot_low +
+  annotate("text", x = min(eval_low$actual), y = max(eval_low$predicted),
+           label = sprintf("R² = %.3f\nSlope = %.3f", r2_low, slope_low),
+           hjust = 0, vjust = 1)
+
+eval_plot_high <- eval_plot_high +
+  annotate("text", x = min(eval_high$actual), y = max(eval_high$predicted),
+           label = sprintf("R² = %.3f\nSlope = %.3f", r2_high, slope_high),
+           hjust = 0, vjust = 1)
+
+# Display plots side by side
+grid.arrange(eval_plot_low, eval_plot_high, ncol = 2)
+
+########################################################################
+
+# Calculate and print evaluation metrics
+# For low moisture
+eval_model_low <- lm(predicted ~ actual, data = eval_low)
+print("Low Moisture Model:")
+print(paste("R² =", round(summary(eval_model_low)$r.squared, 3)))
+print(paste("Slope =", round(coef(eval_model_low)[2], 3)))
+
+# For high moisture
+eval_model_high <- lm(predicted ~ actual, data = eval_high)
+print("High Moisture Model:")
+print(paste("R² =", round(summary(eval_model_high)$r.squared, 3)))
+print(paste("Slope =", round(coef(eval_model_high)[2], 3)))
+
+# To fix the plot annotations, we can modify their position:
+eval_plot_low <- ggplot(eval_low, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.3, color = "blue") +
+  geom_smooth(method = "lm", color = "red") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+  labs(title = "Model Evaluation - Low Moisture",
+       x = "Observed Methane Flux",
+       y = "Predicted Methane Flux") +
+  theme_minimal() +
+  annotate("text", x = -20, y = 9,  # Adjusted position
+           label = sprintf("R² = %.3f\nSlope = %.3f", 
+                         summary(eval_model_low)$r.squared, 
+                         coef(eval_model_low)[2]))
+
+# To fix the plot annotations, we can modify their position:
+eval_plot_high <- ggplot(eval_high, aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.3, color = "blue") +
+  geom_smooth(method = "lm", color = "red") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+  labs(title = "Model Evaluation - High Moisture",
+       x = "Observed Methane Flux",
+       y = "Predicted Methane Flux") +
+  theme_minimal() +
+  annotate("text", x = -20, y = 9,  # Adjusted position
+           label = sprintf("R² = %.3f\nSlope = %.3f", 
+                         summary(eval_model_high)$r.squared, 
+                         coef(eval_model_high)[2]))
+# Display plots side by side
+grid.arrange(eval_plot_low, eval_plot_high, ncol = 2)
+
+
+#Results:
+# Low Moisture Model:
+# 
+# 
+# R² = 0.027 (only explains 2.7% of variation)
+# Slope = 0.025 (far from the ideal 1:1 relationship)
+# Strong tendency to over-predict low fluxes and under-predict high fluxes
+# 
+# 
+# High Moisture Model:
+# 
+# 
+# R² = 0.050 (only explains 5% of variation)
+# Slope = 0.054 (also far from ideal 1:1 relationship)
+# Similar issues with over/under-prediction
+# 
+# The very low slopes (0.025 and 0.054) indicate that the models are "compressing" the predictions - they're not capturing the full range of methane flux variability. This suggests we should definitely try the non-linear model next, as methane flux clearly has more complex relationships with temperature and moisture than our piecewise linear model can capture.
+
+
+```
+
+###Non-linear Model using threshold
+
+```{r}
+# Create indicator variable for above/below threshold
+# df$above_threshold <- as.numeric(df$SWC_3_1_1 > 41.62)
+# model_nonlinear <- lm(FCH4 ~ TS_3_1_1 * SWC_3_1_1 * above_threshold, data = df)
+
+
+# Create indicator variable for above/below threshold
+train_df$above_threshold <- as.numeric(train_df$SWC_3_1_1 > 41.62)
+test_df$above_threshold <- as.numeric(test_df$SWC_3_1_1 > 41.62)
+
+# Fit non-linear model
+model_nonlinear <- lm(FCH4 ~ TS_3_1_1 * SWC_3_1_1 * above_threshold, 
+                     data = train_df)
+
+# Make predictions
+predictions_nl <- predict(model_nonlinear, newdata = test_df)
+
+# Create evaluation plot
+eval_nl <- data.frame(
+    predicted = predictions_nl,
+    actual = test_df$FCH4
+)
+
+# Plot
+ggplot(eval_nl, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    labs(title = "Non-linear Model Evaluation",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    annotate("text", x = min(eval_nl$actual, na.rm = TRUE), 
+             y = max(eval_nl$predicted, na.rm = TRUE),
+             label = sprintf("R² = %.3f\nSlope = %.3f", 
+                           summary(lm(predicted ~ actual, data = eval_nl))$r.squared,
+                           coef(lm(predicted ~ actual, data = eval_nl))[2]),
+             hjust = 0, vjust = 1)
+
+#Results:
+#  The non-linear model shows some improvement over the piecewise models:
+# 
+# Performance Comparison:
+# 
+# 
+# Non-linear model: R² = 0.133 (explains 13.3% of variance)
+# Previous models: R² = 0.027 (low moisture) and 0.050 (high moisture)
+# Slope improved to 0.132 (though still far from ideal 1.0)
+# 
+# 
+# Visual Assessment:
+# 
+# 
+# Less "compression" of predictions (wider range of predicted values)
+# Still showing systematic bias:
+# 
+# Overpredicting at low flux values
+# Underpredicting at high flux values
+# Clustering around the mean
+
+```
+
+
+
+
+#Temp-dependent Moisture Effect model - quadratic model 
+
+```{r}
+# Include quadratic terms to capture non-linear relationships
+# model_quad <- lm(FCH4 ~ TS_3_1_1 + I(TS_3_1_1^2) + SWC_3_1_1 + I(SWC_3_1_1^2) + 
+#                  TS_3_1_1:SWC_3_1_1, data = df)
+
+
+# Fit quadratic model
+model_quad <- lm(FCH4 ~ TS_3_1_1 + I(TS_3_1_1^2) + 
+                 SWC_3_1_1 + I(SWC_3_1_1^2) + 
+                 TS_3_1_1:SWC_3_1_1, 
+                 data = train_df)
+
+# Make predictions
+predictions_quad <- predict(model_quad, newdata = test_df)
+
+# Create evaluation plot
+eval_quad <- data.frame(
+    predicted = predictions_quad,
+    actual = test_df$FCH4
+)
+
+# Plot
+ggplot(eval_quad, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") + #dashed 1:1 line 
+    labs(title = "Quadratic Model Evaluation",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    annotate("text", x = min(eval_quad$actual, na.rm = TRUE), 
+             y = max(eval_quad$predicted, na.rm = TRUE),
+             label = sprintf("R² = %.3f\nSlope = %.3f", 
+                           summary(lm(predicted ~ actual, data = eval_quad))$r.squared,
+                           coef(lm(predicted ~ actual, data = eval_quad))[2]),
+             hjust = 0, vjust = 1)
+
+
+#Results: compare all three approaches:
+# 
+# Piecewise Linear:
+# 
+# Low moisture: R² = 0.027, Slope = 0.025
+# High moisture: R² = 0.050, Slope = 0.054
+# 
+# 
+# Non-linear with threshold:
+# 
+# R² = 0.133, Slope = 0.132
+# 
+# 
+# Quadratic model:
+# 
+# R² = 0.160, Slope = 0.152
+# = best performance of the 3, but still not good 
+# --> Still underpredicting high flux values (points fall below 1:1 line at high values)
+# Overpredicting low flux values (points above 1:1 line at low values)
+# Wide scatter around the prediction line
+
+#examining the quadratic model more closely
+
+# View model summary
+summary(model_quad)
+
+
+# Create prediction surface
+temp_seq <- seq(min(df$TS_3_1_1, na.rm = TRUE), 
+                max(df$TS_3_1_1, na.rm = TRUE), length.out = 50)
+swc_seq <- seq(min(df$SWC_3_1_1, na.rm = TRUE), 
+               max(df$SWC_3_1_1, na.rm = TRUE), length.out = 50)
+
+# Create grid of predictor values
+pred_grid <- expand.grid(TS_3_1_1 = temp_seq, SWC_3_1_1 = swc_seq)
+
+# Get predictions
+pred_grid$predicted <- predict(model_quad, newdata = pred_grid)
+
+# Plot prediction surface
+ggplot(pred_grid, aes(x = TS_3_1_1, y = SWC_3_1_1, fill = predicted)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(title = "Predicted Methane Flux Across Temperature-Moisture Space",
+       x = "Temperature (°C)",
+       y = "Soil Water Content (%)",
+       fill = "Predicted\nMethane Flux") +
+  theme_minimal()
+
+#Results:
+# Model Performance:
+# 
+# 
+# R² = 0.148 (explains 14.8% of variance)
+# All terms are highly significant (p < 2e-16)
+# Still leaves a lot of variance unexplained
+# 
+# 
+# Temperature-Moisture Interactions:
+# 
+# 
+# The surface plot shows highest predicted methane flux at:
+# 
+# High temperatures (20°C) with high moisture (>40%)
+# Very low temperatures (-10°C) with low moisture
+# 
+# 
+# Clear non-linear relationships captured by quadratic terms
+
+# Coefficients show:
+# 
+# 
+# Negative linear effects for both temperature (-1.15) and SWC (-0.36)
+# Positive quadratic effects for both (0.056 for temp², 0.005 for SWC²)
+# Positive interaction effect (0.017)
+
+```
+#Random Forest re-training with swc and soil temp 
+
+#### ERA5 data --> Trying to train RandomForest with just temp, SWC, and the temp and SWC interaction - not constrained 
+
+```{r}
+#not constraining data to threshold limits to limit outliers *** --> for that, see code chunk below 
+
+# Create complete dataset --> RF can't handle missing data / NAs
+rf_data_era = df_era2[complete.cases(df_era2$fch4),]
+
+summary(is.na(rf_data_era$fch4))
+summary(rf_data_era$fch4)
+
+# Create interaction term --> explicit interaction term while keeping original terms 
+rf_data_era$TS_SWC_interact <- rf_data_era$tsoil * rf_data_era$swc
+
+# Split into train/test (80/20)
+set.seed(123)
+train_index <- sample(1:nrow(rf_data_era), 0.8 * nrow(rf_data_era))
+rf_train_era <- rf_data_era[train_index, ]
+rf_test_era <- rf_data_era[-train_index, ]
+
+# Fit RF model with both original and interaction terms
+library(randomForest)
+rf_model_era <- randomForest(fch4 ~ tsoil + swc + TS_SWC_interact,
+                        data = rf_train_era,
+                        ntree = 500)
+
+
+# Now make predictions
+rf_pred_era <- predict(rf_model_era, newdata = rf_test_era)
+
+# Create evaluation plot
+eval_rf_era <- data.frame(
+    predicted = rf_pred_era,
+    actual = rf_test_era$fch4
+)
+
+# Create evaluation plot
+ggplot(eval_rf_era, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    labs(title = "Random Forest Model with Interaction - ERA5",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    annotate("text", x = min(eval_rf_era$actual, na.rm = TRUE), 
+             y = max(eval_rf_era$predicted, na.rm = TRUE),
+             label = sprintf("R² = %.3f\nSlope = %.3f", 
+                           summary(lm(predicted ~ actual, data = eval_rf_era))$r.squared,
+                           coef(lm(predicted ~ actual, data = eval_rf_era))[2]),
+             hjust = 0, vjust = 1)
+
+# Look at variable importance
+varImpPlot(rf_model_era)
+
+#Results:
+#R2 = 0.377, slope = 0.42
+#tsoil slightly more important than interaction, which is slighlty more important than swc alone 
+```
+####ERA5 - Training RF on predicting methane with just temp, SWC, and SWC*temp interaction --> constrained 
+
+```{r}
+#constrained fch4 to limits used in step2 of the processing process (little redundant here but was curious)
+summary(df_era2$fch4) #min = -47, max = 93
+plot(df_era2$date, df_era2$fch4) #plotting to check, and this still looks like a good range to cut out some outliers
+
+# Create interaction term between era temp and era gapfilled swc (gapfilled SWC3 tussock) --> explicit interaction term while keeping original terms 
+df_era2$TS_SWC_interact <- df_era2$tsoil * df_era2$swc
+
+#Use only complete cases
+cc = df_era2[complete.cases(df_era2$fch4),]
+cc = subset(cc,cc$fch4 < 60)
+cc = subset(cc,cc$fch4 > -25)
+
+#create training dataset - 80% to train, 20% to test 
+sample.ch4 = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+train.ch4  = cc[sample.ch4, ]
+test.ch4   = cc[!sample.ch4, ]
+
+#Make sure the training and testing datasets are representative / similar 
+hist(cc$fch4)
+hist(train.ch4$fch4)
+hist(test.ch4$fch4)
+
+
+# Fit RF model with both original and interaction terms - era dataset 
+rf_model_fch4.era <- randomForest(fch4~ tsoil + swc + TS_SWC_interact,
+                        data = train.ch4,
+                        ntree = 500)
+
+# Create prediction dataset --> shouldn't need this anymore 
+#rf_test$TS_SWC_interact <- rf_test$TS_3_1_1 * rf_test$SWC_3_1_1
+
+# Now make predictions
+rf_pred_ch4 <- predict(rf_model_fch4.era, newdata = test.ch4)
+
+# Create evaluation plot
+eval_rf_ch4.era <- data.frame(
+    predicted = rf_pred_ch4,
+    actual = test.ch4$fch4
+)
+
+# Create evaluation plot
+ggplot(eval_rf_ch4.era, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    labs(title = "Random Forest Model with Interaction_era",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    annotate("text", x = min(eval_rf_ch4.era$actual, na.rm = TRUE), 
+             y = max(eval_rf_ch4.era$predicted, na.rm = TRUE),
+             label = sprintf("R² = %.3f\nSlope = %.3f", 
+                           summary(lm(predicted ~ actual, data = eval_rf_ch4.era))$r.squared,
+                           coef(lm(predicted ~ actual, data = eval_rf_ch4.era))[2]),
+             hjust = 0, vjust = 1)
+
+# Look at variable importance
+varImpPlot(rf_model_fch4.era)
+
+#Results from non-constrained fch4 data: #R2 = 0.377, slope = 0.42 --> tsoil slightly more important than interaction, which is slighlty more important than swc alone 
+#Results from constrained fch4 data:  R² = 0.351, Slope = 0.417 --> slightly worse than un-constrained data --> tsoil slighlty more important, followed by interact and swc alone 
+
+```
+
+#Random Forest re-training with all met variables and the swc:temp interaction effect 
+
+####ERA5 data full model --> not constrained 
+
+```{r}
+#include all met variables and the swc:tsoil interaction effect 
+
+rf_all_era <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
+                             vpd + swc + h + le + TS_SWC_interact ,
+                             data = rf_train_era,
+                             ntree = 500,
+                             importance = TRUE)
+
+# Now make predictions
+rf_pred_era2 <- predict(rf_all_era, newdata = rf_test_era)
+
+# Create evaluation plot
+eval_rf_era2 <- data.frame(
+    predicted = rf_pred_era2,
+    actual = rf_test_era$fch4
+)
+
+# Create evaluation plot
+ggplot(eval_rf_era2, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    labs(title = "Random Forest Model with Interaction - ERA5",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    annotate("text", x = min(eval_rf_era2$actual, na.rm = TRUE), 
+             y = max(eval_rf_era2$predicted, na.rm = TRUE),
+             label = sprintf("R² = %.3f\nSlope = %.3f", 
+                           summary(lm(predicted ~ actual, data = eval_rf_era2))$r.squared,
+                           coef(lm(predicted ~ actual, data = eval_rf_era2))[2]),
+             hjust = 0, vjust = 1)
+
+# Look at variable importance
+varImpPlot(rf_all_era)
+
+#Results
+#R2 = 0.48, slope = 0.48
+#wd and swc are most important 
+```
+
+####ERA5 data full RF model --> constrained 
+
+```{r}
+#include all met variables and the swc:tsoil interaction effect 
+
+#for reference, since we already subsetted a constrained dataset in previous code chunks 
+# cc = df_era2[complete.cases(df_era2$fch4),]
+# cc = subset(cc,cc$fch4 < 60)
+# cc = subset(cc,cc$fch4 > -25)
+
+#create training dataset - 80% to train, 20% to test 
+# sample.ch4 = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+# train.ch4  = cc[sample.ch4, ]
+# test.ch4   = cc[!sample.ch4, ]
+
+
+rf_all_era2 <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
+                             vpd + swc + h + le + TS_SWC_interact ,
+                             data = train.ch4,
+                             ntree = 500,
+                             importance = TRUE)
+
+# Now make predictions
+rf_pred_era3 <- predict(rf_all_era2, newdata = test.ch4)
+
+# Create evaluation plot
+eval_rf_era3 <- data.frame(
+    predicted = rf_pred_era3,
+    actual = test.ch4$fch4
+)
+
+# Create evaluation plot
+ggplot(eval_rf_era3, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    labs(title = "Random Forest Model with Interaction - ERA5",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    annotate("text", x = min(eval_rf_era3$actual, na.rm = TRUE), 
+             y = max(eval_rf_era3$predicted, na.rm = TRUE),
+             label = sprintf("R² = %.3f\nSlope = %.3f", 
+                           summary(lm(predicted ~ actual, data = eval_rf_era3))$r.squared,
+                           coef(lm(predicted ~ actual, data = eval_rf_era3))[2]),
+             hjust = 0, vjust = 1)
+
+# Look at variable importance
+varImpPlot(rf_all_era2)
+
+#Results:
+#R2 = 0.50, slope = 0.50
+#wd, swc, and ws are most important 
+```
+####ERA5 data full RF model TAKING OUT INTERACTION --> constrained 
+
+```{r}
+#include all met variables and the swc:tsoil interaction effect 
+
+#for reference, since we already subsetted a constrained dataset in previous code chunks 
+# cc = df_era2[complete.cases(df_era2$fch4),]
+# cc = subset(cc,cc$fch4 < 60)
+# cc = subset(cc,cc$fch4 > -25)
+
+#create training dataset - 80% to train, 20% to test 
+# sample.ch4 = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+# train.ch4  = cc[sample.ch4, ]
+# test.ch4   = cc[!sample.ch4, ]
+
+
+rf_all_era3 <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
+                             vpd + swc + h + le,
+                             data = train.ch4,
+                             ntree = 500,
+                             importance = TRUE)
+
+# Now make predictions
+rf_pred_era4 <- predict(rf_all_era3, newdata = test.ch4)
+
+# Create evaluation plot
+eval_rf_era4 <- data.frame(
+    predicted = rf_pred_era4,
+    actual = test.ch4$fch4
+)
+
+# Create evaluation plot
+ggplot(eval_rf_era4, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    labs(title = "Random Forest Model with Interaction - ERA5",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    annotate("text", x = min(eval_rf_era4$actual, na.rm = TRUE), 
+             y = max(eval_rf_era4$predicted, na.rm = TRUE),
+             label = sprintf("R² = %.3f\nSlope = %.3f", 
+                           summary(lm(predicted ~ actual, data = eval_rf_era4))$r.squared,
+                           coef(lm(predicted ~ actual, data = eval_rf_era4))[2]),
+             hjust = 0, vjust = 1)
+
+# Look at variable importance
+varImpPlot(rf_all_era3)
+
+#Results:
+#R2 = 0.501, slope = 0.498
+#swc and wd are most important 
+
+
+
+# Looking at rf_all era comparison with and without swc:tsoil interaction term
+
+# Without interaction:
+# 
+# R² = 0.501, Slope = 0.498
+# Similar prediction pattern
+# Variable importance shows SWC and wind direction as top predictors
+# 
+# With interaction:
+# 
+# R² = 0.502, Slope = 0.504
+# Very slight improvement
+# Similar variable importance rankings
+# 
+# The difference is minimal (ΔR² = 0.001), but it was recommended to the interaction term because:
+# 
+# Scientific Rationale: 
+# 
+# We've seen clear evidence of temperature-moisture interactions in our earlier analysis
+# The interaction represents a real physical process (moisture-dependent temperature effects on methanogenesis)
+# Including it makes the model more mechanistically sound
+# 
+# 
+# Practical Considerations:
+# 
+# 
+# Even small improvements matter for prediction accuracy
+# No real computational cost to including it
+# Helps capture non-linear relationships we observed in our binned analyses
+# 
+# 
+# Model Interpretability:
+# 
+# 
+# Including the interaction term makes the model more aligned with our understanding of the system
+# Helps communicate the interdependence of these factors
+
+```
+
+#TO DO: try this with constraints, too?
+#### Measured data --> Trying to train RandomForest with just temp, SWC, and the temp and SWC interaction --> not constrained 
+```{r}
+
+# Create complete dataset --> RF can't handle missing data / NAs
+rf_data <- na.omit(df[, c("FCH4", "TS_3_1_1", "SWC_3_1_1")])
+
+# Create interaction term --> explicit interaction term while keeping original terms 
+rf_data$TS_SWC_interact <- rf_data$TS_3_1_1 * rf_data$SWC_3_1_1
+
+# Split into train/test (80/20)
+set.seed(123)
+train_index <- sample(1:nrow(rf_data), 0.8 * nrow(rf_data))
+rf_train <- rf_data[train_index, ]
+rf_test <- rf_data[-train_index, ]
+
+# Fit RF model with both original and interaction terms
+library(randomForest)
+rf_model <- randomForest(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + TS_SWC_interact,
+                        data = rf_train,
+                        ntree = 500)
+
+# Create prediction dataset --> shouldn't need this anymore 
+#rf_test$TS_SWC_interact <- rf_test$TS_3_1_1 * rf_test$SWC_3_1_1
+
+# Now make predictions
+rf_pred <- predict(rf_model, newdata = rf_test)
+
+# Create evaluation plot
+eval_rf <- data.frame(
+    predicted = rf_pred,
+    actual = rf_test$FCH4
+)
+
+# Create evaluation plot
+ggplot(eval_rf, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    labs(title = "Random Forest Model with Interaction",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    annotate("text", x = min(eval_rf$actual, na.rm = TRUE), 
+             y = max(eval_rf$predicted, na.rm = TRUE),
+             label = sprintf("R² = %.3f\nSlope = %.3f", 
+                           summary(lm(predicted ~ actual, data = eval_rf))$r.squared,
+                           coef(lm(predicted ~ actual, data = eval_rf))[2]),
+             hjust = 0, vjust = 1)
+
+# Look at variable importance
+varImpPlot(rf_model)
+
+#RF performs much better than the other models 
+# Let's compare:
+# 
+# Model Performance:
+# 
+# 
+# RF with interaction: R² = 0.325, Slope = 0.350
+# Quadratic model: R² = 0.148, Slope = 0.152
+# Non-linear threshold: R² = 0.133, Slope = 0.132
+# Piecewise linear: R² ≈ 0.027-0.050, Slope ≈ 0.025-0.054
+# 
+# 
+# Key Improvements using the RF model:
+# 
+# 
+# More than doubled the explained variance (32.5% vs 14.8%)
+# Better slope (closer to 1.0, though still underestimating)
+# More balanced predictions across the range
+# 
+# 
+# Variable Importance:
+# 
+# 
+# SWC and TS showing similar importance
+# Interaction term slightly more important
+# This supports your earlier findings about the complex interplay between temperature and moisture
+
+#performs a bit worse than the era5 data 
+
+
+```
+
+
+#ntree optimization for rf_all_era2 model (which includes the swc:temp interaction and fch4 constraints)
+
+#OOB ntrees
+
+```{r}
+#interaction term in your ERA5 dataset, for reference: TS_SWC_interact
+
+#for reference, since we already subsetted a constrained dataset in previous code chunks 
+# cc = df_era2[complete.cases(df_era2$fch4),]
+# cc = subset(cc,cc$fch4 < 60)
+# cc = subset(cc,cc$fch4 > -25)
+
+#create training dataset - 80% to train, 20% to test 
+# sample.ch4 = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+# train.ch4  = cc[sample.ch4, ]
+# test.ch4   = cc[!sample.ch4, ]
+
+# Function to track OOB error versus number of trees with progress bar
+oob_error_plot <- function(data, max_trees = 1000, step = 100) {
+    trees <- seq(50, max_trees, by = step)
+    oob_errors <- numeric(length(trees))
+    
+    # Create progress bar
+    pb <- txtProgressBar(min = 0, max = length(trees), style = 3)
+    
+    for(i in seq_along(trees)) {
+        rf_temp <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
+                              vpd + swc + h + le + tsoil_swc_interact,
+                              data = data,
+                              ntree = trees[i])
+        oob_errors[i] <- rf_temp$mse[trees[i]]
+        
+        # Update progress bar
+        setTxtProgressBar(pb, i)
+    }
+    
+    # Close progress bar
+    close(pb)
+    
+    # Plot OOB error vs number of trees
+    plot(trees, oob_errors, type = "l",
+         xlab = "Number of Trees",
+         ylab = "OOB Mean Squared Error",
+         main = "OOB Error vs Number of Trees")
+    
+    # Add points to see exact values
+    points(trees, oob_errors, pch = 16)
+    
+    # Return optimal number of trees and error data
+    opt_trees <- trees[which.min(oob_errors)]
+    return(list(optimal_trees = opt_trees, 
+                errors = data.frame(trees = trees, oob = oob_errors)))
+}
+
+# Find optimal number of trees
+opt_results <- oob_error_plot(train.ch4)
+print(paste("Optimal number of trees:", opt_results$optimal_trees))
+
+# Print OOB errors for each number of trees
+print("OOB errors for each number of trees:")
+print(opt_results$errors)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#To ignore, early exploratory stuff 
+
+
+#Tried creating predictive models here, but with them all performing so poorly, I didn't end up re-running this or exploring further --> jumped down to RF 
+####predictive model, trying linear model as starting point 
 ```{r}
 # Linear model - soil temp, SWC, and interaction 
 model <- lm(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction, data = df)
@@ -215,7 +2223,8 @@ summary(model)
 df$predicted_FCH4_lm <- predict(model, newdata = df)
 
 #Results:
-# TS_3_1_1:  -1.4649, as temp inc, methane dec? p= (<2e-16) - SIG  **not expecting that result, esp since plot shows pos trend..? inc temp should inc methane emissions # SWC_3_1_1: The coefficient for soil moisture is -0.0001 and p=0.9,NOT sig 
+# TS_3_1_1:  -1.4649, as temp inc, methane dec? p= (<2e-16) - SIG  
+# SWC_3_1_1: The coefficient for soil moisture is -0.0001 and p=0.9,NOT sig 
 # interaction: 0.0352, R2 = 0.011 so pos correlation but very weak; but p  <2e-16 - SIG*
 
 # Linear model 2 - soil temp only 
@@ -224,6 +2233,7 @@ summary(model2)
 
 #Results: 
 #TS_3_1_1     est =0.35596    sE=0.01120   p= <2e-16 ***; Multiple R-squared:  0.03927,	Adjusted R-squared:  0.03923 
+
 # Predict missing values
 df$predicted_FCH4.2 <- predict(model2, newdata = df)
 
@@ -273,6 +2283,8 @@ rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4.4)^2, na.rm = TRUE))
 print(paste("RMSE: ", rmse)) #"RMSE:  9.01373897029865" --> same as first lm model --> SWC appears not to have sig impact on model fit ?
 
 ```
+
+
 #If linear models don't work well, try random forest but use interaction effect? 
 ```{r}
 # This chunk is useful for getting an initial sense of how well the Random Forest model performs on the entire dataset. However, it doesn't provide a robust evaluation since it uses the same data for both training and prediction, which can lead to overfitting and therefore also a RMSE that looks better than it should be - that is why this output seems to perform so well, but shouldn't be trusted until trained on a portion of the df and tested on the other portion 
