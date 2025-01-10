@@ -2141,7 +2141,7 @@ varImpPlot(rf_model)
 # train.ch4  = cc[sample.ch4, ]
 # test.ch4   = cc[!sample.ch4, ]
 
-# Function to track OOB error versus number of trees with progress bar
+# Function to track OOB error versus number of trees with progress bar --> going to try up to 1k because that's what Jackie found was best in her YK paper 
 oob_error_plot <- function(data, max_trees = 1000, step = 100) {
     trees <- seq(50, max_trees, by = step)
     oob_errors <- numeric(length(trees))
