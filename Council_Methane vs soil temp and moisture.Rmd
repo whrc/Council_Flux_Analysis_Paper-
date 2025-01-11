@@ -2151,7 +2151,7 @@ oob_error_plot <- function(data, max_trees = 1000, step = 100) {
     
     for(i in seq_along(trees)) {
         rf_temp <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
-                              vpd + swc + h + le + tsoil_swc_interact,
+                              vpd + swc + h + le + TS_SWC_interact,
                               data = data,
                               ntree = trees[i])
         oob_errors[i] <- rf_temp$mse[trees[i]]
@@ -2185,6 +2185,90 @@ print(paste("Optimal number of trees:", opt_results$optimal_trees))
 # Print OOB errors for each number of trees
 print("OOB errors for each number of trees:")
 print(opt_results$errors)
+
+#REsults: "Optimal number of trees: 950"
+# trees      oob
+# 50	     46.29153			
+# 150	     44.41954			
+# 250	     44.35895			
+# 350	      44.13764			
+# 450	     44.08307			
+# 550	     43.97322			
+# 650	     44.06375			
+# 750	     43.95684			
+# 850	     43.94687			
+# 950	     43.87470	
+#However, we see improvement drops significantly after around 550/600 trees, so could likely use 550/600 trees just fine with little loss of accuracy
+
+```
+#Optimal number of trees for NEE? Just to see? 
+####OOB for NEE
+```{r}
+set.seed(123)
+cc_nee = df_era2[complete.cases(df_era2$nee),] #complete NEE data only 
+cc_nee = subset(cc_nee,cc_nee$nee < 12 & cc_nee$nee > -14) 
+
+
+#use 80% of data set as training set and 20% as test set
+sample.nee = sample(c(TRUE, FALSE), nrow(cc_nee), replace=TRUE, prob=c(0.8,0.2))
+train.nee  = cc_nee[sample.nee, ]
+test.nee   = cc_nee[!sample.nee, ]
+
+#Make sure the patterns here look similar so you know the training and testing datasets are representative of the overall dataset 
+hist(cc_nee$nee)
+hist(train.nee$nee)
+hist(test.nee$nee)
+
+library(randomForest)
+
+# Function to track OOB error versus number of trees with progress bar --> going to try up to 1k because that's what Jackie found was best in her YK paper 
+oob_error_plot_nee <- function(data, max_trees = 1000, step = 100) {
+    trees <- seq(50, max_trees, by = step)
+    oob_errors_nee <- numeric(length(trees))
+    
+    # Create progress bar
+    pb <- txtProgressBar(min = 0, max = length(trees), style = 3)
+    
+    for(i in seq_along(trees)) {
+        rf_nee <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + 
+                              vpd + swc + h + le,
+                              data = data,
+                              ntree = trees[i])
+        oob_errors_nee[i] <- rf_nee$mse[trees[i]]
+        
+        # Update progress bar
+        setTxtProgressBar(pb, i)
+    }
+    
+    # Close progress bar
+    close(pb)
+    
+    # Plot OOB error vs number of trees
+    plot(trees, oob_errors_nee, type = "l",
+         xlab = "Number of Trees",
+         ylab = "OOB Mean Squared Error",
+         main = "OOB Error vs Number of Trees for NEE (no temp swc interaction)")
+    
+    # Add points to see exact values
+    points(trees, oob_errors_nee, pch = 16)
+    
+    # Return optimal number of trees and error data
+    opt_trees_nee <- trees[which.min(oob_errors_nee)]
+    return(list(optimal_trees_nee = opt_trees_nee, 
+                errors = data.frame(trees = trees, oob = oob_errors_nee)))
+}
+
+# Find optimal number of trees
+opt_results_nee <- oob_error_plot_nee(train.nee)
+print(paste("Optimal number of trees:", opt_results_nee$optimal_trees_nee))
+
+# Print OOB errors for each number of trees
+print("OOB errors for each number of trees for NEE:")
+print(opt_results_nee$errors)
+
+#Results: 
+#optimal number of trees at 805, but with minimal improvement from 550 (2.124 → 2.120) --> Could likely use 550-600 trees without significant loss in accuracy
+
 
 ```
 
