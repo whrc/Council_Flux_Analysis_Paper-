@@ -56,7 +56,7 @@ Sys.setenv(TZ='UTC')
 TO DO: re-running all these with SWC_3 (tussock) version of dataset - KK 1/7/2025 **use the era dataset** 
 
 ```{r}
-#Initially ran all these models on the gapfilled data, need to re-run using the era_mod data******** 
+#Initially ran all these models on the gapfilled data to explore; ERA5 datasets included below 
 
 #changed to "council_gapfilled_clean_2017_2023_for analysis.2.csv" --> .2 indicates updated dataset with SWC_3 tussock 
 
@@ -693,7 +693,7 @@ summary(df_era2$swc)
 
 
 # At low SWC values, increasing temperature might decrease methane flux (negative main effect)
-# At high SWC values, increasing temperature increases methane flux (positive interaction overcomes negative main effect)
+# At high SWC values, increasing temperature increases methane flux (relationship flips from neg to pos)
 
 # Darker points (low SWC): slight downward trend with temperature
 # Lighter points (high SWC): upward trend with temperature
@@ -779,13 +779,11 @@ temp_bin_models <- df_era2 %>%
 # Highest variability
 # Highest potential for large emission events
 # 
-# Key Patterns:
+# Key Takeaways:
 # 
 # Temperature amplifies the moisture effect
 # More variability as temperature increases
 # Moisture becomes more important in warmer conditions
-# Also interesting to note that these warmest points: All occur at relatively high SWC (around 58%); Show relatively high methane flux (mean ~29); Have relatively low variability in SWC (58-58.8%)
-# From this we see:
 # Temperature effects may change based on moisture levels
 # Moisture effects may become more important at higher temperatures
 
@@ -971,7 +969,7 @@ ggplot(df, aes(x = TS_3_1_1, y = FCH4)) +
 # -A slight positive trend overall, but with substantial scatter
 # 
 # 
-# The full interaction model results show why this pattern occurs:
+# The full interaction model results:
 # -Negative main effect of temperature (-1.4649) --> sig 
 # -Non-significant main effect of SWC alone (-0.0001; p=0.97)
 # -positive interaction effect (0.0352) --> sig 
@@ -985,7 +983,7 @@ ggplot(df, aes(x = TS_3_1_1, y = FCH4)) +
 # The highest SWC group (lightest points) shows a stronger positive relationship with temperature
 # The middle SWC group shows an intermediate slope
 
-
+#(Tried this with some guidance from Claude*)
 #Trying to calc temp effects / slopes at different SWC using the full interaction model: "model_full_tuss <- lm(FCH4 ~ TS_3_1_1 * SWC_3_1_1, data = df)"
 # The effect of temperature on methane flux at any given SWC value is:
 # Temperature Effect = β₁ + β₃(SWC value)
@@ -1013,50 +1011,54 @@ print(results)
 
 #Results:
 
-# These results tell us something very interesting about how soil moisture modifies the temperature effect on methane flux:
+# how soil moisture modifies the temperature effect on methane flux
 # 
 # At Low Moisture (13.7%):
 #   - Temperature effect is negative (-0.983)
-#   -Meaning: For every 1°C increase in temperature, methane flux decreases by about 0.98 units when soil is dry
+#   -For every 1°C increase in temperature, methane flux decreases by about 0.98 units when soil is dry
 # 
 # 
 # At Medium Moisture (55%):# 
 #   -Temperature effect becomes positive (0.471)
-#   -Meaning: For every 1°C increase, methane flux increases by about 0.47 units at median moisture
+#   -For every 1°C increase, methane flux increases by about 0.47 units at median moisture
 # 
 # 
 # At High Moisture (59.4%):# 
 #   -Even stronger positive effect (0.626)
-#   -Meaning: For every 1°C increase, methane flux increases by about 0.63 units in wet conditions
+#   -For every 1°C increase, methane flux increases by about 0.63 units in wet conditions
 
 
 
-#Calc the transtion point when the soil moisture level where temp starts having a pos effect on methane flux 
-# Solve: -1.4649 + (0.0352 * SWC) = 0
+#Calc the transtion point: at what soil moisture level does temp start having a pos effect on methane flux 
+#Transition = -β₁/β₃ (where β₁ is temp coefficient and β₃ is interaction)
 transition_point <- 1.4649/0.0352
 print(round(transition_point, 2))
-#Result: 41.62
+#Result: 41.62 % 
 
-#Below 41.62% soil moisture:
+#Below 41.62% soil moisture threshold:
 # Temperature increases lead to decreased methane flux
-# This likely occurs because drier conditions limit methanogenic activity
+# -->drier conditions limit methanogenic activity
 # 
 # Above 41.62% soil moisture: 
 # Temperature increases lead to increased methane flux
-# This makes sense ecologically as methanogens require both warmth and anaerobic (wet) conditions
+# -->makes sense: methanogens require both warmth and anaerobic (wet) conditions
 # 
-# This matches well with themoisture distribution:
+# matches well with themoisture distribution:
 # 
 # 25th percentile (13.7%): well below threshold → negative temperature effect
 # Median (55%) and 75th percentile (59.4%): well above threshold → positive temperature effect
-# Mean (41.16%): remarkably close to the transition point!
+# Mean (41.16%): very close to transition point 
 
-#This suggests the site experiences both moisture-limited and temperature-limited methane production, depending on conditions. 
+#-->suggests the site experiences both moisture-limited and temperature-limited methane production (depending on conditions)
 
 ```
 
 ########Interaction effects at lichen/berries location (TS2, SWC2)
 ```{r}
+# Calculate transition points for each location
+# Transition = -β₁/β₃ (where β₁ is temp coefficient and β₃ is interaction)
+
+
 # For pond margin (TS_1_1_1 * SWC_1_1_1)
 model_full_pond <- lm(FCH4 ~ TS_1_1_1 * SWC_1_1_1, data = df)
 summary(model_full_pond)
@@ -1124,8 +1126,7 @@ ggplot(df, aes(x = TS_2_1_1, y = FCH4)) +
 summary(df$SWC_1_1_1)  # pond
 summary(df$SWC_2_1_1)  # lichen/berries
 
-# Calculate transition points for each location
-# Transition = -β₁/β₃ (where β₁ is temp coefficient and β₃ is interaction)
+
 ```
 #Comparative figures
 ```{r}
@@ -1172,7 +1173,7 @@ geom_vline(data = data.frame(
 )
 
 
-
+#(With help from Claude*)
 #Comparative figure: 
 # This should create a panel plot showing all three locations side by side, with:
 # 
@@ -1235,11 +1236,8 @@ p + geom_vline(data = thresholds,
 # Shows the most dramatic shift in temperature effects
 # Strongest negative effect when dry, strongest positive effect when wet
 # 
-# Common patterns across all sites:
 # 
-# Similar range of methane flux values (-50 to 100)
-# Temperature ranges consistent across sites
-# All show the moisture-dependent temperature effect, but with site-specific thresholds
+# **All show the moisture-dependent temperature effect, but with site-specific thresholds
 
 
 
@@ -1373,11 +1371,10 @@ print(rmse_high)
 # R² = 0.057 (explains 5.7% of variance)
 # RMSE = 9.22
 
-# Key Insights:
+# Takeaways
 # 
-# The sign flip in temperature effect confirms our earlier findings
-# Similar RMSE values suggest consistent model performance across conditions
-# Low R² values indicate other factors might be important
+# The sign flip in temperature effect 
+# Low R² values indicate other factors might be important; this isn't the best model 
 
 
 #Visualize 
@@ -1513,21 +1510,16 @@ grid.arrange(eval_plot_low, eval_plot_high, ncol = 2)
 #Results:
 # Low Moisture Model:
 # 
-# 
 # R² = 0.027 (only explains 2.7% of variation)
-# Slope = 0.025 (far from the ideal 1:1 relationship)
+# Slope = 0.025 
 # Strong tendency to over-predict low fluxes and under-predict high fluxes
 # 
 # 
 # High Moisture Model:
 # 
-# 
 # R² = 0.050 (only explains 5% of variation)
-# Slope = 0.054 (also far from ideal 1:1 relationship)
+# Slope = 0.054 
 # Similar issues with over/under-prediction
-# 
-# The very low slopes (0.025 and 0.054) indicate that the models are "compressing" the predictions - they're not capturing the full range of methane flux variability. This suggests we should definitely try the non-linear model next, as methane flux clearly has more complex relationships with temperature and moisture than our piecewise linear model can capture.
-
 
 ```
 
@@ -1573,20 +1565,12 @@ ggplot(eval_nl, aes(x = actual, y = predicted)) +
              hjust = 0, vjust = 1)
 
 #Results:
-#  The non-linear model shows some improvement over the piecewise models:
-# 
-# Performance Comparison:
-# 
+#  The non-linear model shows some improvement over the piecewise model:
 # 
 # Non-linear model: R² = 0.133 (explains 13.3% of variance)
 # Previous models: R² = 0.027 (low moisture) and 0.050 (high moisture)
-# Slope improved to 0.132 (though still far from ideal 1.0)
-# 
-# 
-# Visual Assessment:
-# 
-# 
-# Less "compression" of predictions (wider range of predicted values)
+# Slope improved to 0.132 
+
 # Still showing systematic bias:
 # 
 # Overpredicting at low flux values
@@ -1596,15 +1580,10 @@ ggplot(eval_nl, aes(x = actual, y = predicted)) +
 ```
 
 
-
-
 #Temp-dependent Moisture Effect model - quadratic model 
 
 ```{r}
 # Include quadratic terms to capture non-linear relationships
-# model_quad <- lm(FCH4 ~ TS_3_1_1 + I(TS_3_1_1^2) + SWC_3_1_1 + I(SWC_3_1_1^2) + 
-#                  TS_3_1_1:SWC_3_1_1, data = df)
-
 
 # Fit quadratic model
 model_quad <- lm(FCH4 ~ TS_3_1_1 + I(TS_3_1_1^2) + 
@@ -1638,7 +1617,7 @@ ggplot(eval_quad, aes(x = actual, y = predicted)) +
              hjust = 0, vjust = 1)
 
 
-#Results: compare all three approaches:
+#Results: 
 # 
 # Piecewise Linear:
 # 
@@ -1655,8 +1634,8 @@ ggplot(eval_quad, aes(x = actual, y = predicted)) +
 # 
 # R² = 0.160, Slope = 0.152
 # = best performance of the 3, but still not good 
-# --> Still underpredicting high flux values (points fall below 1:1 line at high values)
-# Overpredicting low flux values (points above 1:1 line at low values)
+# --> Still under-predicting high flux values (points fall below 1:1 line at high values)
+# Over-predicting low flux values (points above 1:1 line at low values)
 # Wide scatter around the prediction line
 
 #examining the quadratic model more closely
@@ -1688,17 +1667,10 @@ ggplot(pred_grid, aes(x = TS_3_1_1, y = SWC_3_1_1, fill = predicted)) +
   theme_minimal()
 
 #Results:
-# Model Performance:
-# 
 # 
 # R² = 0.148 (explains 14.8% of variance)
-# All terms are highly significant (p < 2e-16)
-# Still leaves a lot of variance unexplained
-# 
 # 
 # Temperature-Moisture Interactions:
-# 
-# 
 # The surface plot shows highest predicted methane flux at:
 # 
 # High temperatures (20°C) with high moisture (>40%)
@@ -1708,8 +1680,6 @@ ggplot(pred_grid, aes(x = TS_3_1_1, y = SWC_3_1_1, fill = predicted)) +
 # Clear non-linear relationships captured by quadratic terms
 
 # Coefficients show:
-# 
-# 
 # Negative linear effects for both temperature (-1.15) and SWC (-0.36)
 # Positive quadratic effects for both (0.056 for temp², 0.005 for SWC²)
 # Positive interaction effect (0.017)
@@ -2004,7 +1974,6 @@ varImpPlot(rf_all_era3)
 # Without interaction:
 # 
 # R² = 0.501, Slope = 0.498
-# Similar prediction pattern
 # Variable importance shows SWC and wind direction as top predictors
 # 
 # With interaction:
@@ -2013,115 +1982,18 @@ varImpPlot(rf_all_era3)
 # Very slight improvement
 # Similar variable importance rankings
 # 
-# The difference is minimal (ΔR² = 0.001), but it was recommended to the interaction term because:
+# The difference is minimal (diff in R2 = 0.001), but it was recommended to keep the interaction term because:
 # 
-# Scientific Rationale: 
+# Scientific Rationale: clear evidence of temperature-moisture interactions in earlier analysis
+# The interaction represents a real physical process (moisture-dependent temperature effects on methanogenesis) --> Including the interaction term incorporates that effect 
 # 
-# We've seen clear evidence of temperature-moisture interactions in our earlier analysis
-# The interaction represents a real physical process (moisture-dependent temperature effects on methanogenesis)
-# Including it makes the model more mechanistically sound
-# 
-# 
-# Practical Considerations:
-# 
-# 
-# Even small improvements matter for prediction accuracy
+# Practical reasons: Even small improvements matter for prediction accuracy
 # No real computational cost to including it
-# Helps capture non-linear relationships we observed in our binned analyses
-# 
-# 
-# Model Interpretability:
-# 
-# 
-# Including the interaction term makes the model more aligned with our understanding of the system
-# Helps communicate the interdependence of these factors
+# Helps capture non-linear relationships we observed in our binned analyses --> shows the interdependence of these factors
 
 ```
 
-#TO DO: try this with constraints, too?
-#### Measured data --> Trying to train RandomForest with just temp, SWC, and the temp and SWC interaction --> not constrained 
-```{r}
 
-# Create complete dataset --> RF can't handle missing data / NAs
-rf_data <- na.omit(df[, c("FCH4", "TS_3_1_1", "SWC_3_1_1")])
-
-# Create interaction term --> explicit interaction term while keeping original terms 
-rf_data$TS_SWC_interact <- rf_data$TS_3_1_1 * rf_data$SWC_3_1_1
-
-# Split into train/test (80/20)
-set.seed(123)
-train_index <- sample(1:nrow(rf_data), 0.8 * nrow(rf_data))
-rf_train <- rf_data[train_index, ]
-rf_test <- rf_data[-train_index, ]
-
-# Fit RF model with both original and interaction terms
-library(randomForest)
-rf_model <- randomForest(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + TS_SWC_interact,
-                        data = rf_train,
-                        ntree = 500)
-
-# Create prediction dataset --> shouldn't need this anymore 
-#rf_test$TS_SWC_interact <- rf_test$TS_3_1_1 * rf_test$SWC_3_1_1
-
-# Now make predictions
-rf_pred <- predict(rf_model, newdata = rf_test)
-
-# Create evaluation plot
-eval_rf <- data.frame(
-    predicted = rf_pred,
-    actual = rf_test$FCH4
-)
-
-# Create evaluation plot
-ggplot(eval_rf, aes(x = actual, y = predicted)) +
-    geom_point(alpha = 0.3, color = "blue") +
-    geom_smooth(method = "lm", color = "red") +
-    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
-    labs(title = "Random Forest Model with Interaction",
-         x = "Observed Methane Flux",
-         y = "Predicted Methane Flux") +
-    theme_minimal() +
-    annotate("text", x = min(eval_rf$actual, na.rm = TRUE), 
-             y = max(eval_rf$predicted, na.rm = TRUE),
-             label = sprintf("R² = %.3f\nSlope = %.3f", 
-                           summary(lm(predicted ~ actual, data = eval_rf))$r.squared,
-                           coef(lm(predicted ~ actual, data = eval_rf))[2]),
-             hjust = 0, vjust = 1)
-
-# Look at variable importance
-varImpPlot(rf_model)
-
-#RF performs much better than the other models 
-# Let's compare:
-# 
-# Model Performance:
-# 
-# 
-# RF with interaction: R² = 0.325, Slope = 0.350
-# Quadratic model: R² = 0.148, Slope = 0.152
-# Non-linear threshold: R² = 0.133, Slope = 0.132
-# Piecewise linear: R² ≈ 0.027-0.050, Slope ≈ 0.025-0.054
-# 
-# 
-# Key Improvements using the RF model:
-# 
-# 
-# More than doubled the explained variance (32.5% vs 14.8%)
-# Better slope (closer to 1.0, though still underestimating)
-# More balanced predictions across the range
-# 
-# 
-# Variable Importance:
-# 
-# 
-# SWC and TS showing similar importance
-# Interaction term slightly more important
-# This supports earlier findings about the complex interplay between temperature and moisture
-
-#performs a bit worse than the era5 data 
-
-
-```
 
 
 #ntree optimization for rf_all_era2 model (which includes the swc:temp interaction and fch4 constraints)
@@ -2198,9 +2070,295 @@ print(opt_results$errors)
 # 750	     43.95684			
 # 850	     43.94687			
 # 950	     43.87470	
-#However, we see improvement drops significantly after around 550/600 trees, so could likely use 550/600 trees just fine with little loss of accuracy
+#improvement drops significantly after around 550/600 trees, so could likely use 550/600 trees just fine with little loss of accuracy
 
 ```
+#2019 Only 
+
+#Training RF on just 2019 - ERA5 data --> not constrained 
+```{r}
+# Subset 2019 data
+df_2019 <- df_era2[format(df_era2$date, "%Y") == "2019", ]
+df_2019 = df_2019[complete.cases(df_2019$fch4),]
+
+# Create train/test split for 2019
+set.seed(123)
+sample_2019 <- sample(c(TRUE, FALSE), nrow(df_2019), replace=TRUE, prob=c(0.8,0.2))
+train_2019 <- df_2019[sample_2019, ]
+test_2019 <- df_2019[!sample_2019, ]
+
+# Fit RF model
+rf_2019 <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
+                       vpd + swc + h + le + TS_SWC_interact,
+                       data = train_2019,
+                       ntree = 600)  # Using ~600 trees based on previous OOB analysis
+
+
+
+# Now make predictions
+rf_pred2019 <- predict(rf_2019, newdata = test_2019)
+
+
+# Create evaluation plot
+eval_rf2019 <- data.frame(
+    predicted = rf_pred2019,
+    actual = test_2019$fch4,
+    date = test_2019$date    # Add the date from test dataset
+
+)
+
+# Create evaluation plot
+ggplot(eval_rf2019, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    labs(title = "Random Forest Model with Interaction_2019",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    annotate("text", x = min(eval_rf2019$actual, na.rm = TRUE), 
+             y = max(eval_rf2019$predicted, na.rm = TRUE),
+             label = sprintf("R² = %.3f\nSlope = %.3f", 
+                           summary(lm(predicted ~ actual, data = eval_rf2019))$r.squared,
+                           coef(lm(predicted ~ actual, data = eval_rf2019))[2]),
+             hjust = 0, vjust = 1)
+
+# Look at variable importance
+varImpPlot(rf_2019)
+
+#Results from using all of 2019:
+#SWC is most important, but then followed closely by tsoil, then TS:SWC interaction --> comparatively, wd was usually 1 or 2, it has not dropped to 4th most important 
+#Slope = 0.566; R2 = 0.599 (best fit per R2 yet)
+
+
+
+```
+
+
+
+####Seasonal delineations added to 2019 df
+```{r}
+#Add DOY to the valuation df 
+
+# First create DOY from date
+eval_rf2019$DOY <- as.numeric(format(eval_rf2019$date, "%j"))
+
+# Then apply your seasonal delineations
+eval_rf2019$season <- case_when(
+    (eval_rf2019$DOY >= 246 & eval_rf2019$DOY <= 284) ~ 'Fall Senescence',
+    (eval_rf2019$DOY >= 145 & eval_rf2019$DOY <= 245) ~ 'Growing Season',
+    (eval_rf2019$DOY >= 285 | eval_rf2019$DOY <= 144) ~ 'Winter',
+    TRUE ~ NA_character_
+)
+
+############################################################################
+
+# Add seasonal delineations to the HH 2019 df
+
+# First create DOY from date
+df_2019$DOY <- as.numeric(format(df_2019$date, "%j"))
+
+
+df_2019 <- df_2019 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+      (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+      (DOY >= 285 | DOY <= 144) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+
+#copied here for reference 
+  # geom_vline(xintercept = as.POSIXct("2019-05-24"))+ #end of winter, DOY 144* 
+  # geom_vline(xintercept =  as.POSIXct("2019-08-31"))+ #end of growing season,DOY 245* --> old: DOY 258 #9/15
+  # geom_vline(xintercept =  as.POSIXct("2019-10-11")) + #end of Fall Senescence, DOY 284*
+
+
+```
+
+
+####2019 Residuals plot
+```{r}
+# Calculate residuals
+eval_rf2019$residuals <- eval_rf2019$predicted - eval_rf2019$actual
+
+# Add date information from test dataset
+eval_rf2019$date <- test_2019$date
+
+# Create residual plots
+# 1. Basic residual plot
+p1 <- ggplot(eval_rf2019, aes(x = actual, y = residuals)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+    labs(title = "Residuals vs Observed Methane Flux",
+         x = "Observed Methane Flux",
+         y = "Residuals") +
+    theme_minimal()
+
+# 2. Temporal pattern in residuals
+p2 <- ggplot(eval_rf2019, aes(x = date, y = residuals)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+    labs(title = "Residuals Over Time",
+         x = "Date",
+         y = "Residuals") +
+    theme_minimal()
+
+# Box plot of residuals by season
+p3 <- ggplot(eval_rf2019, aes(x = season, y = residuals)) +
+    geom_boxplot() +
+    labs(title = "Residuals by Season",
+         x = "Season",
+         y = "Residuals") +
+    theme_minimal()
+
+# Arrange plots
+grid.arrange(p1, p2, p3, ncol = 2)
+
+# Calculate summary statistics by season
+season_stats <- eval_rf2019 %>%
+    group_by(season) %>%
+    summarise(
+        mean_residual = mean(residuals, na.rm = TRUE),
+        sd_residual = sd(residuals, na.rm = TRUE),
+        n = n(),
+        rmse = sqrt(mean(residuals^2, na.rm = TRUE))
+    )
+
+print(season_stats)
+
+#Results, only based on test dataset**: 
+#winter has lowest RMSE (6.34) and lowest mean residual (0.23), then growing season (7.96; residual = 0.49), then fall (8.46; residual = 0.83)
+#based on figures:
+#more variability in residuals during growing season, smaller residuals in the winter season (smaller residuals) --> this suggests model performs better for winter? **
+
+```
+####Seasonal Comparisons of RF performance 
+```{r}
+# Add residuals to eval_rf2019 if not already there
+# eval_rf2019$residuals <- eval_rf2019$predicted - eval_rf2019$actual
+
+# Create plot with facets by season
+ggplot(eval_rf2019, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    facet_wrap(~season) +
+    labs(title = "2019 Model Performance by Season",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal()
+
+# Calculate statistics by season
+season_metrics <- eval_rf2019 %>%
+    group_by(season) %>%
+    summarise(
+        R2 = cor(predicted, actual, use = "complete.obs")^2,
+        slope = coef(lm(predicted ~ actual))[2],
+        p_value = summary(lm(predicted ~ actual))$coefficients[2,4],
+        n = n()
+    )
+
+print(season_metrics)
+
+
+#Results:
+#Fall --> R2 = 0.317, slope = 0.37, p<0.001
+#Growing --> R2 = 0.49, slope = 0.51, p<0.001
+#Winter --> R2=0.55, slope = 0.58, p<0.011 --> has the most data points in this test dataset 
+
+# Add statistics to plot
+ggplot(eval_rf2019, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    facet_wrap(~season) +
+    geom_text(data = season_metrics,
+              aes(x = -Inf, y = Inf,
+                  label = sprintf("R² = %.3f\nSlope = %.3f\np = %.3e\nn = %d",
+                                R2, slope, p_value, n)),
+              hjust = -0.1, vjust = 1.1) +
+    labs(title = "2019 Model Performance by Season",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal()
+```
+####Applying 2019 model to other years 
+```{r}
+
+# Create dataset for all other years
+other_years <- df_era2[format(df_era2$date, "%Y") != "2019", ]
+other_years = other_years[complete.cases(other_years$fch4),] 
+
+# Make predictions for other years using 2019 model
+predictions_all_years <- predict(rf_2019, newdata = other_years)
+
+# Create evaluation dataframe
+eval_all <- data.frame(
+    predicted = predictions_all_years,
+    actual = other_years$fch4,
+    date = other_years$date,
+    year = format(other_years$date, "%Y")
+)
+
+# Add your seasonal delineations
+eval_all$DOY <- as.numeric(format(eval_all$date, "%j"))
+eval_all$season <- case_when(
+    (eval_all$DOY >= 246 & eval_all$DOY <= 284) ~ 'Fall Senescence',
+    (eval_all$DOY >= 145 & eval_all$DOY <= 245) ~ 'Growing Season',
+    (eval_all$DOY >= 285 | eval_all$DOY <= 144) ~ 'Winter',
+    TRUE ~ NA_character_
+)
+
+# Create evaluation plot
+p1 <- ggplot(eval_all, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    facet_wrap(~year) +
+    labs(title = "2019-trained RF Model Predictions for Other Years",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 12))
+
+# Calculate performance metrics by year
+year_stats <- eval_all %>%
+    group_by(year) %>%
+    summarise(
+        R2 = cor(predicted, actual, use = "complete.obs")^2,
+        RMSE = sqrt(mean((predicted - actual)^2, na.rm = TRUE)),
+        n = n()
+    )
+
+print(year_stats)
+
+# Create seasonal performance plot
+p2 <- ggplot(eval_all, aes(x = actual, y = predicted, color = season)) +
+    geom_point(alpha = 0.3) +
+    geom_smooth(method = "lm") +
+    facet_wrap(~year) +
+    labs(title = "Seasonal Performance by Year",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal()
+
+grid.arrange(p1, p2, ncol = 1)
+
+#Results   R2           RMSE   n
+# 2017	0.03270917	10.735634	2571	
+# 2018	0.05323178	9.954032	5174	
+# 2020	0.05456234	9.250478	2150	
+# 2021	0.05445196	8.868847	2179	
+# 2022	0.05414603	8.745927	4351	
+# 2023	0.12960697	12.483160	216	
+
+#2019 RF model does not perform well on other years 
+
+```
+
+
 #Optimal number of trees for NEE? Just to see? 
 ####OOB for NEE
 ```{r}
@@ -2267,271 +2425,102 @@ print("OOB errors for each number of trees for NEE:")
 print(opt_results_nee$errors)
 
 #Results: 
-#optimal number of trees at 805, but with minimal improvement from 550 (2.124 → 2.120) --> Could likely use 550-600 trees without significant loss in accuracy
+#optimal number of trees at 850, but with minimal improvement from 550 (2.124 → 2.120) --> Could likely use 550-600 trees without significant loss in accuracy
+
+# trees  oob
+# 50	2.255787			
+# 150	2.150538			
+# 250	2.128528			
+# 350	2.131406			
+# 450	2.128552			
+# 550	2.123629			
+# 650	2.124292			
+# 750	2.121626			
+# 850	2.120393			
+# 950	2.121901			
 
 
 ```
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#To ignore, early exploratory stuff 
-
-
-#Tried creating predictive models here, but with them all performing so poorly, I didn't end up re-running this or exploring further --> jumped down to RF 
-####predictive model, trying linear model as starting point 
+#### Measured data --> Trying to train RandomForest with just temp, SWC, and the temp and SWC interaction --> not constrained 
 ```{r}
-# Linear model - soil temp, SWC, and interaction 
-model <- lm(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction, data = df)
-summary(model)
 
-# Predict missing values
-df$predicted_FCH4_lm <- predict(model, newdata = df)
+# Create complete dataset --> RF can't handle missing data / NAs
+rf_data <- na.omit(df[, c("FCH4", "TS_3_1_1", "SWC_3_1_1")])
+
+# Create interaction term --> explicit interaction term while keeping original terms 
+rf_data$TS_SWC_interact <- rf_data$TS_3_1_1 * rf_data$SWC_3_1_1
+
+# Split into train/test (80/20)
+set.seed(123)
+train_index <- sample(1:nrow(rf_data), 0.8 * nrow(rf_data))
+rf_train <- rf_data[train_index, ]
+rf_test <- rf_data[-train_index, ]
+
+# Fit RF model with both original and interaction terms
+library(randomForest)
+rf_model <- randomForest(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + TS_SWC_interact,
+                        data = rf_train,
+                        ntree = 500)
+
+# Create prediction dataset --> shouldn't need this anymore 
+#rf_test$TS_SWC_interact <- rf_test$TS_3_1_1 * rf_test$SWC_3_1_1
+
+# Now make predictions
+rf_pred <- predict(rf_model, newdata = rf_test)
+
+# Create evaluation plot
+eval_rf <- data.frame(
+    predicted = rf_pred,
+    actual = rf_test$FCH4
+)
+
+# Create evaluation plot
+ggplot(eval_rf, aes(x = actual, y = predicted)) +
+    geom_point(alpha = 0.3, color = "blue") +
+    geom_smooth(method = "lm", color = "red") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    labs(title = "Random Forest Model with Interaction",
+         x = "Observed Methane Flux",
+         y = "Predicted Methane Flux") +
+    theme_minimal() +
+    annotate("text", x = min(eval_rf$actual, na.rm = TRUE), 
+             y = max(eval_rf$predicted, na.rm = TRUE),
+             label = sprintf("R² = %.3f\nSlope = %.3f", 
+                           summary(lm(predicted ~ actual, data = eval_rf))$r.squared,
+                           coef(lm(predicted ~ actual, data = eval_rf))[2]),
+             hjust = 0, vjust = 1)
+
+# Look at variable importance
+varImpPlot(rf_model)
 
 #Results:
-# TS_3_1_1:  -1.4649, as temp inc, methane dec? p= (<2e-16) - SIG  
-# SWC_3_1_1: The coefficient for soil moisture is -0.0001 and p=0.9,NOT sig 
-# interaction: 0.0352, R2 = 0.011 so pos correlation but very weak; but p  <2e-16 - SIG*
-
-# Linear model 2 - soil temp only 
-model2 <- lm(FCH4 ~ TS_3_1_1, data = df)
-summary(model2)
-
-#Results: 
-#TS_3_1_1     est =0.35596    sE=0.01120   p= <2e-16 ***; Multiple R-squared:  0.03927,	Adjusted R-squared:  0.03923 
-
-# Predict missing values
-df$predicted_FCH4.2 <- predict(model2, newdata = df)
-
-# Linear model 3 - interaction only 
-model3 <- lm(FCH4 ~ interaction, data = df)
-summary(model3)
-
-#Results: 
-#interaction est=0.0088479  SE=0.0002053   p= <2e-16 ***; Multiple R-squared:  0.06985,	Adjusted R-squared:  0.06981 
-
-# Predict missing values
-df$predicted_FCH4.3 <- predict(model3, newdata = df)
-
-
-# Linear model - soil temp and interaction 
-model4 <- lm(FCH4 ~ TS_3_1_1 + interaction, data = df)
-summary(model)
-
-# Predict missing values
-df$predicted_FCH4.4 <- predict(model4, newdata = df)
-#Results: same as model(1)
-#Multiple R-squared:  0.1161,	Adjusted R-squared:  0.116 
-#F-statistic:  1083 on 3 and 24733 DF,  p-value: < 2.2e-16
-
-```
-
-
-#RMSE of various linear model options
-####evaluate the model using RMSE(measures the magnitude of errors between predicted and actual values; lower is better fit of model to data)
-```{r}
-# Calculate RMSE - lower RMSE = better fit 
-
-#soil temp, SWC, and interaction --> slightly better than the other two
-rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4_lm)^2, na.rm = TRUE))
-print(paste("RMSE: ", rmse)) # "RMSE:  9.01373878828402"
-
-#soil temp only 
-rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4.2)^2, na.rm = TRUE))
-print(paste("RMSE: ", rmse)) #"RMSE:  9.39753297747576"
-
-#interaction only 
-rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4.3)^2, na.rm = TRUE))
-print(paste("RMSE: ", rmse)) #"RMSE:  9.24675505010849"
-
-#soil temp and interaction
-rmse <- sqrt(mean((df$FCH4 - df$predicted_FCH4.4)^2, na.rm = TRUE))
-print(paste("RMSE: ", rmse)) #"RMSE:  9.01373897029865" --> same as first lm model --> SWC appears not to have sig impact on model fit ?
-
-```
-
-
-#If linear models don't work well, try random forest but use interaction effect? 
-```{r}
-# This chunk is useful for getting an initial sense of how well the Random Forest model performs on the entire dataset. However, it doesn't provide a robust evaluation since it uses the same data for both training and prediction, which can lead to overfitting and therefore also a RMSE that looks better than it should be - that is why this output seems to perform so well, but shouldn't be trusted until trained on a portion of the df and tested on the other portion 
-
-# Load necessary library
-library(randomForest)
-
-# set up random forest model 
-rf_model <- randomForest(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction, data = df, na.action = na.omit)
-df$predicted_FCH4_rf <- predict(rf_model, newdata = df)
-
-# Calculate RMSE
-rmse_rf <- sqrt(mean((df$FCH4 - df$predicted_FCH4_rf)^2, na.rm = TRUE))
-print(paste("RMSE (Random Forest): ", rmse_rf)) # "RMSE (Random Forest):  4.54702260438728"  --> improved RMSE by a lot but this is not on tested data, so ignore this chunk and its results 
-```
-#Train new random forest model 
-```{r}
-# This chunk splits the dataset into training and testing sets, trains the Random Forest model on the training set, and then evaluates its performance on the test set. It calculates both RMSE and R-squared to assess the model's accuracy. *Produces a higher but more accurate RMSE and R-squared value 
-
-#*note, output here is "predicted_CH4_RF" 
-
-# Load necessary libraries
-library(tidyverse)
-library(randomForest)
-library(caret)
-
-
-# Create the interaction term
-df$interaction <- df$TS_3_1_1 * df$SWC_3_1_1
-
-# Drop rows with NA in FCH4
-df <- df %>% drop_na(FCH4)
-df <- df %>% drop_na(SWC_3_1_1)
-df <- df %>% drop_na(TS_3_1_1)
-df <- df %>% drop_na(interaction)
-
-# Split the data into training and testing sets
-set.seed(123) #seed 123 is what we use in our processing code 
-trainIndex <- createDataPartition(df$FCH4, p = .8, list = FALSE)
-trainData <- df[trainIndex,]
-testData <- df[-trainIndex,]
-
-# Train a Random Forest model
-rf_model_training <- randomForest(FCH4 ~ TS_3_1_1 + SWC_3_1_1 + interaction, data = trainData, na.action = na.omit)
-
-# Predict on the test set
-testData$predicted_FCH4_RF <- predict(rf_model_training, newdata = testData)
-
-# Calculate RMSE between the true data and predicted data
-rmse_rf <- sqrt(mean((testData$FCH4 - testData$predicted_FCH4_RF)^2))
-print(paste("RMSE (Random Forest): ", rmse_rf))
-#Results:  "RMSE (Random Forest):  7.96643546914752"--> does improve model a bit compared to just the lm 
-
-# Calculate R-squared
-r2_rf <- cor(testData$FCH4, testData$predicted_FCH4_RF)^2
-print(paste("R-squared (Random Forest): ", r2_rf))
-#Results: "R-squared (Random Forest):  0.304920313430615"
-```
-
-#Comparing RF modeled data to actual data 
-```{r}
-# Compare actual vs predicted values
-comparison <- testData %>% select(FCH4, predicted_FCH4_RF)
-print(head(comparison))
-#don't compare very well....
+#RF performs much better than the other models 
+#Comparison
+# 
+# Model Performance (using measured data**):
+# 
+# 
+# RF with interaction: R² = 0.325, Slope = 0.350
+# Quadratic model: R² = 0.148, Slope = 0.152
+# Non-linear threshold: R² = 0.133, Slope = 0.132
+# Piecewise linear: R² ≈ 0.027-0.050, Slope ≈ 0.025-0.054
+# 
+# 
+# RF model: 
+# 
+# More than doubled the explained variance (32.5% vs 14.8%)
+# Better slope, though still underestimating
+# 
+# Variable Importance:
+# SWC and TS showing similar importance
+# Interaction term slightly more important
 
 
 
-summary(lm(testData$FCH4 ~ testData$predicted_FCH4_RF))
-#Results: not a great fit 
-#slope = 0.85; Multiple R-squared:  0.3049,	Adjusted R-squared:  0.3048 
-#F-statistic:  2168 on 1 and 4943 DF,  p-value: < 2.2e-16
 
-# Plot the comparison
-ggplot(comparison, aes(x = FCH4, y = predicted_FCH4_RF)) +
-  geom_point(alpha = 0.3) +
-  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
-  labs(title = "Actual vs Predicted Methane Flux (FCH4)",
-       x = "Actual FCH4",
-       y = "Predicted FCH4 from RF training") +
-   annotate(geom = 'text',x = 50, y = -10,label=expression(R^2~"= 0.3"),size = 3)+ 
-     annotate(geom = 'text',x = 50, y = -15,label= "slope = 0.85",size = 3)+ 
-  theme_minimal()
-
-
-```
-#comparing predicted CH4 from RF and lm from test Data to actual CH4 data 
-```{r}
-#FCH4 vs FCH4 from RF, looking at comparison of test data 
-summary(lm(testData$FCH4 ~ testData$predicted_FCH4_RF))
-#Results: not a great fit 
-#slope = 0.85; Multiple R-squared:  0.3049,	Adjusted R-squared:  0.3048 
-#F-statistic:  2168 on 1 and 4943 DF,  p-value: < 2.2e-16
-
-# Plot the comparison of CH4 and predicted_FCH4_rf from random forest 
-ggplot(testData, aes(x = FCH4, y = predicted_FCH4_RF)) +
-  geom_point(alpha = 0.3) +
-  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
-  labs(title = "Actual vs Predicted Methane Flux (FCH4)",
-       x = "Actual FCH4",
-       y = "Predicted FCH4_rf") +
-    annotate(geom = 'text',x = 50, y = -10,label=expression(R^2~"= 0.3"),size = 3)+ 
-     annotate(geom = 'text',x = 50, y = -15,label= "slope = 0.85",size = 3)+ 
-  annotate(geom = 'text',x = 57, y = -10,label= "RMSE = 7.97",size = 3)+ 
-  theme_minimal()
-
-
-#testing actual vs predicted CH4 from original df 
-model5 <- lm(FCH4 ~ predicted_FCH4_lm, data = df)
-summary(model5)
-# Results: slope = 1; Multiple R-squared:  0.1161,	Adjusted R-squared:  0.1161 
-#F-statistic:  3250 on 1 and 24735 DF,  p-value: < 2.2e-16
-
-
-# Plot the comparison of actual CH4 and predicted CH4 from lm from orig df
-ggplot(df, aes(x = FCH4, y = predicted_FCH4_lm)) +
-  geom_point(alpha = 0.3) +
-  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
-  labs(title = "Actual vs Predicted Methane Flux (FCH4)",
-       x = "Actual FCH4",
-       y = "Predicted FCH4_LM") +
-     annotate(geom = 'text',x = 50, y = 0,label=expression(R^2~"= 0.12"),size = 3)+ 
-     annotate(geom = 'text',x = 50, y = 1,label= "slope = 1",size = 3)+ 
-   annotate(geom = 'text',x = 50, y = -1,label= "RMSE = 9.01",size = 3)+ 
-  theme_minimal()
-
-
-#Need to merge df before this can work 
-# Plot the comparison of predicted CH4_lm and predicted_FCH4_rf
-# ggplot(df, aes(x = predicted_FCH4_lm, y = predicted_FCH4_RF)) +
-#   geom_point(alpha = 0.3) +
-#   geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
-#   labs(title = "Actual vs Predicted Methane Flux (FCH4)",
-#        x = "predicted FCH4",
-#        y = "Predicted FCH4_rf") +
-#   theme_minimal()
-
-#CH4 data vs predicted FCH4_lm from the testdata 
-ggplot(data = testData,aes(FCH4, predicted_FCH4_lm))+theme_bw()+
-  geom_hline(yintercept = 0,lty=2)+
-  geom_vline(xintercept = 0,lty=2)+
-  geom_point(alpha=0.2)+
-  scale_fill_viridis_c()+
-  geom_abline(slope = 1,intercept = 0,col='red',lty=1) +
-  annotate(geom = 'text',x = 50, y = 0,label=expression(R^2~"= 0.12"),size = 3)+ 
-     annotate(geom = 'text',x = 50, y = 1,label= "slope = 1",size = 3)+ 
-   annotate(geom = 'text',x = 50, y = -1,label= "RMSE = 9.01",size = 3) # +
-    # scale_x_continuous(limits = c(-50,150),expression('Random Forest predicted FCH4  ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-    # scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance FCH4 ('*mu*mol~CO[2]~m^-2~s^-1*')'))#+
-  # annotate(geom = 'text',x = 50, y = -8,label=expression(R^2~"= 0.47"),size = 3)+
-  # annotate(geom = 'text',x = 50,y = -15,label=expression(Slope~"= 1.01"),size = 3)+
-  # theme(text = element_text(size = 8))
-
-  #FCH4 data vs predicted FCH4_RF from testData 
-  ggplot(data = testData,aes(FCH4, predicted_FCH4_RF))+theme_bw()+
-  geom_hline(yintercept = 0,lty=2)+
-  geom_vline(xintercept = 0,lty=2)+
-  geom_point(alpha=0.2)+
-  scale_fill_viridis_c()+
-  geom_abline(slope = 1,intercept = 0,col='red',lty=1) +
-    annotate(geom = 'text',x = 50, y = -10,label=expression(R^2~"= 0.3"),size = 3)+ 
-     annotate(geom = 'text',x = 50, y = -15,label= "slope = 0.85",size = 3)+ 
-  annotate(geom = 'text',x = 65, y = -10,label= "RMSE = 7.97",size = 3)
 
 ```
 
@@ -2541,12 +2530,4 @@ ggplot(data = testData,aes(FCH4, predicted_FCH4_lm))+theme_bw()+
 
 
 
-
-
-
-
-
-
-
-
-
+#
