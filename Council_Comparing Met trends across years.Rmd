@@ -1,0 +1,171 @@
+---
+title: "Council_Comparing Met trends"
+output: html_document
+date: "2025-01-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+# Set working directory and then Load data
+
+
+```{r}
+#changed to "council_gapfilled_clean_2017_2023_for analysis.2.csv" --> .2 indicates updated dataset with SWC_3 tussock 
+
+#half-hourly dataframe --> gapfilled 
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+#daily avg dataframe --> gapfilled 
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#names(df_avg)
+#str(df_avg)
+
+#make sure timestamp is correct and in POSIXct (it should be)
+summary(df_avg$date)
+
+
+```
+
+
+```{r}
+# Create yearly summaries of key variables
+yearly_summary <- df_avg %>%
+  mutate(year = format(date, "%Y")) %>%
+  group_by(year) %>%
+  summarise(
+    # Temperature metrics
+    mean_ta = mean(TA, na.rm = TRUE), #air temp 
+    mean_ts3 = mean(TS_3_1_1, na.rm = TRUE),  # Tussock soil temp
+    
+      #ERA5 air temp
+    mean_ERA.ta = mean(TA_ERA5, na.rm = TRUE), #ERA5 air temp 
+    mean_ERA.ts = mean(TS_ERA5, na.rm = TRUE),  # ERA5 soil temp 
+    
+    # Moisture metrics
+    mean_swc3 = mean(SWC_3_1_1, na.rm = TRUE),  # Tussock moisture
+    mean_vpd = mean(VPD, na.rm = TRUE),
+    mean_rh = mean(RH, na.rm = TRUE),
+    
+    # Energy metrics
+    mean_netrad = mean(NETRAD, na.rm = TRUE),
+    mean_le = mean(LE, na.rm = TRUE),
+    
+    # Sample sizes
+    n_total = n(),
+    n_fch4 = sum(!is.na(FCH4))
+  )
+
+# Create visualization
+library(tidyr)
+
+# Reshape data for plotting
+yearly_long <- yearly_summary %>%
+  select(-n_total, -n_fch4) %>%
+  pivot_longer(-year, 
+               names_to = "variable", 
+               values_to = "value")
+
+# Plot
+ggplot(yearly_long, aes(x = year, y = value, group = 1)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~variable, scales = "free_y") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Environmental Variables Across Years",
+       y = "Value",
+       x = "Year")
+
+#Results of total annual avg:
+#2019 had lower mean air temp and soil temps at tussock location (TS3)
+#very high temps in 2023 compared to others, but this is likely driven by missing half the year ** 
+#can see the come down from the heat spike in 2017 
+#in measure TA you don't see the air temp spike in 2019, which is likely due to having the most complete winter data, which evens out the mean? **need to look at seasons ** 
+#VPD also appears to substantially increase over the years - conversely, RH is decreasing over the years 
+#netrad increases over the years, as well
+
+#**but these are annual averages which don't capture a lot of the nuance, going to break it down into seasons and compare seasons among years
+```
+
+
+#Adding seasonal delineations 
+
+```{r}
+# First create DOY from date
+df_avg$DOY <- as.numeric(format(df_avg$date, "%j"))
+
+# add year column if not already present
+df_avg <- df_avg %>%
+  mutate(year = format(date, "%Y"))
+
+
+# Create seasonal assignments using both year and DOY
+df_avg <- df_avg %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
+      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
+      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+```
