@@ -143,7 +143,59 @@ summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.97, slope = 1.02
 df_era2$swc = ifelse(is.na(df_era2$swc),df_era2$swc.rf,df_era2$swc)
 
 ```
+#Seasonal delineations for all years 
+```{r}
+# First create DOY from date
+df_era2$DOY <- as.numeric(format(df_era2$date, "%j"))
 
+# add year column if not already present
+df_era2 <- df_era2 %>%
+  mutate(year = format(date, "%Y"))
+
+
+# Create seasonal assignments using both year and DOY
+df_era2 <- df_era2%>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
+      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
+      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+
+sum(is.na(df_era2$season))
+
+```
 
 #Correlations - measured data 
 #Here I use original SWC_3 and soil Temp_3 data and the original FCH4 data (not gapfilled)  
@@ -1691,7 +1743,7 @@ ggplot(pred_grid, aes(x = TS_3_1_1, y = SWC_3_1_1, fill = predicted)) +
 
 ```{r}
 #not constraining data to threshold limits to limit outliers *** --> for that, see code chunk below 
-
+library(randomForest)
 # Create complete dataset --> RF can't handle missing data / NAs
 rf_data_era = df_era2[complete.cases(df_era2$fch4),]
 
@@ -2284,7 +2336,7 @@ ggplot(eval_rf2019, aes(x = actual, y = predicted)) +
          y = "Predicted Methane Flux") +
     theme_minimal()
 ```
-####Applying 2019 model to other years 
+####Applying 2019 model to other years --> maybe divide this out by season as well? 
 ```{r}
 
 # Create dataset for all other years
@@ -2302,7 +2354,7 @@ eval_all <- data.frame(
     year = format(other_years$date, "%Y")
 )
 
-# Add your seasonal delineations
+# Add seasonal delineations --> need to adjust this by year ** 
 eval_all$DOY <- as.numeric(format(eval_all$date, "%j"))
 eval_all$season <- case_when(
     (eval_all$DOY >= 246 & eval_all$DOY <= 284) ~ 'Fall Senescence',
@@ -2357,6 +2409,8 @@ grid.arrange(p1, p2, ncol = 1)
 #2019 RF model does not perform well on other years 
 
 ```
+
+
 
 
 #Optimal number of trees for NEE? Just to see? 
@@ -2525,9 +2579,202 @@ varImpPlot(rf_model)
 ```
 
 
+#Other Empirical Models 
+
+#Generalized Additive Models (GAMs)
+```{r}
+library(mgcv)
+gam_model <- gam(FCH4 ~ s(tsoil) + s(swc) + ti(tsoil, swc), data = train.ch4)
+```
 
 
+#Mixed effects model 
+```{r}
+library(lme4)
+mixed_model <- lmer(FCH4 ~ tsoil * swc + (1|season), data = train.ch4)
+```
 
 
+#Support Vector Regression (SVR)
+```{r}
+library(lme4)
+library(e1071)
+svr_model <- svm(FCH4 ~ tsoil + swc, data = train.ch4)
+```
 
-#
+#Gradient Boosting Machines 
+```{r}
+library(gbm)
+gbm_model <- gbm(FCH4 ~ tsoil + swc, data = train.ch4)
+```
+
+
+#Removing 2023 due to lack of seasons 
+```{r}
+# Check levels in training and test data
+print(table(train.ch4$season))
+print(table(test.ch4$season))
+
+#Need to remove 2023, which doesn't have seasons assigned and the NAs are messing up the stats 
+# Remove 2023 data
+train.ch4 <- train.ch4[format(train.ch4$date, "%Y") != "2023", ]
+test.ch4 <- test.ch4[format(test.ch4$date, "%Y") != "2023", ]
+
+# Verify removal
+print("Training data years:")
+print(table(format(train.ch4$date, "%Y")))
+print("Testing data years:")
+print(table(format(test.ch4$date, "%Y")))
+
+#confirm all NAs are gone 
+sum(is.na(test.ch4$season))
+```
+
+#Extreme Gradient Boosting (XGB) & all above models for comparison 
+```{r}
+# load all necessary libraries
+library(mgcv)        # for GAM
+library(lme4)        # for mixed effects
+library(e1071)       # for SVR
+library(gbm)         # for GBM
+library(xgboost)     # for XGBoost
+library(caret)       # for model comparison
+
+# GAM Model - Generalized Additive Models (GAMs)
+gam_model <- gam(fch4 ~ s(tsoil) + s(swc) + ti(tsoil, swc), 
+                 data = train.ch4)
+
+# Mixed Effects Model (with season as random effect)
+mixed_model <- lmer(fch4 ~ tsoil * swc + (1|season), 
+                   data = train.ch4)
+summary(mixed_model)
+
+# SVR Model - Support Vector Regression (SVR)
+svr_model <- svm(fch4 ~ tsoil + swc, 
+                 data = train.ch4)
+
+# GBM Model - Gradient Boosting Machines 
+gbm_model <- gbm(fch4 ~ tsoil + swc,
+                 data = train.ch4,
+                 distribution = "gaussian",
+                 n.trees = 500)
+
+# Prepare data for XGBoost
+# XGBoost needs a specific format
+train_matrix <- model.matrix(~ tsoil + swc, data = train.ch4)[,-1]
+xgb_train <- xgb.DMatrix(data = train_matrix, 
+                         label = train.ch4$fch4)
+
+# XGBoost Model
+xgb_model <- xgboost(data = xgb_train,
+                     nrounds = 100,
+                     objective = "reg:squarederror")
+
+# function to make predictions and calculate R2 for each model
+calculate_metrics <- function(predicted, actual) {
+    R2 = cor(predicted, actual, use = "complete.obs")^2
+    RMSE = sqrt(mean((predicted - actual)^2, na.rm = TRUE))
+    slope = coef(lm(predicted ~ actual))[2]
+    return(c(R2 = R2, RMSE = RMSE, slope = slope))
+}
+#Results of XGBoost - by end of training the RMSE went from 10.31 down to 6.35 
+
+```
+
+#Empirical model comparison stats 
+
+```{r}
+# Create test matrix for XGBoost predictions
+test_matrix <- model.matrix(~ tsoil + swc, data = test.ch4)[,-1]
+xgb_test <- xgb.DMatrix(data = test_matrix)
+
+# Get predictions from each model
+gam_pred <- predict(gam_model, newdata = test.ch4)
+mixed_pred <- predict(mixed_model, newdata = test.ch4)
+
+#svr_pred <- predict(svr_model, newdata = test.ch4)
+gbm_pred <- predict(gbm_model, newdata = test.ch4)
+xgb_pred <- predict(xgb_model, newdata = xgb_test)
+
+# Calculate metrics for each model
+metrics_gam <- calculate_metrics(gam_pred, test.ch4$fch4)
+metrics_mixed <- calculate_metrics(mixed_pred, test.ch4$fch4)
+
+#metrics_svr <- calculate_metrics(svr_pred, test.ch4$fch4) --> having trouble getting this to work 
+metrics_gbm <- calculate_metrics(gbm_pred, test.ch4$fch4)
+metrics_xgb <- calculate_metrics(xgb_pred, test.ch4$fch4)
+
+# Create summary dataframe
+model_comparison <- data.frame(
+    Model = c("GAM", "Mixed Effects", #"SVR",
+              "GBM", "XGBoost"),
+    R2 = c(metrics_gam["R2"], metrics_mixed["R2"], 
+           #metrics_svr["R2"],
+           metrics_gbm["R2"], metrics_xgb["R2"]),
+    RMSE = c(metrics_gam["RMSE"], metrics_mixed["RMSE"], 
+             #metrics_svr["RMSE"], 
+             metrics_gbm["RMSE"], metrics_xgb["RMSE"]),
+    Slope = c(metrics_gam["slope"], metrics_mixed["slope"], 
+              #metrics_svr["slope"], 
+              metrics_gbm["slope"], metrics_xgb["slope"])
+)
+
+print(model_comparison)
+```
+
+#trying to get SVR to work
+```{r}
+# Check the data step by step
+# 1. Original data
+print("Original test data dimensions:")
+print(dim(test.ch4))
+print("NAs in each column:")
+print(colSums(is.na(test.ch4[c("fch4", "tsoil", "swc")])))
+
+# 2. Create index of complete cases
+complete_idx <- complete.cases(test.ch4[c("fch4", "tsoil", "swc")])
+print("Number of complete cases:")
+print(sum(complete_idx))
+
+# 3. Create clean dataset
+clean_data <- test.ch4[complete_idx, ]
+print("Clean data dimensions:")
+print(dim(clean_data))
+
+# 4. Fit model to clean data only
+svr_model_clean <- svm(fch4 ~ tsoil + swc, data = clean_data)
+svr_pred_clean <- predict(svr_model_clean, newdata = clean_data)
+
+print("Final lengths:")
+print(paste("Predictions:", length(svr_pred_clean)))
+print(paste("Actual values:", nrow(clean_data)))
+
+
+```
+#trying to get SVR to work 
+```{r}
+# Create a simple numbered index
+test.ch4$row_id <- 1:nrow(test.ch4)
+
+# Fit model and get predictions
+svr_model_new <- svm(fch4 ~ tsoil + swc, data = test.ch4)
+svr_pred_new <- predict(svr_model_new, newdata = test.ch4)
+
+# Create dataframe with predictions and actual values
+pred_df <- data.frame(
+    row_id = test.ch4$row_id,
+    actual = test.ch4$fch4,
+    predicted = svr_pred_new
+)
+
+# Check which rows are missing predictions
+print("Rows with predictions:")
+print(length(svr_pred_new))
+print("Range of row IDs with predictions:")
+print(range(which(!is.na(svr_pred_new))))
+
+# Look at some summary statistics of the data
+print("Summary of predictors:")
+print(summary(test.ch4[c("tsoil", "swc", "fch4")]))
+```
+
