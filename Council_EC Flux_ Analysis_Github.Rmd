@@ -54,8 +54,8 @@ df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/counci
 #needs continuous day variable - daily avg, calculated in processing steps
 df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-#monthly avg, calculated in processing steps 
-df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+# #monthly avg, calculated in processing steps 
+# df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 #original half-hourly dataframe using the SWC1
 #dforig = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
@@ -103,6 +103,7 @@ ggplot(data = df,aes(TIMESTAMP_END,FC_F))+
 #create TIMESTAMP variable that is = to TIMESTAMP_END
 
 ```{r}
+ 
 df$TIMESTAMP = df$TIMESTAMP_END
 
 year_df <- function(df, year) {
@@ -110,6 +111,7 @@ year_df <- function(df, year) {
     filter(format(date, "%Y") == as.character(year)) %>%
     mutate(DOY = yday(date))
 }
+
 
 #for orig dataset using SWC1
 
