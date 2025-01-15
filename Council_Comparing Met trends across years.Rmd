@@ -53,10 +53,137 @@ df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/co
 #make sure timestamp is correct and in POSIXct (it should be)
 summary(df_avg$date)
 
+#make sure date is in POSIXct --> should return "POSIXct"
+class(df$date)
+class(df_avg$date) #these were in class "date", not POSIXct
+
+#formatting into POSIXct
+df$date <- as.POSIXct(df$date, format = "%Y-%m-%d", tz = "UTC")
+df_avg$date <- as.POSIXct(df_avg$date, format = "%Y-%m-%d", tz = "UTC")
+
+
+df$TIMESTAMP = df$TIMESTAMP_END
+df_avg$TIMESTAMP = df_avg$TIMESTAMP_END
+
 
 ```
 
 
+#Adding seasonal delineations 
+
+#### HH dataframe
+```{r}
+# First create DOY from date
+df$DOY <- as.numeric(format(df$date, "%j"))
+
+# add year column if not already present
+df <- df %>%
+  mutate(year = format(date, "%Y"))
+
+
+# Create seasonal assignments using both year and DOY
+df<- df %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
+      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
+      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+
+df$date <- as.POSIXct(df$date, format = "%Y-%m-%d", tz = "UTC")
+
+# Method 1: Use class()
+class(df$date)
+# Should return "POSIXct" "POSIXt"
+```
+
+
+
+####Seasons to daily avg df 
+```{r}
+# First create DOY from date
+df_avg$DOY <- as.numeric(format(df_avg$date, "%j"))
+
+# add year column if not already present
+df_avg <- df_avg %>%
+  mutate(year = format(date, "%Y"))
+
+
+# Create seasonal assignments using both year and DOY
+df_avg <- df_avg %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
+      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
+      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+
+
+```
+
+#Yearly summaries of key variables 
 ```{r}
 # Create yearly summaries of key variables
 yearly_summary <- df_avg %>%
@@ -118,54 +245,407 @@ ggplot(yearly_long, aes(x = year, y = value, group = 1)) +
 ```
 
 
-#Adding seasonal delineations 
-
+#Create yearly dataframes 
 ```{r}
-# First create DOY from date
-df_avg$DOY <- as.numeric(format(df_avg$date, "%j"))
+#create dataframes for each year for the data you have so you can look at annual trends --> the previous way I did them doesn't work here for some reason, so using filtering 
 
-# add year column if not already present
-df_avg <- df_avg %>%
-  mutate(year = format(date, "%Y"))
+#Daily avg
+
+df_avg_2017 <- df_avg %>%
+  filter(year(date) == 2017)
+
+df_avg_2018 <- df_avg %>%
+  filter(year(date) == 2018)
+
+df_avg_2019 <- df_avg %>%
+  filter(year(date) == 2019)
+
+df_avg_2020 <- df_avg %>%
+  filter(year(date) == 2020)
+
+df_avg_2021 <- df_avg %>%
+  filter(year(date) == 2021)
+
+df_avg_2022 <- df_avg %>%
+  filter(year(date) == 2022)
+
+df_avg_2023 <- df_avg %>%
+  filter(year(date) == 2023)
+
+# HH 
+
+df_2017 <- df %>%
+  filter(year(date) == 2017)
+
+df_2018 <- df %>%
+  filter(year(date) == 2018)
+
+df_2019 <- df %>%
+  filter(year(date) == 2019)
+
+df_2020 <- df %>%
+  filter(year(date) == 2020)
+
+df_2021 <- df %>%
+  filter(year(date) == 2021)
+
+df_2022 <- df %>%
+  filter(year(date) == 2022)
+
+df_2023 <- df %>%
+  filter(year(date) == 2023)
 
 
-# Create seasonal assignments using both year and DOY
-df_avg <- df_avg %>%
-  mutate(
-    season = case_when(
-      # 2017 seasons
-      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
-      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
-      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
-      
-      
-      # 2018 seasons
-      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
-      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
-      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
-      
-      # 2019 seasons
-      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
-      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
-      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
-      
-      # 2020 seasons
-      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
-      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
-      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
-      
-      # 2021 seasons
-      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
-      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
-      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
-      
-      # 2022 seasons
-      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
-      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
-      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
-      
-      # not doing one for 2023 ** incomplete year 
-      TRUE ~ NA_character_
+```
+
+#Seasonal dataframes 
+```{r}
+#This will exclude 2023 becuase it does not have assigned seasons 
+df_avg_winter <- df_avg %>%
+  filter(season == "Winter")
+
+df_avg_growing <- df_avg %>%
+  filter(season == "Growing Season")
+
+df_avg_fall <- df_avg %>%
+  filter(season == "Fall Senescence")
+
+
+sum(is.na(df_avg_fall$season))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+#Creating timeseries for each year, with seasonal delineations 
+```{r}
+#Below code sets it up as a function so all you have to do it change the years at the bottom, and re-run, and it'll adjust the figure with associated seasonal delineations 
+
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+# Create seasonal boundaries dataframe
+season_boundaries <- data.frame(
+  year = rep(2017:2022, each = 3),  # now each year has 3 dates
+  DOY = c(
+    # 2017
+    131, 258, 291,  # Growing season start, Fall start, Winter start
+    # 2018
+    152, 257, 301,  # Growing season start, Fall start, Winter start
+    # 2019
+    145, 246, 285,  # Growing season start, Fall start, Winter start
+    # 2020
+    136, 252, 300,  # Growing season start, Fall start, Winter start
+    # 2021
+    142, 260, 284,  # Growing season start, Fall start, Winter start
+    # 2022
+    144, 245, 282   # Growing season start, Fall start, Winter start
+  )
+)
+
+# Function to create seasonal flux plots
+create_seasonal_plot <- function(df_avg, year_to_plot) {
+  # Filter data for specified year
+  yearly_data <- df_avg %>%
+    filter(year(date) == year_to_plot)
+  
+  # Get the seasonal boundaries for this year and calculate mid-points for labels
+  year_boundaries <- season_boundaries %>%
+    filter(year == year_to_plot) %>%
+    mutate(date = as.Date(paste(year, DOY), format="%Y %j"))
+
+  # Calculate midpoints for season labels
+  year_start <- as.Date(paste0(year_to_plot, "-01-01"))
+  year_end <- as.Date(paste0(year_to_plot, "-12-31"))
+  
+  label_dates <- data.frame(
+    season = c("Winter", "Growing Season", "Fall Senescence", "Winter"),
+    date = c(
+      year_start + (year_boundaries$date[1] - year_start)/2,  # Winter to Growing
+      year_boundaries$date[1] + (year_boundaries$date[2] - year_boundaries$date[1])/2,  # Growing to Fall
+      year_boundaries$date[2] + (year_boundaries$date[3] - year_boundaries$date[2])/2,  # Fall to Winter
+      year_boundaries$date[3] + (year_end - year_boundaries$date[3])/2  # End of year Winter
     )
   )
+  
+  # Create plot a (Temperature and NEE)
+  p1 <- ggplot(yearly_data) +
+    # Add air temperature with scaling
+    geom_line(aes(x = date, y = TA/15, color = "Air Temperature"), size = 0.5) +
+    # Add soil temperature with same scaling - TS3 = tussock location 
+    geom_line(aes(x = date, y = TS_2_1_1/15, color = "Soil Temperature"), size = 0.5) + 
+    #Add air temp ERA5 
+    geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
+    # Add NEE points
+    geom_point(aes(x = date, y = FC_F * 60 * 60 * 24 * (1/1000000) * 12, color = "NEE"), alpha = 0.6, size = 1) +
+       #add dark line at y=0
+    geom_hline(yintercept=0, col="black")+
+    # Create secondary y-axis for temperature with correct scaling
+    scale_y_continuous(
+      name = expression(NEE~(gC~m^-2~d^-1)),
+      limits = c(-4, 3),
+      sec.axis = sec_axis(~ . * 15, name = expression("Temperature ("*degree*"C)"))
+    ) +
+    # Add season divisions using geom_vline with year-specific dates
+    geom_vline(data = year_boundaries,
+               aes(xintercept = date),
+               linetype = "solid", color = "black") +
+    # Customize colors
+    scale_color_manual(
+      values = c("Air Temperature" = "salmon", 
+                "Soil Temperature" = "navy",
+                "ERA5 Air Temperature" = "darkgreen",
+                "NEE" = "turquoise"),
+      name = ""
+    ) +
+    # Add season labels
+    geom_text(data = label_dates,
+              aes(x = date, y = -3.8, label = season),
+              size = 3, angle = 0) +
+    theme_bw() +
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      axis.title.y.right = element_text(color = "black"),
+      axis.text.y.right = element_text(color = "black")
+    ) +
+    labs(x = "Date", title = paste("Seasonal Trends:", year_to_plot))
+  
+  # Create plot b (GPP, RECO, NEE, and CH4)
+  p2 <- ggplot(yearly_data) +
+    # Add GPP points (negative for uptake)
+    geom_point(aes(x = date, y = -GPP_F * 60 * 60 * 24 * (1/1000000) * 12, color = "GPP"), alpha = 0.6, size = 1) +
+    # Add RECO points
+    geom_point(aes(x = date, y = RECO_F * 60 * 60 * 24 * (1/1000000) * 12, color = "Respiration"), alpha = 0.6, size = 1) +
+    # Add NEE line
+    geom_line(aes(x = date, y = FC_F * 60 * 60 * 24 * (1/1000000) * 12, color = "NEE"), size = 0.5) +
+    # Add CH4 line (scaled for visibility)
+    geom_line(aes(x = date, y = FCH4_F * 60 * 60 * 24 * (1/1000000000) * 12 * 33, color = "CH4"), size = 0.5) +
+    #add dark line at y=0
+    geom_hline(yintercept=0, col="black")+
+    # Create secondary y-axis for CH4
+    scale_y_continuous(
+      name = expression(Flux~(gC~m^-2~d^-1)),
+      limits = c(-5, 3),
+      sec.axis = sec_axis(~ . / 33, name = expression('CH'[4]*' Flux (g C'~m^-2~d^-1*')'))
+    ) +
+    # Add season divisions using geom_vline with year-specific dates
+    geom_vline(data = year_boundaries,
+               aes(xintercept = date),
+               linetype = "solid", color = "black") +
+    # Customize colors
+    scale_color_manual(
+      values = c("GPP" = "navy",
+                "Respiration" = "turquoise",
+                "NEE" = "coral",
+                "CH4" = "purple"),
+      name = ""
+    ) +
+    # Add season labels
+    geom_text(data = label_dates,
+              aes(x = date, y = -5, label = season),
+              size = 3, angle = 0) +
+    theme_bw() +
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      axis.title.y.right = element_text(color = "black"),
+      axis.text.y.right = element_text(color = "black")
+    ) +
+     labs(x = "Date", title = paste("Seasonal Trends:", year_to_plot))
+  
+  return(list(temp_nee = p1, fluxes = p2))
+}
+
+# Usage example:
+plots_2020 <- create_seasonal_plot(df_avg, 2020)
+plots_2020$temp_nee  # Display temperature and NEE plot
+plots_2020$fluxes    # Display GPP, RECO, NEE, and CH4 plot
+
+
+
+
 ```
+
+
+#Comparison plots 
+
+####Trying to map the different met data trends by season, for each year
+####trouble getting continuous winter figure due to it occuring at first and end of year 
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+
+create_seasonal_comparison <- function(df_avg, season_name) {
+  # Filter data for the specified season and handle winter wrap-around
+  seasonal_data <- df_avg %>%
+    filter(season == season_name) %>%
+    mutate(
+      doy = case_when(
+        season == "Winter" & month(date) <= 6 ~ yday(date),
+        season == "Winter" & month(date) >= 7 ~ yday(date) - 365,
+        TRUE ~ yday(date)
+      )
+    )
+  
+  # Create a long format dataset for the variables we want to compare
+  long_data <- seasonal_data %>%
+    select(date, year, doy, TA, TA_ERA5, TS_3_1_1, SWC_3_1_1) %>%
+    pivot_longer(
+      cols = c(TA, TA_ERA5, TS_3_1_1, SWC_3_1_1),
+      names_to = "variable",
+      values_to = "value"
+    ) %>%
+    mutate(
+      variable = factor(variable, 
+                       levels = c("TA", "TA_ERA5", "TS_3_1_1", "SWC_3_1_1"),
+                       labels = c("Air Temperature (°C)", "ERA5 Air Temperature (°C)", 
+                                "Soil Temperature (Tussock) (°C)", "Soil Moisture (Tussock) (%SWC)"))
+    )
+  
+  # Get unique months that appear in this season's data
+  if(season_name == "Winter") {
+    # For winter, explicitly set the months we want to show
+    month_doys <- c(-31, -15, 0, 31, 59)  # Mid-Nov through mid-Mar
+    month_labels <- c("Nov", "Dec", "Jan", "Feb", "Mar")
+  } else {
+    # For other seasons, use the actual months in the data
+    unique_months <- unique(month(seasonal_data$date))
+    month_dates <- as.Date(paste0("2019-", unique_months, "-15"))
+    month_doys <- yday(month_dates)
+    month_labels <- format(month_dates, "%b")
+  }
+  
+  # Create the plot
+  p <- ggplot(long_data, aes(x = doy, y = value)) +
+    geom_line(aes(color = as.factor(year))) +
+    facet_wrap(~variable, scales = "free_y", ncol = 1) +
+    scale_color_brewer(palette = "Dark2", name = "Year") +
+    scale_x_continuous(
+      breaks = month_doys,
+      labels = month_labels,
+      limits = range(long_data$doy)
+    ) +
+    labs(
+      title = paste(season_name, "Conditions"),
+      x = "Month",
+      y = NULL
+    ) +
+    theme_bw() +
+    theme(
+      strip.background = element_rect(fill = "white"),
+      strip.text = element_text(size = 10, face = "bold"),
+      legend.position = "right",
+      panel.grid.minor = element_blank()
+    )
+  
+  return(p)
+}
+
+# Create plots for each season
+winter_plot <- create_seasonal_comparison(df_avg, "Winter")
+growing_plot <- create_seasonal_comparison(df_avg, "Growing Season")
+fall_plot <- create_seasonal_comparison(df_avg, "Fall Senescence")
+
+# Display plots
+winter_plot
+growing_plot
+fall_plot
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+
+create_seasonal_comparison <- function(df_avg, season_name) {
+  # Filter data for the specified season and handle winter wrap-around
+  seasonal_data <- df_avg %>%
+    filter(season == season_name) %>%
+    mutate(
+      doy = case_when(
+        season == "Winter" & month(date) <= 6 ~ yday(date),
+        season == "Winter" & month(date) >= 7 ~ yday(date) - 365,
+        TRUE ~ yday(date)
+      )
+    )
+  
+  # Create a long format dataset for the variables we want to compare
+  long_data <- seasonal_data %>%
+    select(date, year, doy, TA, TA_ERA5, TS_3_1_1, SWC_3_1_1) %>%
+    pivot_longer(
+      cols = c(TA, TA_ERA5, TS_3_1_1, SWC_3_1_1),
+      names_to = "variable",
+      values_to = "value"
+    ) %>%
+    mutate(
+      variable = factor(variable, 
+                       levels = c("TA", "TA_ERA5", "TS_3_1_1", "SWC_3_1_1"),
+                       labels = c("Air Temperature (°C)", "ERA5 Air Temperature (°C)", 
+                                "Soil Temperature (Tussock) (°C)", "Soil Moisture (Tussock) (%SWC)"))
+    )
+  
+  # Get unique months that appear in this season's data
+  if(season_name == "Winter") {
+    # For winter, explicitly set the months we want to show
+    month_doys <- c(-31, -15, 0, 31, 59)  # Mid-Nov through mid-Mar
+    month_labels <- c("Nov", "Dec", "Jan", "Feb", "Mar")
+  } else {
+    # For other seasons, use the actual months in the data
+    unique_months <- unique(month(seasonal_data$date))
+    month_dates <- as.Date(paste0("2019-", unique_months, "-15"))
+    month_doys <- yday(month_dates)
+    month_labels <- format(month_dates, "%b")
+  }
+  
+  # Create the plot
+  p <- ggplot(long_data, aes(x = doy, y = value)) +
+    geom_line(aes(color = as.factor(year))) +
+    facet_wrap(~variable, scales = "free_y", ncol = 1) +
+    scale_color_brewer(palette = "Dark2", name = "Year") +
+    scale_x_continuous(
+      breaks = month_doys,
+      labels = month_labels,
+      limits = range(long_data$doy)
+    ) +
+    labs(
+      title = paste(season_name, "Conditions"),
+      x = "Month",
+      y = NULL
+    ) +
+    theme_bw() +
+    theme(
+      strip.background = element_rect(fill = "white"),
+      strip.text = element_text(size = 10, face = "bold"),
+      legend.position = "right",
+      panel.grid.minor = element_blank()
+    )
+  
+  return(p)
+}
+
+# Create plots for each season
+winter_plot <- create_seasonal_comparison(df_avg, "Winter")
+growing_plot <- create_seasonal_comparison(df_avg, "Growing Season")
+fall_plot <- create_seasonal_comparison(df_avg, "Fall Senescence")
+
+# Display plots
+winter_plot
+growing_plot
+fall_plot
+```
+
+
