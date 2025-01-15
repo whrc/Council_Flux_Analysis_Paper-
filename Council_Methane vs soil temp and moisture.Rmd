@@ -215,7 +215,6 @@ df$interaction_tuss <- df$TS_3_1_1 * df$SWC_3_1_1
 cor(df$FCH4, df$interaction_tuss, use = "complete.obs")
 
 #Results: no strong correlations - all very weak pos but interaction a bit better of a fit 
-
 # [1]  0.1981594 FCH4 vs temp
 # [1] 0.153488FCH4 vs SWC
 # [1] 0.2642889 FCH4 vs interaction of temp and SWC
@@ -285,9 +284,7 @@ ggplot(df, aes(x = SWC_2_1_1, y = FCH4)) + geom_point() + geom_smooth(method = "
 ggplot(df, aes(x = interaction_liBer, y = FCH4)) + geom_point() + geom_smooth(method = "lm") 
 
 ```
-#Correlations - era 5 and fch4 (not gapfilled methane)
-#calculate the correlations between fch4, tsoil, swc (era-gapfilled swc):
-
+#Correlations - era 5 soil temp & swc, and fch4 (not gapfilled methane)
 ```{r}
 #era tsoil and swc 
 
@@ -312,9 +309,7 @@ ggplot(df_era2, aes(x = swc, y = fch4)) + geom_point() + geom_smooth(method = "l
 ggplot(df_era2, aes(x = interaction_era, y = fch4)) + geom_point() + geom_smooth(method = "lm") 
 
 ```
-
-
-#lm of relationshipsfrom dataset; testing era tsoil & swc, and all measured soil and SWC locations 
+#lm of relationships from dataset; testing era5 tsoil & swc, and all measured soil and SWC locations 
 ```{r}
 #era_5 df 
 model_era.temp <-lm(fch4 ~ tsoil, data = df_era2)
@@ -327,7 +322,7 @@ summary(model_era.swc) # R2 = 0.02; slope = 0.077; Residual standard error: 9.48
 model_era.interaction <-lm(fch4 ~ interaction_era, data = df_era2)
 summary(model_era.interaction) # R2 = 0.05; slope = 0.009; Residual standard error: 9.332 on 25599 degrees of freedom
 
-#using interaction in formula --> probably better than trying to create a static interaction term ** 
+#full interaction model --> probably better than trying to create a static interaction term ** 
 model_era.interaction2 <-lm(fch4 ~ tsoil*swc, data = df_era2)
 summary(model_era.interaction2) # R2 = 0.11; slope = 0.046; Residual standard error: 9.047 on 25597 degrees of freedom
 #Coefficients:
@@ -375,11 +370,11 @@ summary(model4) #slope = 0.35; R2 = 0.05; p <0.001; Residual standard error: 9.3
 
 #SWC - tussock
 model5 <-lm(FCH4 ~ SWC_3_1_1, data = df)
-summary(model5) #slope = 0.07; R = 0.02; p <0.001; Residual standard error: 9.474 on 24735 degrees of freedom
+summary(model5) #slope = 0.07; R2 = 0.02; p <0.001; Residual standard error: 9.474 on 24735 degrees of freedom
 
 #SWC - tussock - df_clean
 model5.2 <-lm(FCH4 ~ SWC_3_1_1, data = df_clean)
-summary(model5.2) #slope = 0.12; R = 0.050; p <0.001; Residual standard error: 9.253 on 21659 degrees of freedom
+summary(model5.2) #slope = 0.12; R2 = 0.050; p <0.001; Residual standard error: 9.253 on 21659 degrees of freedom
 
 #SWC - lichen and berries
 model6 <-(lm(FCH4 ~ SWC_2_1_1, data = df))
@@ -538,7 +533,7 @@ print(results_sorted)
 ```
 #Comprehensive list of LM results of FCH4 and diff SWC locations - measured data 
 ```{r}
-#Had Claude help with setting up a df for comparison of temp and FCH4
+#Had Claude help with setting up a df for comparison of SWC and FCH4
 
 # First, let's create a list of all  temperature variables
 swc_vars <- c("SWC_1_1_1", "SWC_2_1_1", "SWC_3_1_1")
@@ -657,17 +652,12 @@ summary(model_full_tuss)
 
 
 #Results:
-# Full Interaction Model (R² = 0.1161):
+# Full Interaction Model (R2 = 0.1161):
 # Temperature has a significant negative main effect (-1.4649)
 # Soil water content alone isn't significant (p = 0.975)
-# The interaction is significantly positive (0.0352)
-# This tells us that the effect of temperature on methane flux depends on soil moisture levels
-# This second approach with model_comparisons will show:
-# 
-# Main effect of temperature
-# Main effect of soil water content
-# Their interaction effect
-# Overall model fit via R2, p, and residual std error 
+# The interaction is significantly positive (0.0352) but very weak 
+# **effect of temperature on methane flux depends on soil moisture levels
+#
 
 # We can add this to our systematic comparison:
 model_comparisons <- list()
@@ -675,7 +665,13 @@ for(i in seq_along(locations)) {
     formula <- as.formula(paste("FCH4 ~", temp_vars[i], "*", swc_vars[i]))
     model_comparisons[[locations[i]]] <- lm(formula, data = df)
 }
-
+#model_comparisons shows:
+# Main effect of temperature
+# Main effect of soil water content
+# Their interaction effect
+# Overall model fit via R2, p, and residual std error 
+   
+   
 # View summaries
 lapply(model_comparisons, summary)
 
@@ -700,7 +696,7 @@ lapply(model_comparisons, summary)
 # tsoil:swc    0.046281   0.000969  47.760  < 2e-16 ***
 
 
-# For better visualization of overall trend of tsoil and tsoilinteraction
+# For better visualization of overall trend of tsoil and interaction
 ggplot(df_era2, aes(x = tsoil, y = fch4, color = swc)) +
   geom_point(alpha = 0.3) +
   geom_smooth(method = "lm") +
@@ -756,7 +752,7 @@ summary(df_era2$swc)
 # At the threshold, this equals zero:
 # -2.076 + (0.046 × SWC) = 0
 # 0.046 × SWC = 2.076
-# SWC = 2.076/0.046 = 45.13% --. but since there seem to be two thresholds, going to try to calc the thresholds at diff temps
+# SWC = 2.076/0.046 = 45.13% --> but since there seem to be two thresholds, going to try to calc the thresholds at diff temps
 ```
 ####Methane and moisture relationship at diff temps - ERA5
 ```{r}
@@ -861,11 +857,10 @@ temp_bin_stats <- df_era2 %>%
 print(temp_bin_stats)
 
 #Results
-#Highest variability in methane flux at coldest temps and warmest temps (also correlates with least swc and most swc)
-#Strongest correlation at warm (4 - 8C), but all correlations are weak 
+#Highest variability in methane flux at coldest temps and warmest temps (also correlates with lowest swc and highest swc)
+# all correlations / R2 are weak 
 #Mean flux is actually highest at the coldest (and driest) temp bin ***
-#Steepest slope occurs at warmest temp (8 - 16.5C) & also has highest R2 (0.085) --> but still very poor fit 
-#but also least number of observations in very cold temp bin (2314) vs others (ranging from 66795 - 11020), maybe this affected the means 
+#Steepest slope occurs at warmest temp (8 - 16.5C) & also has highest R2 (0.085) --> but still very poor fit -->but also least number of observations in very cold temp bin (2314) vs others (ranging from 66795 - 11020), maybe this affected the means 
 
 
 #Examining the very cold temp bin some more
@@ -912,10 +907,12 @@ print(temp_bin_medians)
 #Very cold has highest median flux (18.9) and also lowest swc (6%) --> also has highest proportion of missing data / NAs (~87%) when you compare n to n_missing --> probably have to take this with a grain of salt, though it is interesting to see the highest emission potential to possibly occur at the coldest and driest time? --> talk to Kyle about this? 
 #Second highest median flux is warmest/hot (9.8)
 #highest median swc (59%) occurs at cool temp bin (0-4C)
-#Temperature Progression: Cold → Cool → Warm → Warmest/Hot --> Median flux: 4.89 → 5.77 → 7.60 → 9.80
+#Temperature Progression: Cold - Cool - Warm - Warmest --> Median flux: 4.89 --> 5.77 --> 7.60 --> 9.80
 #Sharp divide in median SWC: Cold conditions: 6.35-11.06% vs Cool & Warmer conditions: 57.65-59.30%
 
 ```
+
+
 ####Methane and temp relationship at diff SWC - binning - ERA5
 ```{r}
 #Check spread of data to get accurate bins 
@@ -953,6 +950,9 @@ ggplot(df_era2, aes(x = tsoil, y = fch4, color = swc)) +
        y = "Methane Flux",
        color = "SWC (%)") +
   theme_minimal()
+
+#Results:
+#Can clearly see that at dry conditions there is a neg effect of temp on methane; at wetter conditions, there is a pos effect of temp on methane 
 ```
 ####Relationship stats for each SWC bin
 ```{r}
@@ -977,13 +977,11 @@ print(swc_bin_stats)
 #Results
 #highest methane flux at very wet (60-80%), at a mean temp of 5.7C 
 #negative relationship at very dry swc, positive relationship at wetter swc 
-#relationship seems to switch around SWC = 40%
-#This contrasts with what we saw when we binned by temperature, possibly pointing out how the outliers in the very cold temp bin are skewing the methane fluxes there and need to be taken with a grain of salt...SWC binning is less influenced by extreme temp values (mor even distribution of data, large sample sizes i.e., less proportional missing data)
+#temp-methane relationship seems to switch around SWC = 40%
+#This contrasts with what we saw when we binned by temperature, possibly pointing out how the outliers in the very cold temp bin are skewing the methane fluxes there and need to be taken with a grain of salt...SWC binning is less influenced by extreme temp values (more even distribution of data, large sample sizes i.e., lower proportion of missing data)
 
 
 ```
-
-
 
 #### Measured data 
 ####Interaction between Temp and SWC at tussock location (TS3, SWC3)
@@ -1033,7 +1031,7 @@ ggplot(df, aes(x = TS_3_1_1, y = FCH4)) +
 
 # The lowest SWC group (darkest points) shows a slightly negative or flat relationship with temperature
 # The highest SWC group (lightest points) shows a stronger positive relationship with temperature
-# The middle SWC group shows an intermediate slope
+# The middle SWC group shows a slightly negative slope
 
 #(Tried this with some guidance from Claude*)
 #Trying to calc temp effects / slopes at different SWC using the full interaction model: "model_full_tuss <- lm(FCH4 ~ TS_3_1_1 * SWC_3_1_1, data = df)"
@@ -1067,21 +1065,21 @@ print(results)
 # 
 # At Low Moisture (13.7%):
 #   - Temperature effect is negative (-0.983)
-#   -For every 1°C increase in temperature, methane flux decreases by about 0.98 units when soil is dry
+#   -For every 1 C increase in temperature, methane flux decreases by about 0.98 units when soil is dry
 # 
 # 
 # At Medium Moisture (55%):# 
 #   -Temperature effect becomes positive (0.471)
-#   -For every 1°C increase, methane flux increases by about 0.47 units at median moisture
+#   -For every 1 C increase, methane flux increases by about 0.47 units at median moisture
 # 
 # 
 # At High Moisture (59.4%):# 
 #   -Even stronger positive effect (0.626)
-#   -For every 1°C increase, methane flux increases by about 0.63 units in wet conditions
+#   -For every 1 C increase, methane flux increases by about 0.63 units in wet conditions
 
 
 
-#Calc the transtion point: at what soil moisture level does temp start having a pos effect on methane flux 
+#Calc the transtion point: at what soil moisture level does temp start having a pos effect on methane flux?
 #Transition = -β₁/β₃ (where β₁ is temp coefficient and β₃ is interaction)
 transition_point <- 1.4649/0.0352
 print(round(transition_point, 2))
@@ -1095,7 +1093,7 @@ print(round(transition_point, 2))
 # Temperature increases lead to increased methane flux
 # -->makes sense: methanogens require both warmth and anaerobic (wet) conditions
 # 
-# matches well with themoisture distribution:
+# matches well with the moisture distribution:
 # 
 # 25th percentile (13.7%): well below threshold → negative temperature effect
 # Median (55%) and 75th percentile (59.4%): well above threshold → positive temperature effect
@@ -1105,7 +1103,7 @@ print(round(transition_point, 2))
 
 ```
 
-########Interaction effects at lichen/berries location (TS2, SWC2)
+########Interaction effects at lichen/berries location (TS2, SWC2) 
 ```{r}
 # Calculate transition points for each location
 # Transition = -β₁/β₃ (where β₁ is temp coefficient and β₃ is interaction)
@@ -1116,6 +1114,7 @@ model_full_pond <- lm(FCH4 ~ TS_1_1_1 * SWC_1_1_1, data = df)
 summary(model_full_pond)
 
 #Results:
+#R2 =  0.1126, p<0.001
 #Transition point = 0.3445701/0.0148246 = 23.24% SWC
 # All coefficients highly significant
 # Positive main effect of SWC (0.0402)
@@ -1125,6 +1124,7 @@ model_full_liber <- lm(FCH4 ~ TS_2_1_1 * SWC_2_1_1, data = df)
 summary(model_full_liber)
 
 #Results:
+#R2 = 0.0678, p <0.001
 #Transition point = 0.8599749/0.0290912 = 29.56% SWC
 #all coeffs highly significant 
 
@@ -1356,7 +1356,7 @@ p +
 ```
 #TO DO: do this also with the era data? or are relationships so low, we can reasonably assume those models won't fit well either, and move on to RF 
 
-#Empirical model experimentation with Claude
+#Empirical model experimentation 
 
 ###Piecewise model
 
@@ -1380,7 +1380,7 @@ test_df <- df[-train_index, ]  # The [-train_index] selects all rows NOT in trai
 
 #Break apart the model by low SWC and high SWC, so we can capture the diff temp relationships based on SWC
 
-# Now let's create our piecewise model with the training data
+# create our piecewise model with the training data
 # First for low moisture conditions (≤ 41.62% SWC)
 model_tussock_low <- lm(FCH4 ~ TS_3_1_1, 
                        data = train_df[train_df$SWC_3_1_1 <= 41.62, ])
@@ -1393,8 +1393,8 @@ model_tussock_high <- lm(FCH4 ~ TS_3_1_1,
 summary(model_tussock_low)
 summary(model_tussock_high)
 
-# Now test the models on our test dataset
-# First, split test data by threshold
+# test the models on our test dataset
+# split test data by threshold
 test_low <- test_df[test_df$SWC_3_1_1 <= 41.62, ]
 test_high <- test_df[test_df$SWC_3_1_1 > 41.62, ]
 
@@ -1411,22 +1411,22 @@ print(rmse_high)
 #Results interpretation:
 # Low Moisture Conditions (SWC ≤ 41.62%):
 # 
-# Negative temperature effect: -0.365 units of FCH4 per °C
+# Negative temperature effect: -0.365 units of FCH4 per C
 # Baseline (intercept) of 7.055
-# R² = 0.023 (explains 2.3% of variance)
+# R2 = 0.023 (explains 2.3% of variance)
 # RMSE = 8.82
 
 # High Moisture Conditions (SWC > 41.62%):
 # 
-# Positive temperature effect: +0.476 units of FCH4 per °C
+# Positive temperature effect: +0.476 units of FCH4 per C
 # Baseline (intercept) of 6.353
-# R² = 0.057 (explains 5.7% of variance)
+# R2 = 0.057 (explains 5.7% of variance)
 # RMSE = 9.22
 
 # Takeaways
 # 
 # The sign flip in temperature effect 
-# Low R² values indicate other factors might be important; this isn't the best model 
+# Low R2 values indicate other factors might be important; this isn't the best model 
 
 
 #Visualize 
@@ -1488,34 +1488,8 @@ eval_plot_high <- ggplot(eval_high, aes(x = actual, y = predicted)) +
        y = "Predicted Methane Flux") +
   theme_minimal()
 
-# Calculate evaluation metrics ---------> old, look at this and compare with below 
-# For low moisture
-eval_model_low <- lm(predicted ~ actual, data = eval_low)
-r2_low <- summary(eval_model_low)$r.squared
-slope_low <- coef(eval_model_low)[2]
-
-# For high moisture
-eval_model_high <- lm(predicted ~ actual, data = eval_high)
-r2_high <- summary(eval_model_high)$r.squared
-slope_high <- coef(eval_model_high)[2]
-
-# Add R² and slope to plots
-eval_plot_low <- eval_plot_low +
-  annotate("text", x = min(eval_low$actual), y = max(eval_low$predicted),
-           label = sprintf("R² = %.3f\nSlope = %.3f", r2_low, slope_low),
-           hjust = 0, vjust = 1)
-
-eval_plot_high <- eval_plot_high +
-  annotate("text", x = min(eval_high$actual), y = max(eval_high$predicted),
-           label = sprintf("R² = %.3f\nSlope = %.3f", r2_high, slope_high),
-           hjust = 0, vjust = 1)
-
-# Display plots side by side
-grid.arrange(eval_plot_low, eval_plot_high, ncol = 2)
-
-########################################################################
-
 # Calculate and print evaluation metrics
+
 # For low moisture
 eval_model_low <- lm(predicted ~ actual, data = eval_low)
 print("Low Moisture Model:")
@@ -1528,7 +1502,7 @@ print("High Moisture Model:")
 print(paste("R² =", round(summary(eval_model_high)$r.squared, 3)))
 print(paste("Slope =", round(coef(eval_model_high)[2], 3)))
 
-# To fix the plot annotations, we can modify their position:
+# low moisture 
 eval_plot_low <- ggplot(eval_low, aes(x = actual, y = predicted)) +
   geom_point(alpha = 0.3, color = "blue") +
   geom_smooth(method = "lm", color = "red") +
@@ -1542,7 +1516,7 @@ eval_plot_low <- ggplot(eval_low, aes(x = actual, y = predicted)) +
                          summary(eval_model_low)$r.squared, 
                          coef(eval_model_low)[2]))
 
-# To fix the plot annotations, we can modify their position:
+# high moisture 
 eval_plot_high <- ggplot(eval_high, aes(x = actual, y = predicted)) +
   geom_point(alpha = 0.3, color = "blue") +
   geom_smooth(method = "lm", color = "red") +
@@ -1562,20 +1536,20 @@ grid.arrange(eval_plot_low, eval_plot_high, ncol = 2)
 #Results:
 # Low Moisture Model:
 # 
-# R² = 0.027 (only explains 2.7% of variation)
+# R2 = 0.027 (only explains 2.7% of variation)
 # Slope = 0.025 
-# Strong tendency to over-predict low fluxes and under-predict high fluxes
+# Strong tendency to over-predict low fluxes and under-predict high fluxes(?)
 # 
 # 
 # High Moisture Model:
 # 
-# R² = 0.050 (only explains 5% of variation)
+# R2 = 0.050 (only explains 5% of variation)
 # Slope = 0.054 
-# Similar issues with over/under-prediction
+
 
 ```
 
-###Non-linear Model using threshold
+###Non-linear Model using SWC threshold
 
 ```{r}
 # Create indicator variable for above/below threshold
@@ -1617,17 +1591,13 @@ ggplot(eval_nl, aes(x = actual, y = predicted)) +
              hjust = 0, vjust = 1)
 
 #Results:
-#  The non-linear model shows some improvement over the piecewise model:
+# The non-linear model shows some improvement over the piecewise model:
 # 
-# Non-linear model: R² = 0.133 (explains 13.3% of variance)
-# Previous models: R² = 0.027 (low moisture) and 0.050 (high moisture)
-# Slope improved to 0.132 
+# Non-linear model: R2 = 0.133 (explains 13.3% of variance)
+# Previous models: R2 0.027 (low moisture) and 0.050 (high moisture)
 
-# Still showing systematic bias:
-# 
-# Overpredicting at low flux values
-# Underpredicting at high flux values
-# Clustering around the mean
+#Still not a good fit 
+
 
 ```
 
@@ -1669,12 +1639,12 @@ ggplot(eval_quad, aes(x = actual, y = predicted)) +
              hjust = 0, vjust = 1)
 
 
-#Results: 
+#Results / comparing results from all models: 
 # 
 # Piecewise Linear:
 # 
-# Low moisture: R² = 0.027, Slope = 0.025
-# High moisture: R² = 0.050, Slope = 0.054
+# Low moisture: R2 = 0.027, Slope = 0.025
+# High moisture: R2 = 0.050, Slope = 0.054
 # 
 # 
 # Non-linear with threshold:
@@ -1684,11 +1654,11 @@ ggplot(eval_quad, aes(x = actual, y = predicted)) +
 # 
 # Quadratic model:
 # 
-# R² = 0.160, Slope = 0.152
+# R2 = 0.160, Slope = 0.152
 # = best performance of the 3, but still not good 
 # --> Still under-predicting high flux values (points fall below 1:1 line at high values)
 # Over-predicting low flux values (points above 1:1 line at low values)
-# Wide scatter around the prediction line
+
 
 #examining the quadratic model more closely
 
@@ -1720,7 +1690,7 @@ ggplot(pred_grid, aes(x = TS_3_1_1, y = SWC_3_1_1, fill = predicted)) +
 
 #Results:
 # 
-# R² = 0.148 (explains 14.8% of variance)
+# R2 = 0.148 (explains 14.8% of variance)
 # 
 # Temperature-Moisture Interactions:
 # The surface plot shows highest predicted methane flux at:
@@ -1729,11 +1699,11 @@ ggplot(pred_grid, aes(x = TS_3_1_1, y = SWC_3_1_1, fill = predicted)) +
 # Very low temperatures (-10°C) with low moisture
 # 
 # 
-# Clear non-linear relationships captured by quadratic terms
+#non-linear relationship**
 
 # Coefficients show:
 # Negative linear effects for both temperature (-1.15) and SWC (-0.36)
-# Positive quadratic effects for both (0.056 for temp², 0.005 for SWC²)
+# Positive quadratic effects for both (0.056 for temp^2, 0.005 for SWC^2)
 # Positive interaction effect (0.017)
 
 ```
@@ -1796,7 +1766,7 @@ varImpPlot(rf_model_era)
 
 #Results:
 #R2 = 0.377, slope = 0.42
-#tsoil slightly more important than interaction, which is slighlty more important than swc alone 
+#tsoil slightly more important than interaction, which is slightly more important than swc alone 
 ```
 ####ERA5 - Training RF on predicting methane with just temp, SWC, and SWC*temp interaction --> constrained 
 
@@ -1829,8 +1799,6 @@ rf_model_fch4.era <- randomForest(fch4~ tsoil + swc + TS_SWC_interact,
                         data = train.ch4,
                         ntree = 500)
 
-# Create prediction dataset --> shouldn't need this anymore 
-#rf_test$TS_SWC_interact <- rf_test$TS_3_1_1 * rf_test$SWC_3_1_1
 
 # Now make predictions
 rf_pred_ch4 <- predict(rf_model_fch4.era, newdata = test.ch4)
@@ -2025,12 +1993,12 @@ varImpPlot(rf_all_era3)
 
 # Without interaction:
 # 
-# R² = 0.501, Slope = 0.498
+# R2 = 0.501, Slope = 0.498
 # Variable importance shows SWC and wind direction as top predictors
 # 
 # With interaction:
 # 
-# R² = 0.502, Slope = 0.504
+# R2 = 0.502, Slope = 0.504
 # Very slight improvement
 # Similar variable importance rankings
 # 
@@ -2046,85 +2014,6 @@ varImpPlot(rf_all_era3)
 ```
 
 
-
-
-#ntree optimization for rf_all_era2 model (which includes the swc:temp interaction and fch4 constraints)
-
-#OOB ntrees
-
-```{r}
-#interaction term in ERA5 dataset, for reference: TS_SWC_interact
-
-#for reference, since we already subsetted a constrained dataset in previous code chunks 
-# cc = df_era2[complete.cases(df_era2$fch4),]
-# cc = subset(cc,cc$fch4 < 60)
-# cc = subset(cc,cc$fch4 > -25)
-
-#create training dataset - 80% to train, 20% to test 
-# sample.ch4 = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
-# train.ch4  = cc[sample.ch4, ]
-# test.ch4   = cc[!sample.ch4, ]
-
-# Function to track OOB error versus number of trees with progress bar --> going to try up to 1k because that's what Jackie found was best in her YK paper 
-oob_error_plot <- function(data, max_trees = 1000, step = 100) {
-    trees <- seq(50, max_trees, by = step)
-    oob_errors <- numeric(length(trees))
-    
-    # Create progress bar
-    pb <- txtProgressBar(min = 0, max = length(trees), style = 3)
-    
-    for(i in seq_along(trees)) {
-        rf_temp <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
-                              vpd + swc + h + le + TS_SWC_interact,
-                              data = data,
-                              ntree = trees[i])
-        oob_errors[i] <- rf_temp$mse[trees[i]]
-        
-        # Update progress bar
-        setTxtProgressBar(pb, i)
-    }
-    
-    # Close progress bar
-    close(pb)
-    
-    # Plot OOB error vs number of trees
-    plot(trees, oob_errors, type = "l",
-         xlab = "Number of Trees",
-         ylab = "OOB Mean Squared Error",
-         main = "OOB Error vs Number of Trees")
-    
-    # Add points to see exact values
-    points(trees, oob_errors, pch = 16)
-    
-    # Return optimal number of trees and error data
-    opt_trees <- trees[which.min(oob_errors)]
-    return(list(optimal_trees = opt_trees, 
-                errors = data.frame(trees = trees, oob = oob_errors)))
-}
-
-# Find optimal number of trees
-opt_results <- oob_error_plot(train.ch4)
-print(paste("Optimal number of trees:", opt_results$optimal_trees))
-
-# Print OOB errors for each number of trees
-print("OOB errors for each number of trees:")
-print(opt_results$errors)
-
-#REsults: "Optimal number of trees: 950"
-# trees      oob
-# 50	     46.29153			
-# 150	     44.41954			
-# 250	     44.35895			
-# 350	      44.13764			
-# 450	     44.08307			
-# 550	     43.97322			
-# 650	     44.06375			
-# 750	     43.95684			
-# 850	     43.94687			
-# 950	     43.87470	
-#improvement drops significantly after around 550/600 trees, so could likely use 550/600 trees just fine with little loss of accuracy
-
-```
 #2019 Only 
 
 #Training RF on just 2019 - ERA5 data --> not constrained 
@@ -2410,10 +2299,85 @@ grid.arrange(p1, p2, ncol = 1)
 
 ```
 
+#ntree optimization for rf_all_era2 model (which includes the swc:temp interaction and fch4 constraints)
 
+#OOB ntrees
 
+```{r}
+#interaction term in ERA5 dataset, for reference: TS_SWC_interact
 
-#Optimal number of trees for NEE? Just to see? 
+#for reference, since we already subsetted a constrained dataset in previous code chunks 
+# cc = df_era2[complete.cases(df_era2$fch4),]
+# cc = subset(cc,cc$fch4 < 60)
+# cc = subset(cc,cc$fch4 > -25)
+
+#create training dataset - 80% to train, 20% to test 
+# sample.ch4 = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+# train.ch4  = cc[sample.ch4, ]
+# test.ch4   = cc[!sample.ch4, ]
+
+# Function to track OOB error versus number of trees with progress bar --> going to try up to 1k because that's what Jackie found was best in her YK paper 
+oob_error_plot <- function(data, max_trees = 1000, step = 100) {
+    trees <- seq(50, max_trees, by = step)
+    oob_errors <- numeric(length(trees))
+    
+    # Create progress bar
+    pb <- txtProgressBar(min = 0, max = length(trees), style = 3)
+    
+    for(i in seq_along(trees)) {
+        rf_temp <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
+                              vpd + swc + h + le + TS_SWC_interact,
+                              data = data,
+                              ntree = trees[i])
+        oob_errors[i] <- rf_temp$mse[trees[i]]
+        
+        # Update progress bar
+        setTxtProgressBar(pb, i)
+    }
+    
+    # Close progress bar
+    close(pb)
+    
+    # Plot OOB error vs number of trees
+    plot(trees, oob_errors, type = "l",
+         xlab = "Number of Trees",
+         ylab = "OOB Mean Squared Error",
+         main = "OOB Error vs Number of Trees")
+    
+    # Add points to see exact values
+    points(trees, oob_errors, pch = 16)
+    
+    # Return optimal number of trees and error data
+    opt_trees <- trees[which.min(oob_errors)]
+    return(list(optimal_trees = opt_trees, 
+                errors = data.frame(trees = trees, oob = oob_errors)))
+}
+
+# Find optimal number of trees
+opt_results <- oob_error_plot(train.ch4)
+print(paste("Optimal number of trees:", opt_results$optimal_trees))
+
+# Print OOB errors for each number of trees
+print("OOB errors for each number of trees:")
+print(opt_results$errors)
+
+#REsults: "Optimal number of trees: 950"
+# trees      oob
+# 50	     46.29153			
+# 150	     44.41954			
+# 250	     44.35895			
+# 350	      44.13764			
+# 450	     44.08307			
+# 550	     43.97322			
+# 650	     44.06375			
+# 750	     43.95684			
+# 850	     43.94687			
+# 950	     43.87470	
+#improvement drops significantly after around 550/600 trees, so could likely use 550/600 trees just fine with little loss of accuracy
+
+```
+
+#Optimal number of trees for NEE?
 ####OOB for NEE
 ```{r}
 set.seed(123)
@@ -2551,22 +2515,14 @@ ggplot(eval_rf, aes(x = actual, y = predicted)) +
 varImpPlot(rf_model)
 
 #Results:
-#RF performs much better than the other models 
-#Comparison
-# 
+
 # Model Performance (using measured data**):
 # 
+# RF with interaction: R2 = 0.325, Slope = 0.350
+# Quadratic model: R2 = 0.148, Slope = 0.152
+# Non-linear threshold: R2 = 0.133, Slope = 0.132
+# Piecewise linear: R2 = 0.027-0.050, Slope = 0.025-0.054
 # 
-# RF with interaction: R² = 0.325, Slope = 0.350
-# Quadratic model: R² = 0.148, Slope = 0.152
-# Non-linear threshold: R² = 0.133, Slope = 0.132
-# Piecewise linear: R² ≈ 0.027-0.050, Slope ≈ 0.025-0.054
-# 
-# 
-# RF model: 
-# 
-# More than doubled the explained variance (32.5% vs 14.8%)
-# Better slope, though still underestimating
 # 
 # Variable Importance:
 # SWC and TS showing similar importance
@@ -2649,9 +2605,9 @@ mixed_model <- lmer(fch4 ~ tsoil * swc + (1|season),
                    data = train.ch4)
 summary(mixed_model)
 
-# SVR Model - Support Vector Regression (SVR)
-svr_model <- svm(fch4 ~ tsoil + swc, 
-                 data = train.ch4)
+# SVR Model - Support Vector Regression (SVR) --> removing since it's not working correctly 
+#svr_model <- svm(fch4 ~ tsoil + swc, 
+                 #data = train.ch4)
 
 # GBM Model - Gradient Boosting Machines 
 gbm_model <- gbm(fch4 ~ tsoil + swc,
@@ -2692,7 +2648,7 @@ xgb_test <- xgb.DMatrix(data = test_matrix)
 gam_pred <- predict(gam_model, newdata = test.ch4)
 mixed_pred <- predict(mixed_model, newdata = test.ch4)
 
-#svr_pred <- predict(svr_model, newdata = test.ch4)
+#svr_pred <- predict(svr_model, newdata = test.ch4) --> taking out since it's not working correctly 
 gbm_pred <- predict(gbm_model, newdata = test.ch4)
 xgb_pred <- predict(xgb_model, newdata = xgb_test)
 
@@ -2719,7 +2675,46 @@ model_comparison <- data.frame(
               metrics_gbm["slope"], metrics_xgb["slope"])
 )
 
+print(model_comparison) #--> didn't print slope
+
+
+# Recalculate metrics with explicit slope calculation
+gam_slope <- coef(lm(gam_pred ~ test.ch4$fch4))[2]
+mixed_slope <- coef(lm(mixed_pred ~ test.ch4$fch4))[2]
+gbm_slope <- coef(lm(gbm_pred ~ test.ch4$fch4))[2]
+xgb_slope <- coef(lm(xgb_pred ~ test.ch4$fch4))[2]
+
+# Create updated comparison
+model_comparison <- data.frame(
+    Model = c("GAM", "Mixed Effects", "GBM", "XGBoost"),
+    R2 = c(0.194, 0.114, 0.212, 0.323),
+    RMSE = c(8.20, 8.60, 8.12, 7.53),
+    Slope = c(gam_slope, mixed_slope, gbm_slope, xgb_slope)
+)
+
 print(model_comparison)
+
+# Comparing models now:
+
+# XGBoost performs best:
+
+# Highest R2 = 0.323
+# Lowest RMSE = 7.53
+#slope = 0.34
+ 
+# GBM second best:
+
+# R2 = 0.212
+# RMSE = 8.12
+#slope = 0.20
+ 
+# GAM and Mixed Effects less effective:
+
+# GAM: R2 = 0.194, RMSE = 8.20, slope = 0.2
+# Mixed Effects: R2 = 0.114, RMSE = 8.60, slope = 0.12
+ 
+# BUT, overall, the Random Forest model (fch4 constrained, temp:swc interaction, wd) was best  (R2 = 0.502) 
+
 ```
 
 #trying to get SVR to work
@@ -2749,32 +2744,174 @@ print("Final lengths:")
 print(paste("Predictions:", length(svr_pred_clean)))
 print(paste("Actual values:", nrow(clean_data)))
 
+#shows SVM isn't making predictions for all 5078 rows and that's causing problems 
 
 ```
 #trying to get SVR to work 
 ```{r}
-# Create a simple numbered index
-test.ch4$row_id <- 1:nrow(test.ch4)
+# First, let's see what the SVM model is actually using
+test.ch4$pred_exists <- 1:nrow(test.ch4) %in% 1:length(svr_pred_new)
 
-# Fit model and get predictions
-svr_model_new <- svm(fch4 ~ tsoil + swc, data = test.ch4)
-svr_pred_new <- predict(svr_model_new, newdata = test.ch4)
+# Look at the data characteristics where we do/don't get predictions
+summary_with_pred <- summary(test.ch4[test.ch4$pred_exists, c("tsoil", "swc", "fch4")])
+summary_without_pred <- summary(test.ch4[!test.ch4$pred_exists, c("tsoil", "swc", "fch4")])
 
-# Create dataframe with predictions and actual values
-pred_df <- data.frame(
-    row_id = test.ch4$row_id,
-    actual = test.ch4$fch4,
-    predicted = svr_pred_new
+print("Summary of cases WITH predictions:")
+print(summary_with_pred)
+print("\nSummary of cases WITHOUT predictions:")
+print(summary_without_pred)
+
+# Check for any obvious patterns
+print("\nNumber of cases with/without predictions by season:")
+print(table(test.ch4$season, test.ch4$pred_exists))
+
+
+# Create matched datasets using only the cases where we get predictions
+test.ch4$row_num <- 1:nrow(test.ch4)
+pred_rows <- test.ch4$row_num[test.ch4$pred_exists]
+
+# Calculate metrics using only matching cases
+metrics_svr <- calculate_metrics(svr_pred_new, 
+                               test.ch4$fch4[pred_rows])
+print(metrics_svr)
+
+#For some reason SVR isn't giving a complete list of predictions, it's producing only 4487 predictions even though there are 5078 rows...couldn't figure out why this was the case
+
+#Results for the predictions we did get: 
+#R2 = 0.01; RMSE = 9.65, slope = 0.038 --> not a good predictor, based on what is working...
+```
+#XGBoost tuning with Claude 
+```{r}
+orig = Sys.time() #to see how long this takes 
+
+# Set up a grid of parameters to try
+param_grid <- expand.grid(
+    max_depth = c(3, 6, 9),              # Tree depth - controls how deep each tree can grow
+    eta = c(0.01, 0.1, 0.3),             # Learning rate - lower values = slower learning but sometimes better results 
+    nrounds = c(100, 500, 1000),         # Number of trees
+    gamma = c(0, 0.1, 0.2),              # Minimum loss reduction
+    subsample = c(0.5, 0.75, 1.0),       # Subsample ratio of training data - what fraction of data to use for each tree
+    colsample_bytree = c(0.6, 0.8, 1.0)  # Subsample ratio of columns - what fraction of variables to consider for each tree 
 )
 
-# Check which rows are missing predictions
-print("Rows with predictions:")
-print(length(svr_pred_new))
-print("Range of row IDs with predictions:")
-print(range(which(!is.na(svr_pred_new))))
+# Function to evaluate XGBoost with different parameters
+evaluate_params <- function(params) {
+    # Prepare data
+    train_matrix <- model.matrix(~ tsoil + swc, data = train.ch4)[,-1]
+    test_matrix <- model.matrix(~ tsoil + swc, data = test.ch4)[,-1]
+    dtrain <- xgb.DMatrix(data = train_matrix, label = train.ch4$fch4)
+    dtest <- xgb.DMatrix(data = test_matrix, label = test.ch4$fch4)
+    
+    # Train model
+    model <- xgboost(data = dtrain,
+                    max_depth = params$max_depth, #how deep each tree can be
+                    eta = params$eta,             #learning rate 
+                    nrounds = params$nrounds,     #number of trees
+                    gamma = params$gamma,         #split threshold
+                    subsample = params$subsample, #data sampling
+                    colsample_bytree = params$colsample_bytree, #variable sampling 
+                    objective = "reg:squarederror", #for regression problems 
+                    verbose = 0) #suppresses progress message, use "1" to show updates 
+    
+    # Make predictions
+    pred <- predict(model, dtest)
+    
+    # Calculate metrics
+    rmse <- sqrt(mean((pred - test.ch4$fch4)^2))
+    r2 <- cor(pred, test.ch4$fch4)^2
+    
+    return(c(rmse = rmse, r2 = r2))
+}
 
-# Look at some summary statistics of the data
-print("Summary of predictors:")
-print(summary(test.ch4[c("tsoil", "swc", "fch4")]))
+# Try first few parameter combinations 
+results <- data.frame()
+for(i in 1:10) {  # Start with just 10 combinations --> combinations of the param_grid set up, which has 3 options for eta, max_depth, nrounds, etc. 
+    params <- param_grid[i,]
+    metrics <- evaluate_params(params)
+    results <- rbind(results, 
+                    data.frame(params, 
+                             RMSE = metrics["rmse"],
+                             R2 = metrics["r2"]))
+}
+
+# Sort by RMSE
+results_sorted <- results[order(results$RMSE),]
+print(head(results_sorted))
+
+Sys.time() - orig #to see how long this takes --> 25 seconds, sweet 
+
+#Results
+#best performance (lowest RMSE, 7.93) on top row, showing max depth of 6, eta of 0.10, nrounds = 100, gamma = 0, subsample = 0.5, colsample_bytree = 0.6, R2 of 0.246  --> still not as good as the RF model 
+
+
 ```
+#Tuning XGBoost round 2 
+```{r}
+orig = Sys.time()
+
+# Create a more focused parameter grid based on the results in the code chunk above 
+focused_param_grid <- expand.grid(
+    max_depth = c(5, 6, 7),              # Center around 6
+    eta = c(0.05, 0.10, 0.15),           # Focus near 0.10
+    nrounds = c(100, 200, 300),          # Test if more rounds help
+    gamma = c(0, 0.05, 0.1),             # Try small values
+    subsample = c(0.4, 0.5, 0.6),        # Center around 0.5
+    colsample_bytree = c(0.5, 0.6, 0.7)  # Center around 0.6
+)
+
+# Use the same evaluation function but try more combinations
+results <- data.frame()
+for(i in 1:30) {  # Try 30 combinations
+    params <- focused_param_grid[i,]
+    metrics <- evaluate_params(params)
+    results <- rbind(results, 
+                    data.frame(params, 
+                             RMSE = metrics["rmse"],
+                             R2 = metrics["r2"]))
+}
+
+# Sort and show top 5 results
+results_sorted <- results[order(results$RMSE),]
+print(head(results_sorted, 5))
+
+Sys.time() - orig # --> about 2.5 min 
+
+#Results:
+#best results on top row, max depth = 5, eta = 0.10, nrounds = 200, gamma = 0, subsample = 0.4, colsample_bytree = 0.5, R2 of 0.247, RMSE = 7.9  --> randomForest still performs better 
+```
+#Tuning XGBoost round 3
+```{r}
+orig = Sys.time()
+#much more focused, based on the previous 2 models 
+# Final focused parameter grid
+final_param_grid <- expand.grid(
+    max_depth = c(4, 5, 6),              # Really tight around 5
+    eta = c(0.08, 0.10, 0.12),           # Very close to 0.10
+    nrounds = c(175, 200, 225),          # Centered on 200
+    gamma = c(0, 0.01, 0.02),            # Very small gamma values
+    subsample = c(0.35, 0.40, 0.45),     # Tight around 0.40
+    colsample_bytree = c(0.45, 0.50, 0.55) # Tight around 0.50
+)
+
+# Try more combinations since we're in a promising area
+results <- data.frame()
+for(i in 1:50) {  # Increased to 50 combinations
+    params <- final_param_grid[i,]
+    metrics <- evaluate_params(params)
+    results <- rbind(results, 
+                    data.frame(params, 
+                             RMSE = metrics["rmse"],
+                             R2 = metrics["r2"]))
+}
+
+# Sort and show top 5 results
+results_sorted <- results[order(results$RMSE),]
+print(head(results_sorted, 5))
+
+Sys.time() - orig # about 2min 
+
+#Results:
+#best performing model's R2 is still just 0.248 (RMSE = 7.92) --> first iteration of the XGBoost actually performed best, with R2 = 0.3 & RMSE of 7.5 --> otherwise, RF model still performs much better 
+```
+
 
