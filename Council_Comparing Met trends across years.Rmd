@@ -300,7 +300,10 @@ df_2023 <- df %>%
 
 #Seasonal dataframes 
 ```{r}
-#This will exclude 2023 becuase it does not have assigned seasons 
+#Across all years
+#This will exclude 2023 because it does not have assigned seasons 
+
+#Daily avg 
 df_avg_winter <- df_avg %>%
   filter(season == "Winter")
 
@@ -311,13 +314,29 @@ df_avg_fall <- df_avg %>%
   filter(season == "Fall Senescence")
 
 
+#HH data 
+df_winter <- df %>%
+  filter(season == "Winter")
+
+df_growing <- df %>%
+  filter(season == "Growing Season")
+
+df_fall <- df %>%
+  filter(season == "Fall Senescence")
+
+
+
+
+#Within each year 
+
+#** TO DO
+
+#Daily avg
+
+
+
 sum(is.na(df_avg_fall$season))
 ```
-
-
-
-
-
 
 
 
@@ -646,6 +665,175 @@ fall_plot <- create_seasonal_comparison(df_avg, "Fall Senescence")
 winter_plot
 growing_plot
 fall_plot
+
+#**need to find a way to double check the months included in each season for each year 
+```
+#Create seasonal subsets from df_avg
+```{r}
+create_seasonal_subsets <- function(year_data, year_num) {
+  # Create seasonal datasets
+  winter <- year_data %>%
+    filter(season == "Winter")
+  
+  growing <- year_data %>%
+    filter(season == "Growing Season")
+  
+  fall <- year_data %>%
+    filter(season == "Fall Senescence")
+  
+  # Print summary information
+  cat(paste("\nSeasonal Summary for", year_num, ":\n"))
+  cat("------------------------\n")
+  
+  cat("Winter dates:\n")
+  print(range(winter$date))
+  cat(paste("Number of winter days:", nrow(winter), "\n\n"))
+  
+  cat("Growing Season dates:\n")
+  print(range(growing$date))
+  cat(paste("Number of growing days:", nrow(growing), "\n\n"))
+  
+  cat("Fall Senescence dates:\n")
+  print(range(fall$date))
+  cat(paste("Number of fall days:", nrow(fall), "\n\n"))
+  
+  # Return the datasets as a list
+  return(list(
+    winter = winter,
+    growing = growing,
+    fall = fall
+  ))
+}
+
+# print results 
+seasons_2017 <- create_seasonal_subsets(df_avg_2017, 2017)
+
+# Access individual seasonal datasets if needed:
+winter_2017 <- seasons_2017$winter
+growing_2017 <- seasons_2017$growing
+fall_2017 <- seasons_2017$fall
+
+# Can easily do for other years:
+seasons_2018 <- create_seasonal_subsets(df_avg_2018, 2018)
+seasons_2019 <- create_seasonal_subsets(df_avg_2019, 2019)
+seasons_2020 <- create_seasonal_subsets(df_avg_2020, 2020)
+seasons_2021 <- create_seasonal_subsets(df_avg_2021, 2021)
+seasons_2022 <- create_seasonal_subsets(df_avg_2019, 2022)
+```
+#Met data per season
+```{r}
+create_seasonal_subsets <- function(year_data, year_num) {
+  # Create seasonal datasets
+  winter <- year_data %>%
+    filter(season == "Winter")
+  
+  growing <- year_data %>%
+    filter(season == "Growing Season")
+  
+  fall <- year_data %>%
+    filter(season == "Fall Senescence")
+  
+  # Function to calculate seasonal statistics
+  get_season_stats <- function(data) {
+    list(
+      # Measured Air Temperature statistics
+      mean_air_temp = mean(data$TA, na.rm = TRUE),
+      max_air_temp = max(data$TA, na.rm = TRUE),
+      min_air_temp = min(data$TA, na.rm = TRUE),
+      
+      # ERA5 Air Temperature statistics
+      mean_era5_temp = mean(data$TA_ERA5, na.rm = TRUE),
+      max_era5_temp = max(data$TA_ERA5, na.rm = TRUE),
+      min_era5_temp = min(data$TA_ERA5, na.rm = TRUE),
+      
+      # Soil conditions
+      mean_soil_temp = mean(data$TS_3_1_1, na.rm = TRUE),
+      max_soil_temp = max(data$TS_3_1_1, na.rm = TRUE),
+      min_soil_temp = min(data$TS_3_1_1, na.rm = TRUE),
+      
+      mean_soil_moisture = mean(data$SWC_3_1_1, na.rm = TRUE),
+      max_soil_moisture = max(data$SWC_3_1_1, na.rm = TRUE),
+      min_soil_moisture = min(data$SWC_3_1_1, na.rm = TRUE),
+      
+      # Carbon fluxes
+      mean_NEE = mean(data$FC_F, na.rm = TRUE),
+      mean_CH4 = mean(data$FCH4_F, na.rm = TRUE),
+      cumulative_NEE = sum(data$FC_F, na.rm = TRUE),
+      cumulative_CH4 = sum(data$FCH4_F, na.rm = TRUE)
+    )
+  }
+  
+  # Calculate statistics for each season
+  winter_stats <- get_season_stats(winter)
+  growing_stats <- get_season_stats(growing)
+  fall_stats <- get_season_stats(fall)
+  
+  # Print summary information
+  cat(paste("\nSeasonal Summary for", year_num, ":\n"))
+  cat("================================================\n")
+  
+  for(season_name in c("Winter", "Growing Season", "Fall Senescence")) {
+    season_data <- switch(season_name,
+                         "Winter" = winter,
+                         "Growing Season" = growing,
+                         "Fall Senescence" = fall)
+    stats <- switch(season_name,
+                   "Winter" = winter_stats,
+                   "Growing Season" = growing_stats,
+                   "Fall Senescence" = fall_stats)
+    
+    cat(paste("\n", season_name, ":\n"))
+    cat("----------------\n")
+    cat("Dates:", format(range(season_data$date), "%Y-%m-%d"), "\n")
+    cat("Number of days:", nrow(season_data), "\n")
+    cat("\nTemperature Conditions:\n")
+    cat(sprintf("Measured Air Temperature: %.1f°C (range: %.1f to %.1f°C)\n", 
+                stats$mean_air_temp, stats$min_air_temp, stats$max_air_temp))
+    cat(sprintf("ERA5 Air Temperature: %.1f°C (range: %.1f to %.1f°C)\n", 
+                stats$mean_era5_temp, stats$min_era5_temp, stats$max_era5_temp))
+    cat(sprintf("Soil Temperature: %.1f°C (range: %.1f to %.1f°C)\n", 
+                stats$mean_soil_temp, stats$min_soil_temp, stats$max_soil_temp))
+    
+    cat("\nSoil Moisture:\n")
+    cat(sprintf("Mean: %.1f %%SWC (range: %.1f to %.1f %%SWC)\n", 
+                stats$mean_soil_moisture, stats$min_soil_moisture, stats$max_soil_moisture))
+    
+    cat("\nCarbon Fluxes:\n")
+    cat("\nCarbon Fluxes:\n")
+    cat(sprintf("Mean NEE: %.2f µmol/m²/s\n", stats$mean_NEE))
+    cat(sprintf("Mean CH4: %.3f nmol/m²/s\n", stats$mean_CH4))
+    cat(sprintf("Cumulative NEE: %.1f µmol/m²\n", stats$cumulative_NEE))
+    cat(sprintf("Cumulative CH4: %.2f nmol/m²\n", stats$cumulative_CH4))
+    cat("\n")
+  }
+  
+  # Return the datasets as a list
+  return(list(
+    winter = winter,
+    growing = growing,
+    fall = fall,
+    stats = list(
+      winter = winter_stats,
+      growing = growing_stats,
+      fall = fall_stats
+    )
+  ))
+}
+
+# print results 
+seasons_2019 <- create_seasonal_subsets(df_avg_2019, 2019)
+
+# Access individual seasonal datasets if needed:
+winter_2019 <- seasons_2019$winter
+growing_2019 <- seasons_2019$growing
+fall_2019 <- seasons_2019$fall
+
+# Can easily do for other years:
+seasons_2018 <- create_seasonal_subsets(df_avg_2018, 2018)
+seasons_2019 <- create_seasonal_subsets(df_avg_2019, 2019)
+seasons_2020 <- create_seasonal_subsets(df_avg_2020, 2020)
+seasons_2021 <- create_seasonal_subsets(df_avg_2021, 2021)
+seasons_2022 <- create_seasonal_subsets(df_avg_2019, 2022)
 ```
 
 
