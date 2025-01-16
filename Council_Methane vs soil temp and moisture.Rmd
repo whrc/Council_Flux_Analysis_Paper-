@@ -4,6 +4,8 @@ output: html_document
 date: "2024-12-26"
 #Notes on SWC and temp:
 
+#Lit seems to say moisture might be more important than soil temp (? need to look this up again*)
+
 #SWC
 #SWC also broken up by location, just like temp 
 #  SWC_1_1_1 % Soil water content (15cm depth) – margin pond
