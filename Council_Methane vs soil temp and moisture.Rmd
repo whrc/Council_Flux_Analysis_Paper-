@@ -3490,6 +3490,8 @@ ggplot(model_data, aes(x = swc, y = fch4, color = season)) +
        x = "SWC %",
        y = expression(paste("CH"[4], " Flux")))
 ```
+
+
 #LME with varIDent in winter specifically 
 ```{r}
 # Create winter-only dataset
@@ -3530,6 +3532,8 @@ winter_xgb_measured <- df_era2$fch4[df_era2$season == "Winter" &
 
 winter_xgb_rmse <- sqrt(mean((winter_xgb_predictions - winter_xgb_measured)^2))
 ```
+
+#TO DO - RE-RUN and annotate the results 
 
 ```{r}
 # including air temperature and its interaction
@@ -3653,6 +3657,8 @@ summary(lm(pred_fch4 ~ actual_fch4))
 #Results: R2 = 0.72, slope = 0.63, p<0.001
 
 ```
+
+
 #XGBoost 2019 predictions on all years
 ```{r}
 # Create matrix for the entire dataset
