@@ -46,50 +46,452 @@ TO DO: re-running all these with SWC_3 (tussock) version of dataset - KK 1/7/202
 df = fread(input ="C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_HH_alt_methane_models.csv", na.strings = "-9999")
 
 
+colnames(df)
+
+summary(df$date)
+
+```
+
+#Create daily avg for ease
+```{r}
+library(openair)
+#average entire dataframe with tighter data availability threshold to avoid using large data gaps in calculating the avg -- having at least 50% of the data 
+df_avg <- as.data.frame(date)
+df_avg <-timeAverage(df, avg.time = "day", data.thresh = 50) #this seems to remove the measured fch4, probably due to severe lack of data 
+
+
+
+# Create seasonal assignments using both year and DOY
+df_avg <- df_avg %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
+      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
+      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+
 
 ```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-#Budgets based on XGBoost model with interaction effect 
 
 ####Yearly df 
 ```{r}
-df_2017 <- df %>%
+df_avg_2017 <- df_avg %>%
   filter(year(date) == 2017)
 
-df_2018 <- df %>%
+df_avg_2018 <- df_avg %>%
   filter(year(date) == 2018)
 
-df_2019 <- df %>%
+df_avg_2019 <- df_avg %>%
   filter(year(date) == 2019)
 
-df_2020 <- df %>%
+df_avg_2020 <- df_avg %>%
   filter(year(date) == 2020)
 
-df_2021 <- df %>%
+df_avg_2021 <- df_avg %>%
   filter(year(date) == 2021)
 
-df_2022 <- df %>%
+df_avg_2022 <- df_avg %>%
   filter(year(date) == 2022)
 
-df_2023 <- df %>%
+df_avg_2023 <- df_avg %>%
   filter(year(date) == 2023)
+
+
+#sum - yearly budget 
+sum(df_avg_2017$rfch4_gf * 60 * 60 * 24 * (1/1000000000) * 12 )
+sum(df_avg_2018$rfch4_gf * 60 * 60 * 24 * (1/1000000000) * 12 )
+
+```
+```{r}
+convert_ch4_flux <- function(flux_nmol) {
+  # Starting with nano-molCH4-C/m2/s
+  # * 60*60*24 for seconds in a day
+  # * (1/1000000000) for nano conversion
+  # * 12 for atomic mass of C
+  flux_nmol * 60 * 60 * 24 * (1/1000000000) * 12
+}
+
+# Calculate annual budgets
+annual_budget <- df_avg %>%
+  filter(year != 2023) %>%
+  group_by(year) %>%
+  summarise(
+    XGBoost_total = sum(fch4_gapfilled) * 60 * 60 * 24 * (1/1000000000) * 12,
+    XGBoost_interact_total = sum(fch4_gapfilled_interact) * 60 * 60 * 24 * (1/1000000000) * 12,
+    RandomForest_total = sum(rfch4_gf) * 60 * 60 * 24 * (1/1000000000) * 12,
+    n_days = n()
+  )
+
+# Calculate seasonal budgets
+seasonal_budget <- df_avg %>%
+  filter(year != 2023) %>%
+  group_by(year, season) %>%
+  summarise(
+    XGBoost_total = sum(fch4_gapfilled) * 60 * 60 * 24 * (1/1000000000) * 12,
+    XGBoost_interact_total = sum(fch4_gapfilled_interact) * 60 * 60 * 24 * (1/1000000000) * 12,
+    RandomForest_total = sum(rfch4_gf) * 60 * 60 * 24 * (1/1000000000) * 12,
+    n_days = n()
+  )
+```
+
+
+
+```{r}
+# # Function to convert from nano-mol/m2/s to g CH4-C/m2/day --> *60*60*24*(1/1000000000)*12*
+# convert_ch4_flux <- function(flux_nmol) {
+#   # flux_nmol is in nano-mol/m²/s
+#   # Convert to g/m²/day:
+#   # * (24*60*60) for seconds in day
+#   # * 16.04 for molar mass of CH4 --> but just checking C, so substitute 12 
+#   # * 10^-9 for nano to base units
+#   flux_nmol * (24*60*60) * 12 * 10^-9
+# }
+
+# Create visualization of annual budgets
+annual_plot <- ggplot(annual_budget %>%
+                     pivot_longer(cols = contains("total"),
+                                names_to = "Model",
+                                values_to = "CH4_flux")) +
+  geom_bar(aes(x = as.factor(year), y = CH4_flux, fill = Model),
+           position = "dodge", stat = "identity") +
+  labs(title = "Annual CH4 Budgets by Model",
+       x = "Year",
+       y = expression(paste("CH"[4], " (g ", m^-2, " ", yr^-1, ")"))) +
+  theme_bw()
+
+# Create visualization of seasonal budgets
+seasonal_plot <- ggplot(seasonal_budget %>%
+                       pivot_longer(cols = contains("total"),
+                                  names_to = "Model",
+                                  values_to = "CH4_flux")) +
+  geom_bar(aes(x = as.factor(year), y = CH4_flux, fill = Model),
+           position = "dodge", stat = "identity") +
+  facet_wrap(~season) +
+  labs(title = "Seasonal CH4 Budgets by Model",
+       x = "Year",
+       y = expression(paste("CH"[4], " (g ", m^-2, " ", season^-1, ")"))) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display results and plots
+print("Annual CH4 Budgets (g CH4/m²/year):")
+print(annual_budget)
+
+print("\nSeasonal CH4 Budgets (g CH4/m²/season):")
+print(seasonal_budget)
+
+annual_plot
+seasonal_plot
+```
+
+
+#Compare original RF to current model outputs
+
+
+
+```{r}
+df_avg_orig = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+```
+
+#Seasonal delineations for orig RF model dataset
+
+```{r}
+# First create DOY from date
+df_avg_orig$DOY <- as.numeric(format(df_avg_orig$date, "%j"))
+
+# add year column if not already present
+df_avg_orig <- df_avg_orig %>%
+  mutate(year = format(date, "%Y"))
+
+
+# Create seasonal assignments using both year and DOY
+df_avg_orig <- df_avg_orig  %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
+      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
+      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+
 
 ```
 
+
+
+####Yearly df 
+```{r}
+df_avg_orig_2017 <- df_avg_orig %>%
+  filter(year(date) == 2017)
+
+df_avg_orig_2018 <- df_avg_orig %>%
+  filter(year(date) == 2018)
+
+df_avg_orig_2019 <- df_avg_orig %>%
+  filter(year(date) == 2019)
+
+df_avg_orig_2020 <- df_avg_orig %>%
+  filter(year(date) == 2020)
+
+df_avg_orig_2021 <- df_avg_orig %>%
+  filter(year(date) == 2021)
+
+df_avg_orig_2022 <- df_avg_orig %>%
+  filter(year(date) == 2022)
+
+df_avg_orig_2023 <- df_avg_orig %>%
+  filter(year(date) == 2023)
+
+
+#sum - yearly budget 
+sum(df_avg_orig_2017$FCH4_F * 60 * 60 * 24 * (1/1000000000) * 12 )
+sum(df_avg_orig_2018$FCH4_F * 60 * 60 * 24 * (1/1000000000) * 12 )
+
+```
+
+
+#Original RF model annual and seasonal budgets 
+```{r}
+
+# Calculate annual budgets for gapfilled methane only - in g/m2
+annual_budget_orig <- df_avg_orig %>%
+  filter(year != 2023) %>%
+  group_by(year) %>%
+  summarise(
+    FCH4_F = sum(FCH4_F) * 60 * 60 * 24 * (1/1000000000) * 12,
+    n_days = n()
+  )
+
+# Calculate seasonal budgets for gapfilled methane only - in g/m2
+seasonal_budget_orig <- df_avg_orig %>%
+  filter(year != 2023) %>%
+  group_by(year, season) %>%
+  summarise(
+    FCH4_F = sum(FCH4_F) * 60 * 60 * 24 * (1/1000000000) * 12,
+     n_days = n()
+    )
+
+#Print
+print(annual_budget_orig)
+
+print(seasonal_budget_orig)
+```
+
+
+
+```{r}
+# Create visualization of annual budgets
+annual_plot_orig <- ggplot(annual_budget_orig, aes(x = as.factor(year), y = FCH4_F)) +
+  geom_bar(stat = "identity", fill = "salmon") +
+  labs(title = "Annual CH4 Budgets - Original RF",
+       x = "Year",
+       y = expression(paste("CH"[4], " (g ", m^-2, " ", yr^-1, ")"))) +
+  theme_bw()
+
+annual_plot_orig
+
+# Create visualization of seasonal budgets
+seasonal_plot_orig <- ggplot(seasonal_budget_orig, aes(x = as.factor(year), y = FCH4_F)) +
+  geom_bar(stat = "identity", fill = "salmon") +
+  facet_wrap(~season)+
+  labs(title = "Annual CH4 Budgets - Original RF",
+       x = "Season",
+       y = expression(paste("CH"[4], " (g ", m^-2, " ", season^-1, ")"))) +
+  theme_bw()
+
+seasonal_plot_orig
+
+
+
+
+# Display all results and plots together 
+print(annual_budget_orig)
+
+print(seasonal_budget_orig)
+
+annual_plot_orig
+seasonal_plot_orig
+```
+#plot all together for ease of comparison 
+```{r}
+library(dplyr)
+
+#make sure date is in POSIXct
+df_avg_orig$date <- as.POSIXct(df_avg_orig$date, format = "%Y-%m-%d")
+
+class(df_avg_orig$date) #should report POSIXct
+
+
+# Merge by date, adding just FCH4_F from df_avg_orig
+df_avg2 <- df_avg %>%
+ left_join(select(df_avg_orig, date, rfch4_orig = FCH4_F), by = "date")
+
+
+
+# Calculate annual budgets
+annual_budget_all <- df_avg2 %>%
+  filter(year != 2023) %>%
+  group_by(year) %>%
+  summarise(
+    XGBoost_total = sum(fch4_gapfilled) * 60 * 60 * 24 * (1/1000000000) * 12,
+    XGBoost_interact_total = sum(fch4_gapfilled_interact) * 60 * 60 * 24 * (1/1000000000) * 12,
+    RandomForest_total = sum(rfch4_gf) * 60 * 60 * 24 * (1/1000000000) * 12,
+    Orig_RandomForest_total = sum(rfch4_orig) * 60 * 60 * 24 * (1/1000000000) * 12,
+    n_days = n()
+  )
+
+# Calculate seasonal budgets
+seasonal_budget_all <- df_avg2 %>%
+  filter(year != 2023) %>%
+  group_by(year, season) %>%
+  summarise(
+    XGBoost_total = sum(fch4_gapfilled) * 60 * 60 * 24 * (1/1000000000) * 12,
+    XGBoost_interact_total = sum(fch4_gapfilled_interact) * 60 * 60 * 24 * (1/1000000000) * 12,
+    RandomForest_total = sum(rfch4_gf) * 60 * 60 * 24 * (1/1000000000) * 12,
+    Orig_RandomForest_total = sum(rfch4_orig) * 60 * 60 * 24 * (1/1000000000) * 12,
+    n_days = n()
+  )
+
+
+# Create visualization of annual budgets
+annual_plot_all <- ggplot(annual_budget_all %>%
+                     pivot_longer(cols = contains("total"),
+                                names_to = "Model",
+                                values_to = "CH4_flux")) +
+  geom_bar(aes(x = as.factor(year), y = CH4_flux, fill = Model),
+           position = "dodge", stat = "identity") +
+  labs(title = "Annual CH4 Budgets by Model",
+       x = "Year",
+       y = expression(paste("CH"[4], " (g ", m^-2, " ", yr^-1, ")"))) +
+  theme_bw()
+
+# Create visualization of seasonal budgets
+seasonal_plot_all <- ggplot(seasonal_budget_all %>%
+                       pivot_longer(cols = contains("total"),
+                                  names_to = "Model",
+                                  values_to = "CH4_flux")) +
+  geom_bar(aes(x = as.factor(year), y = CH4_flux, fill = Model),
+           position = "dodge", stat = "identity") +
+  facet_wrap(~season) +
+  labs(title = "Seasonal CH4 Budgets by Model",
+       x = "Year",
+       y = expression(paste("CH"[4], " (g ", m^-2, " ", season^-1, ")"))) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# Display results and plots
+
+print(annual_budget_all)
+print(seasonal_budget_all)
+
+annual_plot_all
+seasonal_plot_all
+
+
+
+
+```
+
+
+#gapfilling with orig rf model 
+```{r}
+
+#plot half-hourly FCH4 data with the gap-filled data to compare 
+ggplot(data = df_avg2)+
+  geom_hline(yintercept = 0)+
+  geom_point(aes(date, rfch4_orig,col='RF Gapfilled'))+
+  geom_point(aes(date,fch4,col='Original'))+
+    labs(
+        y = expression(CH[4]~Flux~(nmolCH[4]~m^-2~y^-1)),
+        x = "Time") +
+  scale_color_manual(values=c('black','red'))+
+  theme_bw()+
+  #geom_vline(xintercept = as.POSIXct("2023-07-05"))+
+  labs(title = "Orig RF Methane Flux (no interaction): Measured and Gap-filled Values")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Copied over for full budgets, but skipping CO2 budgets for now to focus on methane 
 
 ####Annual budgets
 #### Net C Budgets: Annual bar plot
