@@ -4,7 +4,7 @@ output: html_document
 date: "2024-12-26"
 #Notes on SWC and temp:
 
-#Lit seems to say moisture might be more important than soil temp (? need to look this up again*)
+#Lit & the incMSE results seems to say moisture might be more important than soil temp 
 
 #SWC
 #SWC also broken up by location, just like temp 
@@ -145,6 +145,7 @@ summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.97, slope = 1.02
 df_era2$swc = ifelse(is.na(df_era2$swc),df_era2$swc.rf,df_era2$swc)
 
 ```
+
 #Seasonal delineations for all years 
 ```{r}
 # First create DOY from date
@@ -194,6 +195,8 @@ df_era2 <- df_era2%>%
       TRUE ~ NA_character_
     )
   )
+
+#Will have some NAs as 2023 is incomplete --> maybe go in and see if any seasonal delineations can be made for 2023? (KK 1/16/'25)
 
 sum(is.na(df_era2$season))
 
@@ -2070,14 +2073,12 @@ ggplot(eval_rf2019, aes(x = actual, y = predicted)) +
 varImpPlot(rf_2019)
 
 #Results from using all of 2019:
-#SWC is most important, but then followed closely by tsoil, then TS:SWC interaction --> comparatively, wd was usually 1 or 2, it has not dropped to 4th most important 
-#Slope = 0.566; R2 = 0.599 (best fit per R2 yet)
+#SWC is most important, but then followed closely by tsoil, then TS:SWC interaction --> comparatively, wd was usually 1 or 2, it has now dropped to 4th most important 
+#Slope = 0.566; R2 = 0.599 --> better fit becuase it was trained and tested on just 2019*, but now we need to see if it extrapolates to the other years
 
 
 
 ```
-
-
 
 ####Seasonal delineations added to 2019 df
 ```{r}
@@ -2456,7 +2457,7 @@ print(opt_results_nee$errors)
 # 550	2.123629			
 # 650	2.124292			
 # 750	2.121626			
-# 850	2.120393			
+# 850	2.120393	****		
 # 950	2.121901			
 
 
@@ -2542,28 +2543,28 @@ varImpPlot(rf_model)
 #Generalized Additive Models (GAMs)
 ```{r}
 library(mgcv)
-gam_model <- gam(FCH4 ~ s(tsoil) + s(swc) + ti(tsoil, swc), data = train.ch4)
+gam_model <- gam(ch4 ~ s(tsoil) + s(swc) + ti(tsoil, swc), data = train.ch4)
 ```
 
 
-#Mixed effects model 
+#Mixed effects model (with season as random effect --> maybe redo within each season?)
 ```{r}
 library(lme4)
-mixed_model <- lmer(FCH4 ~ tsoil * swc + (1|season), data = train.ch4)
+mixed_model <- lmer(fch4 ~ tsoil * swc + (1|season), data = train.ch4)
 ```
 
 
-#Support Vector Regression (SVR)
+#Support Vector Regression (SVR) --> couldn't get this to work
 ```{r}
 library(lme4)
 library(e1071)
-svr_model <- svm(FCH4 ~ tsoil + swc, data = train.ch4)
+svr_model <- svm(fach4 ~ tsoil + swc, data = train.ch4)
 ```
 
 #Gradient Boosting Machines 
 ```{r}
 library(gbm)
-gbm_model <- gbm(FCH4 ~ tsoil + swc, data = train.ch4)
+gbm_model <- gbm(fch4 ~ tsoil + swc, data = train.ch4)
 ```
 
 
@@ -2628,13 +2629,7 @@ xgb_model <- xgboost(data = xgb_train,
                      nrounds = 100,
                      objective = "reg:squarederror")
 
-# function to make predictions and calculate R2 for each model
-calculate_metrics <- function(predicted, actual) {
-    R2 = cor(predicted, actual, use = "complete.obs")^2
-    RMSE = sqrt(mean((predicted - actual)^2, na.rm = TRUE))
-    slope = coef(lm(predicted ~ actual))[2]
-    return(c(R2 = R2, RMSE = RMSE, slope = slope))
-}
+
 #Results of XGBoost - by end of training the RMSE went from 10.31 down to 6.35 
 
 ```
@@ -2642,25 +2637,44 @@ calculate_metrics <- function(predicted, actual) {
 #Empirical model comparison stats 
 
 ```{r}
+
+# function to make predictions and calculate R2 for each model 
+calculate_metrics <- function(predicted, actual) {
+    R2 = cor(predicted, actual, use = "complete.obs")^2
+    RMSE = sqrt(mean((predicted - actual)^2, na.rm = TRUE))
+    slope = coef(lm(predicted ~ actual))[2]
+    return(c(R2 = R2, RMSE = RMSE, slope = slope))
+}
+
+
+
 # Create test matrix for XGBoost predictions
 test_matrix <- model.matrix(~ tsoil + swc, data = test.ch4)[,-1]
 xgb_test <- xgb.DMatrix(data = test_matrix)
 
 # Get predictions from each model
 gam_pred <- predict(gam_model, newdata = test.ch4)
+
 mixed_pred <- predict(mixed_model, newdata = test.ch4)
 
 #svr_pred <- predict(svr_model, newdata = test.ch4) --> taking out since it's not working correctly 
+
 gbm_pred <- predict(gbm_model, newdata = test.ch4)
+
 xgb_pred <- predict(xgb_model, newdata = xgb_test)
 
 # Calculate metrics for each model
 metrics_gam <- calculate_metrics(gam_pred, test.ch4$fch4)
+
 metrics_mixed <- calculate_metrics(mixed_pred, test.ch4$fch4)
 
 #metrics_svr <- calculate_metrics(svr_pred, test.ch4$fch4) --> having trouble getting this to work 
+
 metrics_gbm <- calculate_metrics(gbm_pred, test.ch4$fch4)
+
 metrics_xgb <- calculate_metrics(xgb_pred, test.ch4$fch4)
+
+print(metrics_xgb)
 
 # Create summary dataframe
 model_comparison <- data.frame(
@@ -2915,5 +2929,734 @@ Sys.time() - orig # about 2min
 #Results:
 #best performing model's R2 is still just 0.248 (RMSE = 7.92) --> first iteration of the XGBoost actually performed best, with R2 = 0.3 & RMSE of 7.5 --> otherwise, RF model still performs much better 
 ```
+
+#Plotting out the results of first XGBoost 
+
+####XGBoost on test dataset
+
+```{r}
+# Prepare data for XGBoost (same as in training, using test.ch4 data)
+test_matrix <- model.matrix(~ tsoil + swc, data = test.ch4)[,-1]  # Same features as in training
+xgb_test <- xgb.DMatrix(data = test_matrix)
+
+# Make predictions using the trained XGBoost model
+pred_fch4 <- predict(xgb_model, newdata = xgb_test)
+
+#add pred_fch4 to test.ch4 dataset 
+test.ch4$pred_fch4 <- pred_fch4
+
+# Actual measured methane flux (fch4) from the test dataset
+actual_fch4 <- test.ch4$fch4
+
+#RMSE
+rmse <- sqrt(mean((pred_fch4 - actual_fch4)^2))
+cat("RMSE:", rmse, "\n")
+#RMSE = 7.662884 
+
+# R2
+ss_total <- sum((actual_fch4 - mean(actual_fch4))^2)
+ss_residual <- sum((actual_fch4 - pred_fch4)^2)
+r_squared <- 1 - (ss_residual / ss_total)
+cat("R-squared:", r_squared, "\n")
+
+# plot to compare the predicted vs. actual values
+library(ggplot2)
+comparison_df <- data.frame(Actual = actual_fch4, Predicted = pred_fch4)
+
+ggplot(comparison_df, aes(x = Actual, y = Predicted)) +
+  geom_point() + 
+  geom_abline(slope = 1, intercept = 0, color = "red") +  # Line of perfect agreement
+  labs(title = "Actual vs. Predicted Methane Flux - test dataset",
+       x = "Actual fCH4",
+       y = "Predicted fCH4") +
+  geom_smooth(method = 'lm')+
+  theme_bw()+
+  annotate("text", size = 4, x = -5, y = 40, label = "R2 = 0.32, slope = 0.34, RMSE = 7.66", font = "black")
+
+#R2 = 0.322; RMSE = 7.66
+
+summary(lm(comparison_df$Predicted ~ comparison_df$Actual))
+#Results:
+#Residual standard error: 7.66 on 5080 degrees of freedom
+#R2 = 0.32; slope = 0.339; p<0.001
+
+
+
+# Plot to visualize the gap-filling
+ggplot(test.ch4, aes(x = date)) +
+  # Plot gap-filled values in red, slightly transparent
+  geom_point(aes(y = pred_fch4), color = "red", alpha = 0.5) +
+  # Plot measured values in black, on top
+  geom_point(aes(y = fch4), color = "black", na.rm = TRUE) +
+  labs(title = "Test dataset: Methane Flux: Measured and Gap-filled Values",
+       x = "Date",
+       y = expression(paste("CH"[4], " Flux")),
+       color = "") +
+  theme_bw() +
+  # Add legend
+  geom_segment(aes(x = min(date), xend = min(date), y = max(pred_fch4, na.rm=TRUE), 
+                   yend = max(pred_fch4, na.rm=TRUE), color = "Measured"), 
+               show.legend = TRUE) +
+  geom_segment(aes(x = min(date), xend = min(date), y = max(pred_fch4, na.rm=TRUE), 
+                   yend = max(pred_fch4, na.rm=TRUE), color = "Gap-filled"), 
+               show.legend = TRUE) +
+  scale_color_manual(values = c("Measured" = "black", "Gap-filled" = "red")) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+ 
+
+
+
+```
+####XGBoost on full complete cases dataset
+```{r}
+# First, make sure all necessary data is complete
+cc <- df_era2[complete.cases(df_era2$fch4, df_era2$tsoil, df_era2$swc), ]
+
+# Create matrix for prediction
+full_matrix <- model.matrix(~ tsoil + swc, data = cc)[,-1]  # Remove intercept column
+
+# Use your already trained model (xgb_model) to make predictions
+pred_fch4 <- predict(xgb_model, full_matrix)
+
+# Get actual values
+actual_fch4 <- cc$fch4
+
+# Calculate metrics
+rmse <- sqrt(mean((pred_fch4 - actual_fch4)^2))
+cat("RMSE:", rmse, "\n") #RMSE = 7.01
+
+# Calculate R2 --> here results say R2 = 0.465
+ss_total <- sum((actual_fch4 - mean(actual_fch4))^2)
+ss_residual <- sum((actual_fch4 - pred_fch4)^2)
+r_squared <- 1 - (ss_residual / ss_total)
+cat("R-squared:", r_squared, "\n")
+
+# Create a dataframe for plotting
+plot_data <- data.frame(
+  actual_fch4 = actual_fch4,
+  pred_fch4 = pred_fch4
+)
+
+# Create plot
+ggplot(plot_data, aes(x = actual_fch4, y = pred_fch4)) +
+  geom_point(alpha = 0.5) + 
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  geom_smooth(method = 'lm')+
+  labs(title = "Complete cases: Actual vs. Predicted Methane Flux",
+       x = expression(paste("Actual CH"[4], " Flux")),
+       y = expression(paste("Predicted CH"[4], " Flux"))) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  ) +
+   annotate("text", size = 5, x = -30, y = 50, label = "R2 = 0.47, slope = 0.41", color = "black")+
+  annotate("text", size = 5, x = -30, y = 45, label = "RMSE = 7.01", color = "black")
+
+# Linear model summary
+summary(lm(pred_fch4 ~ actual_fch4))
+#Results: R2 = 0.475, slope = 0.41, p<0.001
+
+
+# add predictions to the cc dataset
+cc$pred_fch4 <- pred_fch4
+
+# Create a time series plot
+ggplot(cc, aes(x = date)) +
+  geom_point(aes(y = fch4, color = "Measured"), alpha = 0.7) +
+  geom_point(aes(y = pred_fch4, color = "Predicted"), alpha = 0.7) +
+  scale_color_manual(values = c("Measured" = "black", "Predicted" = "red")) +
+  labs(title = "Complete cases: Measured vs Predicted Methane Flux Over Time",
+       x = "Date",
+       y = expression(paste("CH"[4], " Flux")),
+       color = "") +
+  theme_bw() +
+  theme(
+    #legend.position = "bottom",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  ) 
+ 
+
+```
+#### XGBoost predictions on df_era2 - full dataset 
+```{r}
+# Get predictions from original model for full dataset
+original_predictions <- predict(xgb_model, full_matrix_all_years)
+
+# Create comparison dataframe for original model
+comparison_df_orig <- data.frame(
+    measured = df_era2$fch4[measured_indices_all],
+    predicted = original_predictions[measured_indices_all]
+)
+
+# Calculate statistics
+rmse_orig <- sqrt(mean((comparison_df_orig$predicted - comparison_df_orig$measured)^2))
+r_squared_orig <- 1 - sum((comparison_df_orig$measured - comparison_df_orig$predicted)^2) /
+                     sum((comparison_df_orig$measured - mean(comparison_df_orig$measured))^2)
+# Calculate slope
+lm_fit <- lm(predicted ~ measured, data = comparison_df_orig)
+slope <- coef(lm_fit)[2]
+
+# Create statistics text
+stats_text <- sprintf("R² = %.3f\nRMSE = %.3f\nSlope = %.3f",
+                     r_squared_orig, rmse_orig, slope)
+
+# Create the 1:1 plot
+ggplot(comparison_df_orig, aes(x = measured, y = predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +  # 1:1 line
+  geom_smooth(method = "lm")+
+  labs(title = "Measured vs Predicted Methane Flux (Original Model)",
+       x = expression(paste("Measured CH"[4], " Flux")),
+       y = expression(paste("Predicted CH"[4], " Flux"))) +
+  # Add text annotations for statistics
+  annotate("text", x = min(comparison_df_orig$measured),
+           y = max(comparison_df_orig$predicted),
+           label = stats_text,
+           hjust = 0, vjust = 1,
+           size = 4) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  ) +
+  # Make plot square and ensure axes have same limits
+  coord_fixed(ratio = 1) +
+  scale_x_continuous(limits = function(x) c(min(x), max(x))) +
+  scale_y_continuous(limits = function(x) c(min(x), max(x)))
+
+summary(lm(comparison_df$predicted ~ comparison_df$measured))
+
+```
+
+
+###XGBoost gapfilling 
+```{r}
+#Now see how XGBoost performs for full dataset
+
+# Create matrix for the entire dataset (df_era2) using only tsoil and swc
+full_matrix <- model.matrix(~ tsoil + swc, data = df_era2)[,-1]
+
+# Make predictions for the entire dataset using your trained model
+all_predictions <- predict(xgb_model, full_matrix)
+
+# Create a new column for gap-filled fch4
+df_era2$fch4_gapfilled <- df_era2$fch4  # Copy measured values first
+
+# Replace NAs with predicted values
+df_era2$fch4_gapfilled[is.na(df_era2$fch4)] <- all_predictions[is.na(df_era2$fch4)]
+
+# how many gaps were filled
+cat("Number of gaps filled:", sum(is.na(df_era2$fch4)), "\n")
+#Result: 91231 
+
+# Plot to visualize the gap-filling
+ggplot(df_era2, aes(x = date)) +
+  # Plot gap-filled values in red, slightly transparent
+  geom_point(aes(y = fch4_gapfilled), color = "red", alpha = 0.5) +
+  # Plot measured values in black, on top
+  geom_point(aes(y = fch4), color = "black", na.rm = TRUE) +
+  labs(title = "Methane Flux: Measured and Gap-filled Values",
+       x = "Date",
+       y = expression(paste("CH"[4], " Flux")),
+       color = "") +
+  theme_bw() +
+  # Add legend
+  geom_segment(aes(x = min(date), xend = min(date), y = max(fch4_gapfilled, na.rm=TRUE), 
+                   yend = max(fch4_gapfilled, na.rm=TRUE), color = "Measured"), 
+               show.legend = TRUE) +
+  geom_segment(aes(x = min(date), xend = min(date), y = max(fch4_gapfilled, na.rm=TRUE), 
+                   yend = max(fch4_gapfilled, na.rm=TRUE), color = "Gap-filled"), 
+               show.legend = TRUE) +
+  scale_color_manual(values = c("Measured" = "black", "Gap-filled" = "red")) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+```
+
+# XGBoost with interaction effect - training and testing 
+
+
+```{r}
+# 1. set up training matrix for XGBoost
+train_matrix_interact <- model.matrix(~ tsoil + swc + TS_SWC_interact, data = train.ch4)[,-1]
+xgb_train_interact <- xgb.DMatrix(data = train_matrix_interact, 
+                                 label = train.ch4$fch4)
+
+# Train XGBoost Model with interaction
+xgb_model_interact <- xgboost(data = xgb_train_interact,
+                             nrounds = 100,
+                             objective = "reg:squarederror")
+
+# 2. Test the model on test dataset
+test_matrix_interact <- model.matrix(~ tsoil + swc + TS_SWC_interact, data = test.ch4)[,-1]
+test_predictions <- predict(xgb_model_interact, test_matrix_interact)
+
+#add test predictions to train.ch4 dataset
+test.ch4$pred_fch4_interact <- test_predictions
+
+# Calculate performance metrics on test set
+rmse_test <- sqrt(mean((test_predictions - test.ch4$fch4)^2))
+r_squared_test <- 1 - sum((test.ch4$fch4 - test_predictions)^2) / 
+                    sum((test.ch4$fch4 - mean(test.ch4$fch4))^2)
+lm_fit_test <- lm(test_predictions ~ test.ch4$fch4)
+slope_test <- coef(lm_fit_test)[2]
+
+# Create 1:1 plot for test set performance
+ggplot(data.frame(measured = test.ch4$fch4, predicted = test_predictions), 
+       aes(x = measured, y = predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  geom_smooth(method = "lm")+
+  labs(title = "Test Set: Measured vs Predicted Methane Flux",
+       subtitle = "Model with Interaction Term",
+       x = expression(paste("Measured CH"[4], " Flux")),
+       y = expression(paste("Predicted CH"[4], " Flux"))) +
+  annotate("text", x = min(test.ch4$fch4), 
+           y = max(test_predictions),
+           label = sprintf("R² = %.3f\nRMSE = %.3f\nSlope = %.3f", 
+                         r_squared_test, rmse_test, slope_test),
+           hjust = 0, vjust = 1,
+           size = 4) +
+  theme_bw() +
+  coord_fixed(ratio = 1)
+
+
+summary(lm(test.ch4$fch4 ~ test.ch4$pred_fch4_interact))
+#slope = 0.34, R2 = 0.323
+
+
+# 3. If test performance is satisfactory, then use model on full dataset
+if(r_squared_test > 0.3) {  # You can set your own threshold
+  # Create matrix for entire dataset
+  full_matrix_interact <- model.matrix(~ tsoil + swc + TS_SWC_interact, data = df_era2)[,-1]
+  
+  # Make predictions
+  all_predictions <- predict(xgb_model_interact, full_matrix_interact)
+  
+  # Create gap-filled column
+  df_era2$fch4_gapfilled_interact <- df_era2$fch4
+  df_era2$fch4_gapfilled_interact[is.na(df_era2$fch4)] <- all_predictions[is.na(df_era2$fch4)]
+}
+
+
+```
+#XGBoost Interaction on full dataset 
+```{r}
+# Calculate performance metrics where we have measured values in full dataset 
+measured_indices <- !is.na(df_era2$fch4)
+comparison_df_interact <- data.frame(
+    measured = df_era2$fch4[measured_indices],
+    predicted = interact_predictions[measured_indices]
+)
+
+# Calculate statistics
+rmse_interact <- sqrt(mean((comparison_df_interact$predicted - comparison_df_interact$measured)^2))
+r_squared_interact <- 1 - sum((comparison_df_interact$measured - comparison_df_interact$predicted)^2) / 
+                        sum((comparison_df_interact$measured - mean(comparison_df_interact$measured))^2)
+# Calculate slope
+lm_fit_interact <- lm(predicted ~ measured, data = comparison_df_interact)
+slope_interact <- coef(lm_fit_interact)[2]
+
+# Create 1:1 plot
+ggplot(comparison_df_interact, aes(x = measured, y = predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  geom_smooth(method = "lm")+
+  labs(title = "Measured vs Predicted Methane Flux (Model with Interaction)",
+       x = expression(paste("Measured CH"[4], " Flux")),
+       y = expression(paste("Predicted CH"[4], " Flux"))) +
+  annotate("text", x = min(comparison_df_interact$measured), 
+           y = max(comparison_df_interact$predicted),
+           label = sprintf("R² = %.3f\nRMSE = %.3f\nSlope = %.3f", 
+                         r_squared_interact, rmse_interact, slope_interact),
+           hjust = 0, vjust = 1,
+           size = 4) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  ) +
+  coord_fixed(ratio = 1) +
+  scale_x_continuous(limits = function(x) c(min(x), max(x))) +
+  scale_y_continuous(limits = function(x) c(min(x), max(x)))
+
+# Create gap-filled column using interaction model
+df_era2$fch4_gapfilled_interact <- df_era2$fch4
+df_era2$fch4_gapfilled_interact[is.na(df_era2$fch4)] <- interact_predictions[is.na(df_era2$fch4)]
+
+# Time series plot
+ggplot(df_era2, aes(x = date)) +
+  geom_point(aes(y = fch4_gapfilled_interact), color = "red", alpha = 0.5) +
+  geom_point(aes(y = fch4), color = "black", na.rm = TRUE) +
+  labs(title = "Methane Flux: Measured and Gap-filled Values (Interaction Model)",
+       x = "Date",
+       y = expression(paste("CH"[4], " Flux")),
+       color = "") +
+  theme_bw() +
+  geom_segment(aes(x = min(date), xend = min(date), 
+                   y = max(fch4_gapfilled_interact, na.rm=TRUE), 
+                   yend = max(fch4_gapfilled_interact, na.rm=TRUE), 
+                   color = "Measured"), 
+               show.legend = TRUE) +
+  geom_segment(aes(x = min(date), xend = min(date), 
+                   y = max(fch4_gapfilled_interact, na.rm=TRUE), 
+                   yend = max(fch4_gapfilled_interact, na.rm=TRUE), 
+                   color = "Gap-filled"), 
+               show.legend = TRUE) +
+  scale_color_manual(values = c("Measured" = "black", "Gap-filled" = "red")) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+```
+#Save exploratory methane model dataset for buedgets in new script
+```{r}
+#saving with adj RF model, XGBoost model....
+write.csv(x = df_era2,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_HH_alt_methane_models.csv',quote = F,row.names = F)
+```
+
+#VarIDent in mixed effects models 
+```{r}
+library(nlme)
+
+# First, let's create a dataset with complete cases
+model_data <- df_era2 %>%
+  filter(!is.na(fch4), !is.na(tsoil), !is.na(swc), !is.na(season))#%>%
+  # Scale numeric predictors for better model convergence
+  # mutate(tsoil_scaled = scale(tsoil),
+  #        swc_scaled = scale(swc))
+
+# Fit mixed effects model with varying variances by season
+me_model <- lme(fch4 ~ tsoil * swc, #tsoil_scaled, swc_scaled 
+                data = model_data,
+                weights = varIdent(form = ~1|season),
+                random = ~1|year)
+
+# Look at model summary
+summary(me_model)
+
+# Check residuals
+plot(me_model)
+
+# Compare variances by season
+print(intervals(me_model))
+
+# Visualize the relationship with seasonal differences
+ggplot(model_data, aes(x = tsoil, y = fch4, color = season)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm") +
+  facet_wrap(~season) +
+  theme_bw() +
+  labs(title = "Methane Flux vs Soil Temperature by Season",
+       x = "Soil Temperature (°C)",
+       y = expression(paste("CH"[4], " Flux")))
+
+# Visualize the relationship with seasonal differences
+ggplot(model_data, aes(x = swc, y = fch4, color = season)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm") +
+  facet_wrap(~season) +
+  theme_bw() +
+  labs(title = "Methane Flux vs SWC by Season",
+       x = "SWC %",
+       y = expression(paste("CH"[4], " Flux")))
+```
+#LME with varIDent in winter specifically 
+```{r}
+# Create winter-only dataset
+winter_data <- model_data %>%
+  filter(season == "Winter")
+
+# Fit model to winter data only
+winter_me_model <- lme(fch4 ~ tsoil * swc,
+                      data = winter_data,
+                      weights = varIdent(form = ~1|year),  # Allow different variances by year
+                      random = ~1|year)
+
+# Make predictions and assess performance
+winter_predictions <- predict(winter_me_model, winter_data)
+winter_measured <- winter_data$fch4
+
+# Calculate performance metrics
+winter_rmse <- sqrt(mean((winter_predictions - winter_measured)^2))
+winter_r2 <- 1 - sum((winter_measured - winter_predictions)^2) / 
+                 sum((winter_measured - mean(winter_measured))^2)
+
+# Visualize predictions vs measured for winter
+ggplot(data.frame(measured = winter_measured, 
+                 predicted = winter_predictions), 
+       aes(x = measured, y = predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Winter Methane Flux: Mixed Effects Model Predictions",
+       x = "Measured CH4 Flux",
+       y = "Predicted CH4 Flux") +
+  theme_bw()
+
+# Compare with winter predictions from XGBoost
+winter_xgb_predictions <- all_predictions[df_era2$season == "Winter" & 
+                                        !is.na(df_era2$fch4)]
+winter_xgb_measured <- df_era2$fch4[df_era2$season == "Winter" & 
+                                   !is.na(df_era2$fch4)]
+
+winter_xgb_rmse <- sqrt(mean((winter_xgb_predictions - winter_xgb_measured)^2))
+```
+
+
+
+
+
+#hybrid approach 
+```{r}
+# Use mixed model for winter, XGBoost for other seasons
+df_era2$hybrid_predictions <- df_era2$fch4_predicted  # Start with XGBoost predictions
+winter_indices <- df_era2$season == "Winter"
+df_era2$hybrid_predictions[winter_indices] <- predict(winter_me_model, 
+                                                     newdata = df_era2[winter_indices,])
+```
+
+
+
+
+#TO DO: use test dataset on this before testing on whole dataset 
+
+####XGBoost trained just on 2019 
+```{r}
+# First, let's create a 2019 dataset
+df_2019 <- df_era2 %>%
+  filter(year(date) == 2019)
+
+# Create training data from 2019 (complete cases only)
+train_2019 <- df_2019[complete.cases(df_2019$fch4, df_2019$tsoil, df_2019$swc), ]
+
+# Prepare data for XGBoost training
+train_matrix_2019 <- model.matrix(~ tsoil + swc, data = train_2019)[,-1]
+xgb_train_2019 <- xgb.DMatrix(data = train_matrix_2019, 
+                             label = train_2019$fch4)
+
+# Train XGBoost Model on 2019 data
+xgb_model_2019 <- xgboost(data = xgb_train_2019,
+                         nrounds = 100,
+                         objective = "reg:squarederror")
+
+# Create matrix for entire 2019 dataset to make predictions
+full_matrix_2019 <- model.matrix(~ tsoil + swc, data = df_2019)[,-1]
+
+# Make predictions for all of 2019
+all_predictions_2019 <- predict(xgb_model_2019, full_matrix_2019)
+
+# Create gap-filled column for 2019
+df_2019$fch4_gapfilled <- df_2019$fch4
+df_2019$fch4_gapfilled[is.na(df_2019$fch4)] <- all_predictions_2019[is.na(df_2019$fch4)]
+
+# Print summary of gap-filling
+cat("Number of gaps filled in 2019:", sum(is.na(df_2019$fch4)), "\n")
+
+# Create visualization
+ggplot(df_2019, aes(x = date)) +
+  geom_line(aes(y = fch4_gapfilled), color = "red", alpha = 0.5) +
+  geom_line(aes(y = fch4), color = "black", na.rm = TRUE) +
+  labs(title = "2019 Methane Flux: Measured and Gap-filled Values",
+       x = "Date",
+       y = expression(paste("CH"[4], " Flux")),
+       color = "") +
+  theme_bw() +
+  geom_segment(aes(x = min(date), xend = min(date), 
+                   y = max(fch4_gapfilled, na.rm=TRUE), 
+                   yend = max(fch4_gapfilled, na.rm=TRUE), 
+                   color = "Measured"), 
+               show.legend = TRUE) +
+  geom_segment(aes(x = min(date), xend = min(date), 
+                   y = max(fch4_gapfilled, na.rm=TRUE), 
+                   yend = max(fch4_gapfilled, na.rm=TRUE), 
+                   color = "Gap-filled"), 
+               show.legend = TRUE) +
+  scale_color_manual(values = c("Measured" = "black", "Gap-filled" = "red")) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+# Let's also check model performance on measured values
+measured_indices <- !is.na(df_2019$fch4)
+actual_fch4 <- df_2019$fch4[measured_indices]
+pred_fch4 <- all_predictions_2019[measured_indices]
+
+# Calculate metrics
+rmse <- sqrt(mean((pred_fch4 - actual_fch4)^2))
+r_squared <- 1 - sum((actual_fch4 - pred_fch4)^2) / sum((actual_fch4 - mean(actual_fch4))^2)
+#Results:
+# RMSE: 5.975 
+# R-squared: 0.717 
+
+cat("\nModel Performance on 2019 Data:\n")
+cat("RMSE:", round(rmse, 3), "\n")
+cat("R-squared:", round(r_squared, 3), "\n")
+
+# Linear model summary
+summary(lm(pred_fch4 ~ actual_fch4))
+#Results: R2 = 0.72, slope = 0.63, p<0.001
+
+```
+#XGBoost 2019 predictions on all years
+```{r}
+# Create matrix for the entire dataset
+full_matrix_all_years <- model.matrix(~ tsoil + swc, data = df_era2)[,-1]
+
+# Use 2019-trained model to predict all years
+all_years_predictions <- predict(xgb_model_2019, full_matrix_all_years)
+
+# Create gap-filled column in full dataset
+df_era2$fch4_gapfilled_2019model <- df_era2$fch4  # Keep measured values
+df_era2$fch4_gapfilled_2019model[is.na(df_era2$fch4)] <- all_years_predictions[is.na(df_era2$fch4)]
+
+# Print summary of gap-filling
+cat("Number of gaps filled across all years:", sum(is.na(df_era2$fch4)), "\n")
+#Result: 91231 
+
+# Create visualization
+ggplot(df_era2, aes(x = date)) +
+  geom_line(aes(y = fch4_gapfilled_2019model), color = "red", alpha = 0.5) +
+  geom_line(aes(y = fch4), color = "black", na.rm = TRUE) +
+  labs(title = "Methane Flux: Measured and Gap-filled Values (2019 Model)",
+       subtitle = "Model trained on 2019 data only",
+       x = "Date",
+       y = expression(paste("CH"[4], " Flux")),
+       color = "") +
+  theme_bw() +
+  geom_segment(aes(x = min(date), xend = min(date), 
+                   y = max(fch4_gapfilled_2019model, na.rm=TRUE), 
+                   yend = max(fch4_gapfilled_2019model, na.rm=TRUE), 
+                   color = "Measured"), 
+               show.legend = TRUE) +
+  geom_segment(aes(x = min(date), xend = min(date), 
+                   y = max(fch4_gapfilled_2019model, na.rm=TRUE), 
+                   yend = max(fch4_gapfilled_2019model, na.rm=TRUE), 
+                   color = "Gap-filled"), 
+               show.legend = TRUE) +
+  scale_color_manual(values = c("Measured" = "black", "Gap-filled" = "red")) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+# Calculate performance metrics for all non-NA measured values
+measured_indices_all <- !is.na(df_era2$fch4)
+actual_fch4_all <- df_era2$fch4[measured_indices_all]
+pred_fch4_all <- all_years_predictions[measured_indices_all]
+
+rmse_all <- sqrt(mean((pred_fch4_all - actual_fch4_all)^2))
+r_squared_all <- 1 - sum((actual_fch4_all - pred_fch4_all)^2) / 
+                    sum((actual_fch4_all - mean(actual_fch4_all))^2)
+
+cat("\nModel Performance on All Years:\n")
+cat("RMSE:", round(rmse_all, 3), "\n")
+cat("R-squared:", round(r_squared_all, 3), "\n")
+
+#Result: RMSE = 9, R2 = 0.12 --> so no good for extrapolating across all years 
+
+```
+
+
+
+
+
+
+```{r}
+# Create dataframe for plotting where we have measured values
+comparison_df <- data.frame(
+  measured = df_era2$fch4[measured_indices_all],
+  predicted = all_years_predictions[measured_indices_all]
+)
+
+# Calculate statistics for annotation
+rmse_text <- sprintf("RMSE = %.3f", rmse_all)
+r2_text <- sprintf("R² = %.3f", r_squared_all)
+
+# Create the 1:1 plot with statistics
+ggplot(comparison_df, aes(x = measured, y = predicted)) +
+  geom_point(alpha = 0.5) +  # Points with some transparency
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +  # 1:1 line
+  labs(title = "Measured vs Predicted Methane Flux (2019 Model)",
+       x = expression(paste("Measured CH"[4], " Flux")),
+       y = expression(paste("Predicted CH"[4], " Flux"))) +
+  # Add text annotations for statistics
+  annotate("text", x = min(comparison_df$measured), 
+           y = max(comparison_df$predicted), 
+           label = paste(r2_text, rmse_text, sep = "\n"), 
+           hjust = 0, vjust = 1,
+           size = 4) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  ) +
+  # Make plot square and ensure axes have same limits
+  coord_fixed(ratio = 1) +
+  scale_x_continuous(limits = function(x) c(min(x), max(x))) +
+  scale_y_continuous(limits = function(x) c(min(x), max(x)))
+```
+
+
+
+
+
+
+#XGBoost seasonal predictions 
+
+```{r}
+# Add season-specific colors and plot
+ggplot(cc, aes(x = date)) +
+  geom_line(aes(y = fch4, color = "Measured")) +
+  geom_line(aes(y = pred_fch4, color = "Predicted")) +
+  facet_wrap(~season, scales = "free_x") +
+  scale_color_manual(values = c("Measured" = "black", "Predicted" = "red")) +
+  labs(title = "Measured vs Predicted Methane Flux by Season",
+       x = "Date",
+       y = expression(paste("CH"[4], " Flux")),
+       color = "") +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
