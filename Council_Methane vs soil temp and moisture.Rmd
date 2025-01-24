@@ -3792,6 +3792,81 @@ ggplot(cc, aes(x = date)) +
 ```
 
 
+#OOB ntree for SWC in RF
+
+#Optimal number of trees for SWC (SWC3)
+
+```{r}
+set.seed(123)
+cc_swc = df_era2[complete.cases(df_era2$swc),] #complete swc data only 
+
+#use 80% of data set as training set and 20% as test set
+sample.swc = sample(c(TRUE, FALSE), nrow(cc_swc), replace=TRUE, prob=c(0.8,0.2))
+train.swc  = cc_swc[sample.swc, ]
+test.swc   = cc_swc[!sample.swc, ]
+
+#Make sure the patterns here look similar so you know the training and testing datasets are representative of the overall dataset 
+hist(cc_swc$swc)
+hist(train.swc$swc)
+hist(test.swc$swc)
+
+library(randomForest)
+
+# Function to track OOB error versus number of trees with progress bar --> going to try up to 1k because that's what Jackie found was best in her YK paper 
+oob_error_plot_swc <- function(data, max_trees = 1000, step = 100) {
+    trees <- seq(50, max_trees, by = step)
+    oob_errors_swc <- numeric(length(trees))
+    
+    # Create progress bar
+    pb <- txtProgressBar(min = 0, max = length(trees), style = 3)
+
+   
+    for(i in seq_along(trees)) {
+        rf_swc <- randomForest(swc ~ tair + rh + rg + ws + wd + tsoil + 
+                              vpd + h + le,
+                              data = data,
+                              ntree = trees[i])
+        oob_errors_swc[i] <- rf_swc$mse[trees[i]]
+        
+        # Update progress bar
+        setTxtProgressBar(pb, i)
+    }
+    
+    # Close progress bar
+    close(pb)
+    
+    # Plot OOB error vs number of trees
+    plot(trees, oob_errors_swc, type = "l",
+         xlab = "Number of Trees",
+         ylab = "OOB Mean Squared Error",
+         main = "OOB Error vs Number of Trees for SWC (SWC3)")
+    
+    # Add points to see exact values
+    points(trees, oob_errors_swc, pch = 16)
+    
+    # Return optimal number of trees and error data
+    opt_trees_swc <- trees[which.min(oob_errors_swc)]
+    return(list(optimal_trees_swc = opt_trees_swc, 
+                errors = data.frame(trees = trees, oob = oob_errors_swc)))
+}
+
+# Find optimal number of trees
+opt_results_swc <- oob_error_plot_swc(train.swc)
+print(paste("Optimal number of trees:", opt_results_swc$optimal_trees_swc))
+
+# Print OOB errors for each number of trees
+print("OOB errors for each number of trees for swc:")
+print(opt_results_swc$errors)
+
+#Results: 
+
+
+		
+
+
+
+
+```
 
 
 
