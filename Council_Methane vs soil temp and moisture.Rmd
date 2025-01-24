@@ -3875,7 +3875,7 @@ print(opt_results_swc$errors)
 # 1000	13.28281	
 
 
-Sys.time() - orig #stop timer 
+Sys.time() - orig #stop timer --> took 4.3 hours 
 
 
 ```
