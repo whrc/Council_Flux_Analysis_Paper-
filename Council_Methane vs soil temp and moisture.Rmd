@@ -3797,6 +3797,9 @@ ggplot(cc, aes(x = date)) +
 #Optimal number of trees for SWC (SWC3)
 
 ```{r}
+
+orig = Sys.time()#starting timer
+
 set.seed(123)
 cc_swc = df_era2[complete.cases(df_era2$swc),] #complete swc data only 
 
@@ -3812,9 +3815,9 @@ hist(test.swc$swc)
 
 library(randomForest)
 
-# Function to track OOB error versus number of trees with progress bar --> going to try up to 1k because that's what Jackie found was best in her YK paper 
+# Function to track OOB error versus number of trees with progress bar 
 oob_error_plot_swc <- function(data, max_trees = 1000, step = 100) {
-    trees <- seq(50, max_trees, by = step)
+    trees <- seq(100, max_trees, by = step)
     oob_errors_swc <- numeric(length(trees))
     
     # Create progress bar
@@ -3858,12 +3861,21 @@ print(paste("Optimal number of trees:", opt_results_swc$optimal_trees_swc))
 print("OOB errors for each number of trees for swc:")
 print(opt_results_swc$errors)
 
-#Results: 
+#Results: optimal number of trees is 800*
+# trees oob
+# 100	14.03046			
+# 200	13.52641			
+# 300	13.43767			
+# 400	13.33447			
+# 500	13.40129			
+# 600	13.34920			
+# 700	13.31430			
+# 800	13.23051			
+# 900	13.31164			
+# 1000	13.28281	
 
 
-		
-
-
+Sys.time() - orig #stop timer 
 
 
 ```
