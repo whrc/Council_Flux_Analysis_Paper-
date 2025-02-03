@@ -828,7 +828,7 @@ winter_2019 <- seasons_2019$winter
 growing_2019 <- seasons_2019$growing
 fall_2019 <- seasons_2019$fall
 
-# Can easily do for other years:
+# Easily print results for other years:
 seasons_2018 <- create_seasonal_subsets(df_avg_2018, 2018)
 seasons_2019 <- create_seasonal_subsets(df_avg_2019, 2019)
 seasons_2020 <- create_seasonal_subsets(df_avg_2020, 2020)
