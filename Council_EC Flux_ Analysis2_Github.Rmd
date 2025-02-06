@@ -824,11 +824,160 @@ annual_Cbudget_bargraph <- ggplot(annual_budgets_long, aes(x = factor(year), y =
 annual_Cbudget_bargraph
 
 #save
-ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/yearly_carbon_fluxes.png", annual_Cbudget_bargraph, 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/yearly_carbon_fluxes_bargraph.png", annual_Cbudget_bargraph, 
        width = 10, height = 7, dpi = 600)
 
 
 ```
 
+#***Adjusting the winter methane budget --> 98% of growing season CH4 flux --> new table to plot 
 
+```{r}
+#Load annual and seasonal tables with adjusted winter methane 
+install.packages("readxl")
+library("readxl")
+# 
+# adj_C_budgets = fread("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Seasonal_Cbudgets_Table_all_years_for_paper.xlsx",na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+adj_C_budgets <- read_xlsx(path ="C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Seasonal_Cbudgets_Table_all_years_for_paper.xlsx", sheet = "R template" )
+
+# Reshape data for plotting
+adj_C_budgets_long<- adj_C_budgets %>%
+  pivot_longer(cols = c(Net_CO2, Net_CH4_adj, Total_Net_C),
+               names_to = "flux_type",
+               values_to = "flux")
+
+
+```
+
+#Plot of budgets with winter-adj CH4 --> not redoing CO2 as those budgets should remain the same 
+```{r}
+#Seasonal patterns - winter-adj CH4
+
+#Seasonal budgets for CH4
+adj_seasonal_budgets_CH4 <- ggplot(adj_C_budgets %>% 
+                                    filter(Season != "Annual"), #takes out "annual" as a season
+                                  aes(x = factor(Year), y = Net_CH4_adj, fill = Season)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  #labs(title = "Seasonal CH4 Budgets by Year",
+  labs(title = expression(bold(Net~Seasonal~CH[4]~Flux~by~Year)),
+       x = "Year",
+       fill = "Season",
+       #y = "CO2 Budget (gC/m²/season)") +
+   y = expression(bold(Net~CH[4]~Flux~(gC/m^2/season)))) +
+     scale_fill_manual(values = c("brown4", "darkgreen", "steelblue1", "grey")) +
+     scale_y_continuous(
+      limits = c(0, 2.5),  # Adjust these limits as needed
+      breaks = seq(0, 2.5, by = 0.5))+
+  theme_bw() +
+  theme(
+    # axis.text.x = element_text(size = 14, face = "bold"),
+    #  axis.text.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 12, face = "bold"),
+      axis.title = element_text(size = 14, face = "bold"))
+
+adj_seasonal_budgets_CH4
+
+#Save CH4 seasonal budgets 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adj_seasonal_budgets_CH4.png", adj_seasonal_budgets_CH4, 
+       width = 10, height = 7, dpi = 600)
+```
+
+#bar graph of seasonal budgets 
+```{r}
+#bar graph of net CH4, CO2, and total C without labels above bars 
+
+adj_annual_Cbudget_bargraph <- ggplot(adj_C_budgets_long %>%
+                                        filter(Season == "Annual"),
+                                               aes(x = factor(Year), y = flux, fill = flux_type)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  labs(title = "Annual Net Carbon Flux by Year",
+       x = "Year",
+       y = expression(Net~C~Flux~(gC/m^2/year)),
+       fill = "Flux Type") +
+  scale_fill_manual(values = c("salmon", "turquoise", "grey"),
+                    labels = c(expression(CH[4]), expression(CO[2]), "Total C")) +
+   scale_y_continuous(
+        breaks = seq(-15, 45, 10),
+        limits = c(-15, 45)) +  # Slightly increased upper limit to accommodate labels
+  theme_bw()+
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 12, face = "bold"),
+      axis.title = element_text(size = 14, face = "bold"))
+
+adj_annual_Cbudget_bargraph
+
+#save
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adj_yearly_carbon_fluxes.png", adj_annual_Cbudget_bargraph, 
+       width = 10, height = 7, dpi = 600)
+```
+
+#gridded bar graph of budgets with winter-adj methane 
+```{r}
+
+# Load required packages
+library(gridExtra)
+library(grid)
+
+# Create separate plots for each year using lapply
+# lapply applies the same function to each year (2017:2022)
+adj_yearly_plots <- lapply(2017:2022, function(yr) {
+  ggplot(adj_C_budgets_long %>% filter(Year == yr) %>%
+              filter(Season == "Annual"),
+         aes(x = flux_type, y = flux)) +
+    geom_bar(stat = "identity", fill = "#00BFC4") +
+    geom_label(aes(label = round(flux, 2),
+                   # Put the vjust logic inside aes()
+                   vjust = ifelse(flux < 0, 
+                                ifelse(flux_type == "CO2", 2.5, 2), #adjusts the neg CO2 value neatly under bar
+                                -0.5)),
+              hjust = 0.5,
+              size = 3.5,
+              label.padding = unit(0.2, "lines"),
+              fill = "white",
+              colour = "black") +
+    # Set plot labels
+    labs(title = as.character(yr),
+         x = "",
+         y = "") +  # Remove y-axis label since we'll have a shared one
+    # Use clean theme
+    theme_bw() +
+    # Add this line to change x-axis labels
+    scale_x_discrete(labels = c(expression(bold(CH[4])), expression(bold(CO[2])), expression(bold("Total C")))) +
+       # Customize theme elements
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 14, face = "bold"), ## This will make all axis text bold
+      axis.title = element_text(size = 16, face = "bold"),
+      panel.grid.major = element_line(color = "grey90"),
+      panel.grid.minor = element_line(color = "grey95")
+    ) +
+    # Set y-axis limits and breaks
+    scale_y_continuous(
+      limits = c(-20, 50),
+      breaks = seq(-20, 50, by = 10)
+    )
+})
+
+# Create the grid arrangement with shared y-axis label
+adj_grid_arranged <- arrangeGrob(
+  grobs = adj_yearly_plots,
+  ncol = 2,  # Arrange plots in 2 columns
+  # Add shared y-axis label, rotated 90 degrees
+  left = textGrob(expression(Net~Carbon~Flux~(gC~m^-2~y^-1)), 
+                  rot = 90,
+                  gp = gpar(fontsize = 30))
+)
+
+# Display the arranged grid
+grid.arrange(adj_grid_arranged)
+
+#save
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adj_yearly_carbon_fluxes.png", adj_grid_arranged, 
+       width = 10, height = 15, dpi = 600)
+
+
+```
 
