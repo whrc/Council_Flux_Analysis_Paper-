@@ -217,14 +217,6 @@ year_df <- function(df, year) {
     mutate(DOY = yday(date))
 }
 
-
-#for orig dataset using SWC1
-
-# year_df2 <- function(df, year) {
-#   dforig %>%
-#     filter(format(date, "%Y") == as.character(year)) %>%
-#     mutate(DOY = yday(date))
-# }
 ```
 
 #Creates data frames of each year containing the daily averages of each value- useful for focusing on one year at a time
@@ -288,56 +280,32 @@ ggplot(data = df) +
 
 
 ```
+#***Annual budgets, seasonal budgets, figures, and correlations using daily avg df_avg
 
-#Seasonal and annual summaries of CO2, CH4, TS_3, and SWC_3
+#Seasonal and annual summaries of CO2, CH4, soil temp, air temp, swc, and ERA5
+
+#Adding in annual and seasonal total C budgets (sum of CO2 and CH4) - using daily avg data since HH and daily avg agreed in previous code chunks 
+
+#Creating seasonal and annual total C budget tables 
 ```{r}
 # Load necessary packages
 library(dplyr)
 library(ggplot2)
 library(lubridate)
 
-#annual summaries of CO2 and CH4 fluxes
-annual_budgets <- df_avg %>%
-  group_by(year = year(date)) %>%
-  summarize(
-    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
-    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
-    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
-    mean_TS_ERA5 = mean (TS_ERA5, na.rm = TRUE),
-    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
-    mean_TA = mean(TA, na.rm = TRUE),
-    mean_TA_ERA5 = mean(TA_ERA5, na.rm = TRUE)
-  )
+#Annual and seasonal summaries with SE 
 
-#seasonal summaries
-seasonal_budgets <- df_avg %>%
-  group_by(year = year(date), season) %>%
-  summarize(
-    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
-    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
-    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
-    mean_TS_ERA5 = mean (TS_ERA5, na.rm = TRUE),
-    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
-    mean_TA = mean(TA, na.rm = TRUE),
-    mean_TA_ERA5 = mean(TA_ERA5, na.rm = TRUE),
-    days = n()
-  )
-
-print(annual_budgets)
-print(seasonal_budgets)
-```
-
-
-#Annual and seaosnal summaries with SE 
-```{r}
 #no SE for CO2 and CH4 fluxes as these are sums **** then we calc averages with SE for the met variables 
 
 # Annual summaries with standard errors
+# Annual summaries with total C budget
 annual_budgets <- df_avg %>%
   group_by(year = year(date)) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
   summarize(
     CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
     CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
     mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
     se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
     mean_TS_ERA5 = mean(TS_ERA5, na.rm = TRUE),
@@ -350,12 +318,14 @@ annual_budgets <- df_avg %>%
     se_TA_ERA5 = sd(TA_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TA_ERA5)))
   )
 
-# Seasonal summaries with standard errors
+# Seasonal summaries with total C budget
 seasonal_budgets <- df_avg %>%
   group_by(year = year(date), season) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
   summarize(
     CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
     CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
     mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
     se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
     mean_TS_ERA5 = mean(TS_ERA5, na.rm = TRUE),
@@ -372,75 +342,154 @@ seasonal_budgets <- df_avg %>%
 print(annual_budgets)
 print(seasonal_budgets)
 ```
-
-
-#***Annual budgets, seasonal budgets, figures, and correlations using daily avg df_avg
+#Save table of annual and/or seasonal budgets 
 ```{r}
-# Load necessary packages
-library(dplyr)
-library(ggplot2)
-library(lubridate)
-library(tidyr)
+# Save as a nicely formatted table using kableExtra from knitr package 
+# good for a publication or report --> creates HTML table, but not as customize-able as if you were to make it in Excel 
 
-# Calculate annual budgets
-annual_budgets <- df_avg %>%
-  group_by(year = year(date)) %>%
-  filter(year != 2023) %>% #removing 2023 due to incomplete seasons 
-  summarize(
-    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
-    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
-    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
-    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
-    mean_air_temp = mean(TA, na.rm = TRUE),
-    mean_wind_speed = mean(WS, na.rm = TRUE),
-    total_days = n()
-  )
+install.packages("kableExtra") 
 
-# Calculate seasonal budgets
-seasonal_budgets <- df_avg %>%
-  group_by(year = year(date), season) %>%
-  filter(year != 2023) %>% #removing 2023 due to incomplete seasons 
-  summarize(
-    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
-    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
-    GPP_sum = sum(GPP_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
-    RECO_sum = sum(RECO_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
-    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
-    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
-    mean_air_temp = mean(TA, na.rm = TRUE),
-    mean_wind_speed = mean(WS, na.rm = TRUE),
-    days = n()
-  )
+library(kableExtra)
 
+#Seasonal budgets 
+
+seasonal_budgets %>%
+  kable(digits = 2) %>%  # rounds numbers to 2 decimal places
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  save_kable("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_formatted.html")
+
+#Write table to Excel file:
+# First install if needed:
+install.packages("writexl")
+
+library(writexl)
+write_xlsx(seasonal_budgets, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets.xlsx")
+
+#Write table to CSV
+# base R, no additional packages needed)
+write.csv(seasonal_budgets, "seasonal_budgets.csv", row.names = FALSE)
+
+
+# Create a new table with combined mean ± SE format
+seasonal_budgets_formatted <- seasonal_budgets %>%
+  mutate(
+    soil_temp = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    soil_moisture = sprintf("%.2f ± %.2f", mean_soil_moisture, se_soil_moisture),
+    air_temp = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    TS_ERA5 = sprintf("%.2f ± %.2f", mean_TS_ERA5, se_TS_ERA5),
+    TA_ERA5 = sprintf("%.2f ± %.2f", mean_TA_ERA5, se_TA_ERA5)
+  ) %>%
+  select(year, season, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5, days)
+
+# Save to Excel
+write_xlsx(seasonal_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_formatted2.xlsx")
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Annual budgets 
+# Create a new table with combined mean ± SE format
+annual_budgets_formatted <- annual_budgets %>%
+  mutate(
+    soil_temp = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    soil_moisture = sprintf("%.2f ± %.2f", mean_soil_moisture, se_soil_moisture),
+    air_temp = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    TS_ERA5 = sprintf("%.2f ± %.2f", mean_TS_ERA5, se_TS_ERA5),
+    TA_ERA5 = sprintf("%.2f ± %.2f", mean_TA_ERA5, se_TA_ERA5)
+  ) %>%
+  select(year, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5)
+
+# Save to Excel
+write_xlsx(annual_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_budgets_formatted.xlsx")
+
+```
+
+
+
+
+#Plot annual and seasonal budgets 
+```{r}
 # Create visualizations
 
-# 1. Annual CO2 and CH4 budgets
+# 1. Annual CO2 budget
 ggplot(annual_budgets, aes(x = factor(year))) +
   geom_bar(aes(y = CO2_budget), stat = "identity", fill = "steelblue") +
   geom_text(aes(y = CO2_budget, label = round(CO2_budget, 1)), vjust = -0.5) +
   labs(title = "Annual CO2 Budget by Year",
        x = "Year",
-       y = "CO2 Budget (gC/m²/year)") +
+      # y = "CO2 Budget (gC/m²/year)") +
+  y = expression(CO[2]~Budget~(gC/m^2/year))) +
   theme_bw()
 
+#Annual budget for CH4
 ggplot(annual_budgets, aes(x = factor(year))) +
   geom_bar(aes(y = CH4_budget), stat = "identity", fill = "darkgreen") +
   geom_text(aes(y = CH4_budget, label = round(CH4_budget, 2)), vjust = -0.5) +
   labs(title = "Annual CH4 Budget by Year",
        x = "Year",
-       y = "CH4 Budget (gC/m²/year)") +
+      # y = "CH4 Budget (gC/m²/year)") +
+  y = expression(CH[4]~Budget~(gC/m^2/year))) +
   theme_bw()
 
-# 2. Seasonal patterns
-# Create seasonal budget plots
-ggplot(seasonal_budgets, aes(x = factor(year), y = CO2_budget, fill = season)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  labs(title = "Seasonal CO2 Budgets by Year",
-       x = "Year",
-       y = "CO2 Budget (gC/m²/season)") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+# 2. Seasonal patterns
+
+# Create seasonal budget plots for CO2
+seasonal_budgets_CO2 <- ggplot(seasonal_budgets, aes(x = factor(year), y = CO2_budget, fill = season)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_hline(yintercept=0, colour = "black")+ 
+  labs(title = expression(bold(Net~Seasonal~CO[2]~Flux~by~Year)),
+       x = "Year",
+        fill = "Season",
+       #y = "CO2 Budget (gC/m²/season)") +
+   y = expression(bold(Net~CO[2]~Flux~(gC/m^2/season)))) +
+  scale_fill_manual(values = c("brown4", "darkgreen", "steelblue1"))+
+   scale_y_continuous(
+      limits = c(-125, 125),  # Adjust these limits as needed
+      breaks = seq(-125, 125, by = 25))+
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 14, face = "bold"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+                                  axis.text = element_text(size = 12, face = "bold"),
+                                  axis.title = element_text(size = 14, face = "bold"))
+
+  print(seasonal_budgets_CO2)
+
+#Seasonal budgets for CH4
+seasonal_budgets_CH4 <- ggplot(seasonal_budgets, aes(x = factor(year), y = CH4_budget, fill = season)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  #labs(title = "Seasonal CH4 Budgets by Year",
+  labs(title = expression(bold(Net~Seasonal~CH[4]~Flux~by~Year)),
+       x = "Year",
+       fill = "Season",
+       #y = "CO2 Budget (gC/m²/season)") +
+   y = expression(bold(Net~CH[4]~Flux~(gC/m^2/season)))) +
+     scale_fill_manual(values = c("brown4", "darkgreen", "steelblue1")) +
+     scale_y_continuous(
+      limits = c(0, 2.5),  # Adjust these limits as needed
+      breaks = seq(0, 2.5, by = 0.5))+
+  theme_bw() +
+  theme(
+    # axis.text.x = element_text(size = 14, face = "bold"),
+    #  axis.text.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 12, face = "bold"),
+      axis.title = element_text(size = 14, face = "bold"))
+
+print(seasonal_budgets_CH4)
+
+#Save CO2 seasonal budgets 
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_CO2.png", seasonal_budgets_CO2, 
+       width = 10, height = 7, dpi = 600)
+
+
+#Save CH4 seasonal budgets 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_CH4.png", seasonal_budgets_CH4, 
+       width = 10, height = 7, dpi = 600)
+```
+
+#Environmental correlation matrix 
+```{r}
 # 3. Environmental relationships
 # Create a correlation plot between fluxes and environmental variables
 env_flux_daily <- df_avg %>%
@@ -468,18 +517,19 @@ ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
   scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Correlation Matrix of Fluxes and Environmental Variables")
+  labs(title = "Correlation Matrix of Fluxes and Environmental Variables using daily avg data")
 ```
+
 #Same as above but using the HH data 
 ```{r}
-# Load necessary packages
-library(dplyr)
-library(ggplot2)
-library(lubridate)
-library(tidyr)
+# # Load necessary packages
+# library(dplyr)
+# library(ggplot2)
+# library(lubridate)
+# library(tidyr)
 
 # Calculate annual budgets
-annual_budgets <- df %>%
+annual_budgets_HH <- df %>%
   group_by(year = year(date)) %>%
   filter(year != 2023) %>%
   summarize(
@@ -493,7 +543,7 @@ annual_budgets <- df %>%
   )
 
 # Calculate seasonal budgets
-seasonal_budgets <- df %>%
+seasonal_budgets_HH <- df %>%
   group_by(year = year(date), season) %>%
   filter(year != 2023) %>%
   summarize(
@@ -511,7 +561,7 @@ seasonal_budgets <- df %>%
 # Create visualizations
 
 # 1. Annual CO2 and CH4 budgets
-ggplot(annual_budgets, aes(x = factor(year))) +
+ggplot(annual_budgets_HH, aes(x = factor(year))) +
   geom_bar(aes(y = CO2_budget), stat = "identity", fill = "steelblue") +
   geom_text(aes(y = CO2_budget, label = round(CO2_budget, 1)), vjust = -0.5) +
   labs(title = "Annual CO2 Budget by Year",
@@ -519,7 +569,7 @@ ggplot(annual_budgets, aes(x = factor(year))) +
        y = "CO2 Budget (gC/m²/year)") +
   theme_bw()
 
-ggplot(annual_budgets, aes(x = factor(year))) +
+ggplot(annual_budgets_HH, aes(x = factor(year))) +
   geom_bar(aes(y = CH4_budget), stat = "identity", fill = "darkgreen") +
   geom_text(aes(y = CH4_budget, label = round(CH4_budget, 2)), vjust = -0.5) +
   labs(title = "Annual CH4 Budget by Year",
@@ -529,7 +579,7 @@ ggplot(annual_budgets, aes(x = factor(year))) +
 
 # 2. Seasonal patterns
 # Create seasonal budget plots
-ggplot(seasonal_budgets, aes(x = factor(year), y = CO2_budget, fill = season)) +
+ggplot(seasonal_budgets_HH, aes(x = factor(year), y = CO2_budget, fill = season)) +
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Seasonal CO2 Budgets by Year",
        x = "Year",
@@ -539,28 +589,246 @@ ggplot(seasonal_budgets, aes(x = factor(year), y = CO2_budget, fill = season)) +
 
 # 3. Environmental relationships
 # Create a correlation plot between fluxes and environmental variables
-env_flux_daily <- df_avg %>%
-  select(FC_F, FCH4_F, TS_3_1_1, SWC_3_1_1, TA, WS) %>%
+env_flux_daily_HH <- df %>%
+  select(FC_F, FCH4_F, TS_3_1_1, SWC_3_1_1, TA, WS, WD, TA_ERA5, TS_ERA5) %>%
   rename(
     CO2_flux = FC_F,
     CH4_flux = FCH4_F,
     Soil_temp = TS_3_1_1,
     Soil_moisture = SWC_3_1_1,
     Air_temp = TA,
-    Wind_speed = WS
+    Wind_speed = WS,
+    Wind_Direction = WD,
+    Air_temp_ERA5 = TA_ERA5,
+    Soil_temp_ERA5 = TS_ERA5
   )
 
-cor_matrix <- cor(env_flux_daily, use = "complete.obs")
+cor_matrix_HH <- cor(env_flux_daily_HH, use = "complete.obs")
 
 # Convert correlation matrix to long format for plotting
-cor_long <- as.data.frame(as.table(cor_matrix))
-names(cor_long) <- c("Var1", "Var2", "Correlation")
+cor_long_HH <- as.data.frame(as.table(cor_matrix_HH))
+names(cor_long_HH) <- c("Var1", "Var2", "Correlation")
 
-ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+ggplot(cor_long_HH, aes(x = Var1, y = Var2, fill = Correlation)) +
   geom_tile() +
   scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Correlation Matrix of Fluxes and Environmental Variables")
+  labs(title = "Correlation Matrix of Fluxes and Environmental Variables using HH data")
 ```
+
+
+
+#Annual total C and Seasonal C flux plots 
+```{r}
+# Create visualization for annual total C budget
+ggplot(annual_budgets, aes(x = factor(year))) +
+  geom_bar(aes(y = total_C_budget), stat = "identity", fill = "purple") +
+  geom_text(aes(y = total_C_budget, label = round(total_C_budget, 1)), vjust = -0.5) +
+  labs(title = "Annual Total Carbon Budget by Year",
+       x = "Year",
+       y = expression(Total~C~Budget~(gC/m^2/year))) +
+  theme_bw()
+
+# Create visualization for seasonal total C budget
+ggplot(seasonal_budgets, aes(x = factor(year), y = total_C_budget, fill = season)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(y = total_C_budget, label = round(total_C_budget, 1)), 
+           # vjust = -0.5, 
+            vjust = ifelse(seasonal_budgets$total_C_budget < 0, 1.5, -0.5), #this neatly aligns the label with the corresponding bar
+            position = position_dodge(width = 0.9),  ) +
+  labs(title = "Seasonal Total Carbon Budgets by Year",
+       x = "Year",
+       y = expression(Total~C~Budget~(gC/m^2/season))) +
+     scale_y_continuous(
+      limits = c(-150, 150),  # Adjust these limits as needed
+      breaks = seq(-150, 150, by = 50))+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+#Save yearly images individually 
+```{r}
+# Function to Save individual plots as individual images
+for(i in seq_along(yearly_plots)) {
+  ggsave(
+    filename = paste0("carbon_budget_", 2016+i, ".png"),
+    plot = yearly_plots[[i]],
+    width = 8,
+    height = 6,
+    dpi = 300
+  )
+}
+
+```
+
+#Total carbon flux by year gridded figure with shared axis label 
+```{r}
+# Load required packages
+library(gridExtra)
+library(grid)
+
+# Create separate plots for each year using lapply
+# lapply applies the same function to each year (2017:2022)
+yearly_plots <- lapply(2017:2022, function(yr) {
+  ggplot(annual_budget_long %>% filter(year == yr), 
+         aes(x = flux_type, y = flux)) +
+    geom_bar(stat = "identity", fill = "#00BFC4") +
+    geom_label(aes(label = round(flux, 2),
+                   # Put the vjust logic inside aes()
+                   vjust = ifelse(flux < 0, 
+                                ifelse(flux_type == "CO2", 2.5, 2), #adjusts the neg CO2 value neatly under bar
+                                -0.5)),
+              hjust = 0.5,
+              size = 3.5,
+              label.padding = unit(0.2, "lines"),
+              fill = "white",
+              colour = "black") +
+    # Set plot labels
+    labs(title = as.character(yr),
+         x = "",
+         y = "") +  # Remove y-axis label since we'll have a shared one
+    # Use clean theme
+    theme_bw() +
+    # Customize theme elements
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 14, face = "bold"),
+      axis.title = element_text(size = 16, face = "bold"),
+      panel.grid.major = element_line(color = "grey90"),
+      panel.grid.minor = element_line(color = "grey95")
+    ) +
+    # Set y-axis limits and breaks
+    scale_y_continuous(
+      limits = c(-20, 50),
+      breaks = seq(-20, 50, by = 10)
+    )
+})
+
+# Create the grid arrangement with shared y-axis label
+grid_arranged <- arrangeGrob(
+  grobs = yearly_plots,
+  ncol = 2,  # Arrange plots in 2 columns
+  # Add shared y-axis label, rotated 90 degrees
+  left = textGrob(expression(Net~Carbon~Flux~(gC~m^-2~y^-1)), 
+                  rot = 90,
+                  gp = gpar(fontsize = 30))
+)
+
+# Display the arranged grid
+grid.arrange(grid_arranged)
+
+#save
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/yearly_carbon_fluxes.png", grid_arranged, 
+       width = 10, height = 15, dpi = 600)
+
+
+```
+
+#Bar graph of net CO2, CH4, and total C fluxes 
+
+```{r}
+# Reshape data for plotting
+annual_budgets_long <- annual_budgets %>%
+  select(year, CO2_budget, CH4_budget, total_C_budget) %>%
+  pivot_longer(cols = c(CO2_budget, CH4_budget, total_C_budget),
+               names_to = "flux_type",
+               values_to = "flux")
+
+
+# Create plot with perfectly aligned boxed labels for CO2 and CH4 
+ggplot(annual_budgets_long, aes(x = factor(year), y = flux, fill = gas_type)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  geom_label(aes(label = round(budget, 1), group = flux_type), # Added group aesthetic
+            position = position_dodge(width = 0.9),            # Match dodge width with bars
+            vjust = ifelse(annual_budgets_long$budget < 0, 1.5, -0.5),
+            hjust = 0.5,
+            size = 3.5,
+            label.padding = unit(0.2, "lines"),
+            fill = "white",
+            colour = "black") +
+  labs(title = "Annual Carbon Budget by Year",
+       x = "Year",
+       y = expression(C~Budget~(gC/m^2/year)),
+       fill = "Flux Type") +
+  scale_fill_manual(values = c("salmon", "turquoise"),
+                    labels = c(expression(CH[4]), expression(CO[2]))) +
+   scale_y_continuous(
+        breaks = seq(-20, 50, 10),  # Set limits for the primary axis - other years go up to -73
+    limits = c(-20, 50))+ 
+  theme_bw()
+
+
+# Bar graph with CO2, CH4, and total C annual budgets with labeled flux values 
+ggplot(annual_budgets_long, aes(x = factor(year), y = flux, fill = flux_type)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  # geom_label(aes(label = round(flux, 1), group = flux_type),
+  #           position = position_dodge(width = 0.9),
+  #           hjust = 0.5,
+               #vjust = ifelse(annual_budget_long$flux < 0, 2.5, -0.5), #adjust all labels 
+               # vjust = ifelse(annual_budget_long$flux < 0, 2.5,  # for negative values; if below 0, set label positioned 2 units below the bar for negative values
+            geom_label(aes(label = round(flux, 1), group = flux_type),
+            position = position_dodge(width = 0.9),
+            hjust = 0.5,
+            vjust = case_when(
+              # For CO2 fluxes
+              annual_budget_long$flux_type == "CO2" & annual_budget_long$flux < 0 ~ 1.8,  # negative CO2
+              annual_budget_long$flux_type == "CO2" & annual_budget_long$flux >= 0 ~ -0.5,  # positive CO2
+              # For Total fluxes
+              annual_budget_long$flux_type == "Total" & annual_budget_long$flux < 0 ~ 1.2, # negative Total
+              annual_budget_long$flux_type == "Total" & annual_budget_long$flux >= 0 ~ -1, # positive Total
+              # For CH4 fluxes (all cases)
+              annual_budget_long$flux_type == "CH4" ~ -0.5
+            ),
+            size = 3.5,
+            label.padding = unit(0.2, "lines"),
+            fill = "white",
+            colour = "black") +
+  labs(title = "Annual Carbon Budget by Year",
+       x = "Year",
+       y = expression(C~Budget~(gC/m^2/year)),
+       fill = "Flux Type") +
+  scale_fill_manual(values = c("salmon", "turquoise", "grey"),
+                    labels = c(expression(CH[4]), expression(CO[2]), "Total C")) +
+   scale_y_continuous(
+        breaks = seq(-20, 50, 10),
+        limits = c(-20, 55)) +  # Slightly increased upper limit to accommodate labels
+  theme_bw()+
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 12, face = "bold"),
+      axis.title = element_text(size = 14, face = "bold"))
+
+
+
+#bar graph of net CH4, CO2, and total C without labels above bars 
+
+annual_Cbudget_bargraph <- ggplot(annual_budgets_long, aes(x = factor(year), y = flux, fill = flux_type)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  labs(title = "Annual Net Carbon Flux by Year",
+       x = "Year",
+       y = expression(Net~C~Flux~(gC/m^2/year)),
+       fill = "Flux Type") +
+  scale_fill_manual(values = c("salmon", "turquoise", "grey"),
+                    labels = c(expression(CH[4]), expression(CO[2]), "Total C")) +
+   scale_y_continuous(
+        breaks = seq(-15, 45, 10),
+        limits = c(-15, 45)) +  # Slightly increased upper limit to accommodate labels
+  theme_bw()+
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 12, face = "bold"),
+      axis.title = element_text(size = 14, face = "bold"))
+
+annual_Cbudget_bargraph
+
+#save
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/yearly_carbon_fluxes.png", annual_Cbudget_bargraph, 
+       width = 10, height = 7, dpi = 600)
+
+
+```
+
+
 
