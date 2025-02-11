@@ -11,16 +11,6 @@ knitr::opts_chunk$set(echo = TRUE)
 #Notes on site: Wind direction primarily blows from NW, except for Dec - Mar, when it primarily blows from SE direction. The site is largely tussock tundra but to the south there is thermokarst 
 
 
-## based on Dani's Churchill CO2 Analysis code on github 
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
-# add root directory here for github
-```
-
-Notes:
-
 ```{r, include=FALSE}
 rm(list = ls())
 
@@ -487,8 +477,9 @@ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper
 ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_CH4.png", seasonal_budgets_CH4, 
        width = 10, height = 7, dpi = 600)
 ```
+#Correlation matrix 
 
-#Environmental correlation matrix 
+####Flux v Environmental correlation matrix 
 ```{r}
 # 3. Environmental relationships
 # Create a correlation plot between fluxes and environmental variables
@@ -514,11 +505,126 @@ names(cor_long) <- c("Var1", "Var2", "Correlation")
 
 ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
   geom_tile() +
-  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
-  theme_minimal() +
+  scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 0,
+                        limits = c(-1, 1)) +  # Add this to set the full range to be 1 to -1
+  theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Correlation Matrix of Fluxes and Environmental Variables using daily avg data")
+  theme(axis.text = element_text(size = 12, face = "bold"),
+       plot.title = element_text(size = 14, face = "bold", hjust = 0.5)) +                 
+  labs(title = "Correlation Matrix of C Fluxes and Environmental Variables")
+   
+
+#save
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/flux_correlation_matrix_allyears.png", 
+       width = 7, height = 5, dpi = 600)
 ```
+#Correlation matrix - adj color breaks and adding values to the tiles 
+```{r}
+# Option 1: Regular breaks from -1 to 1
+ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile() +
+  # Add correlation values to tiles
+  geom_text(aes(label = sprintf("%.2f", Correlation)), 
+            size = 3) +  # Adjust size as needed
+  scale_fill_gradient2(low = "red", 
+                      mid = "white", 
+                      high = "blue", 
+                      midpoint = 0,
+                      limits = c(-1, 1),
+                      breaks = seq(-1, 1, by = 0.2)) +  # Creates breaks every 0.2
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(size = 12, face = "bold"),
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5)) +                 
+  labs(title = "Correlation Matrix of C Fluxes and Environmental Variables")
+
+
+# Option 2: Custom breaks at key values - can make figure look a bit clunky 
+ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile() +
+  # Add correlation values with conditional formatting
+  geom_text(aes(label = sprintf("%.2f", Correlation),
+                color = abs(Correlation) < 0.5), # Changes text color based on correlation strength
+            size = 3) +
+  scale_fill_gradient2(low = "red", 
+                      mid = "white", 
+                      high = "blue", 
+                      midpoint = 0,
+                      limits = c(-1, 1),
+                      breaks = c(-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1)) +
+  scale_color_manual(values = c("white", "black"), guide = "none") +  # For text visibility
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(size = 12, face = "bold"),
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5)) +                 
+  labs(title = "Correlation Matrix of C Fluxes and Environmental Variables")
+
+
+# Option 3: Fewer breaks for a cleaner look, only labels corr values above 0.3
+ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile() +
+  # Add correlation values only for strong correlations
+  geom_text(data = subset(cor_long, abs(Correlation) > 0.3),  # Only show stronger correlations
+            aes(label = sprintf("%.2f", Correlation),
+                 color = abs(Correlation) < 0.5), # Changes text color based on correlation strength
+            size = 3,
+            fontface = "bold") + #to make numbers in tiles bold
+  scale_fill_gradient2(low = "red", 
+                      mid = "white", 
+                      high = "blue", 
+                      midpoint = 0,
+                      limits = c(-1, 1),
+                      breaks = c(-1, -0.5, 0, 0.5, 1)) +
+    scale_color_manual(values = c("white", "black"), guide = "none") +  # For text visibility
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(size = 12, face = "bold"),
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5)) +                 
+  labs(title = "Correlation Matrix of C Fluxes and Environmental Variables")
+
+#save
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/flux_correlation_matrix_allyears2.png", 
+       width = 7, height = 5, dpi = 600)
+
+
+#Option 4: simple heatmap style correlation matrix visual 
+install.packages("lattice")
+print(cor_matrix)
+
+library(ggplot2)
+ggplot(data = cor_long, aes(x=Var1, y=Var2,
+                                   fill=Correlation)) + 
+geom_tile()+
+    scale_fill_gradient2(
+                      limits = c(-1, 1),
+                      breaks = c(-1, -0.5, 0, 0.5, 1)) 
+
+
+
+
+ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile() +
+  # Add correlation values only for strong correlations
+  geom_text(data = subset(cor_long, abs(Correlation) > 0.3),  # Only show stronger correlations
+            aes(label = sprintf("%.2f", Correlation),
+                 color = abs(Correlation) < 0.5), # Changes text color based on correlation strength
+            size = 3,
+            fontface = "bold") + #to make numbers in tiles bold
+  scale_fill_gradient2(low = "red", 
+                      mid = "white", 
+                      high = "blue", 
+                      midpoint = 0,
+                      limits = c(-1, 1),
+                      breaks = c(-1, -0.5, 0, 0.5, 1)) +
+    scale_color_manual(values = c("white", "black"), guide = "none") +  # For text visibility
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(size = 12, face = "bold"),
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5)) +                 
+  labs(title = "Correlation Matrix of C Fluxes and Environmental Variables")
+
+```
+
 
 #Same as above but using the HH data 
 ```{r}
@@ -980,4 +1086,29 @@ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper
 
 
 ```
+#Daily avg NEE flux per season
+```{r}
+# Calculate daily average CO2 flux (FC_F) by season with standard error
+seasonal_NEE_summary <- df_avg %>%
+  group_by(year, season) %>%
+  summarize(
+    mean_flux = mean(FC_F, na.rm = TRUE),
+    se_flux = sd(FC_F, na.rm = TRUE)/sqrt(sum(!is.na(FC_F))),
+    n_days = n()  # number of days per season
+  )
+
+# Format the results with mean ± SE
+seasonal_NEE_formatted <- seasonal_NEE_summary %>%
+  mutate(
+    flux = sprintf("%.2f ± %.2f", mean_flux, se_flux)
+  ) %>%
+  select(season, flux, n_days)
+         
+seasonal_NEE_formatted
+
+# Save to Excel
+library(writexl)
+write_xlsx(seasonal_NEE_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_NEE_summary.xlsx")
+```
+
 
