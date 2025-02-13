@@ -180,7 +180,6 @@ library(openair)
 ```
 
 ```{r}
-
 # Create a windRose plot for basic wind patterns
 # prepare the data with wind speed and direction
 wind_data <- df_avg %>%
@@ -188,8 +187,18 @@ wind_data <- df_avg %>%
   rename(ws = WS,
          wd = WD)
 
+#*Note: openair / WindRose function doesn't create a ggplot object, so you can't save with ggsave 
+
 # Basic wind rose
-windRose(wind_data)
+ windRose(wind_data,
+           main = "Wind Direction all years")
+
+# alt method for saving image: Create PNG directly
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_windrose_allyears.png",
+    width = 10, height = 7, units = "in", res = 600)
+windRose(wind_data, main = "Wind Direction all years")
+dev.off()
+
 
 # create pollution roses for CO2 and CH4 fluxes
 #create dataset 
@@ -203,25 +212,60 @@ flux_wind_data <- df_avg %>%
          CH4 = FCH4)
 
 # CO2 flux pollution rose - not gapfilled 
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CO2_pollutionrose.png",
+    width = 10, height = 7, units = "in", res = 600)
+
 pollutionRose(flux_wind_data, pollutant = "CO2", 
               key.position = "right",
               main = "CO2 Flux by Wind Direction")
 
+dev.off()
+
 # CH4 flux pollution rose
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CH4_pollutionrose.png",
+    width = 10, height = 7, units = "in", res = 600)
+
 pollutionRose(flux_wind_data, pollutant = "CH4",
               key.position = "right",
               main = "CH4 Flux by Wind Direction")
+
+dev.off()
 
 #Gapfilled C fluxes
-pollutionRose(flux_wind_data, pollutant = "CO2", 
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CO2_GF_pollutionrose.png",
+    width = 10, height = 7, units = "in", res = 600)
+
+pollutionRose(flux_wind_data, pollutant = "CO2_GF", 
               key.position = "right",
-              main = "CO2 Flux by Wind Direction")
+              main = "CO2_GF Flux by Wind Direction")
+
+dev.off()
 
 # CH4 flux pollution rose
-pollutionRose(flux_wind_data, pollutant = "CH4",
-              key.position = "right",
-              main = "CH4 Flux by Wind Direction")
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CH4_GF_pollutionrose.png",
+    width = 10, height = 7, units = "in", res = 600)
 
+pollutionRose(flux_wind_data, pollutant = "CH4_GF",
+              key.position = "right",
+              main = "CH4_GF Flux by Wind Direction")
+
+
+dev.off()
+
+#Method 2 for saving non ggplot objects, this uses pixel width and height and lets you plot the image first, then save, whereas the other way only saves, doesn't display plot it makes in Rmarkdown panel 
+# Method 2: Save after plotting
+# windRose(wind_data, main = "Wind Direction all years")
+# dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_windrose_allyears.png",
+#          width = 6000, height = 4200, res = 600)
+# dev.off()
+
+#example: 
+# pollutionRose(flux_wind_data, pollutant = "CH4_GF",
+#               key.position = "right",
+#               main = "CH4_GF Flux by Wind Direction")
+# dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_testCH4_GF_image.png",
+#          width = 6000, height = 4200, res = 600)
+# dev.off()
 
 ```
 
@@ -244,18 +288,35 @@ pollutionRose(flux_wind_seasonal, pollutant = "CO2",
               type = "season",
               main = "Seasonal CO2 Flux by Wind Direction")
 
+dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CO2.png",
+         width = 6000, height = 4200, res = 600)
+dev.off()
+
+
 pollutionRose(flux_wind_seasonal, pollutant = "CH4",
               type = "season",
               main = "Seasonal CH4 Flux by Wind Direction")
+
+dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CH4.png",
+         width = 6000, height = 4200, res = 600)
+dev.off()
 
 # Seasonal wind roses for each flux - gapfilled **
 pollutionRose(flux_wind_seasonal, pollutant = "CO2_GF",
               type = "season",
               main = "Seasonal CO2_F Flux by Wind Direction")
 
+dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CO2_GF.png",
+         width = 6000, height = 4200, res = 600)
+dev.off()
+
 pollutionRose(flux_wind_seasonal, pollutant = "CH4_GF",
               type = "season",
               main = "Seasonal CH4_F Flux by Wind Direction")
+
+dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CH4_GF.png",
+         width = 6000, height = 4200, res = 600)
+dev.off()
 ```
 
 ####Windroses and C fluxes by year
