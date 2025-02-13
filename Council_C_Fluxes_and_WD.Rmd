@@ -243,7 +243,7 @@ dev.off()
 
 # CH4 flux pollution rose
 png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CH4_GF_pollutionrose.png",
-    width = 10, height = 7, units = "in", res = 600)
+    width = 10, height = 7, units = "cm", res = 600)
 
 pollutionRose(flux_wind_data, pollutant = "CH4_GF",
               key.position = "right",
@@ -270,7 +270,9 @@ dev.off()
 ```
 
 
-#Windrose - seasonal C fluxes by WD across all years
+#Windrose - seasonal C fluxes by WD across all years - using df_avg
+
+####uses open-air's season defintiions, need to adjust it to my assigned seasonal definitions 
 ```{r}
 # create seasonal wind roses to see if patterns change
 # add season to the data
@@ -317,9 +319,23 @@ pollutionRose(flux_wind_seasonal, pollutant = "CH4_GF",
 dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CH4_GF.png",
          width = 6000, height = 4200, res = 600)
 dev.off()
+
+
+# Create one plot with all seasons
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_assigned_seasonal_pollutionroses.png", width = 7, height = 4, units = "in", res = 600)
+pollutionRose(flux_wind_seasonal, 
+              pollutant = "CO2", 
+              type = "season",  # This will use your season column
+              type.col = "season",  # Specify which column contains your seasons
+              main = "CO2 Flux by Wind Direction and Season")
+dev.off()
+
+
+
+
 ```
 
-####Windroses and C fluxes by year
+####Windroses and C fluxes by year using df_avg
 ```{r}
 # Create plots by year
 # First, let's add a year column if it's not already there
@@ -333,7 +349,7 @@ flux_wind_yearly <- df_avg %>%
            CO2 = FC,
          CH4 = FCH4)
 
-# Create plots for each year (2017-2022)
+# Create plots for each year (2017-2022) - not GF
 # For CO2
 for(yr in 2017:2022) {
   yearly_data <- flux_wind_yearly %>% filter(year == yr)
@@ -349,9 +365,72 @@ for(yr in 2017:2022) {
   pollutionRose(yearly_data, pollutant = "CH4",
                 main = paste("CH4 Flux by Wind Direction -", yr))
 }
+
+
+
+
+# Create plots for each year (2017-2022) - gapfilled C fluxes
+# For CO2
+for(yr in 2017:2022) {
+  yearly_data <- flux_wind_yearly %>% filter(year == yr)
+  
+  pollutionRose(yearly_data, pollutant = "CO2_GF",
+                main = paste("CO2_GF Flux by Wind Direction -", yr))
+}
+
+# For CH4
+for(yr in 2017:2022) {
+  yearly_data <- flux_wind_yearly %>% filter(year == yr)
+  
+  pollutionRose(yearly_data, pollutant = "CH4_GF",
+                main = paste("CH4_GF Flux by Wind Direction -", yr))
+}
+
+
+```
+####Function to save images of C flux by wind direction for each year
+```{r}
+# Create a function to generate and save pollution roses
+save_pollution_roses <- function(data, years = 2017:2022, 
+                               base_path = "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/") {
+  
+  # Define pollutants and their names for file saving
+  pollutants <- c("CO2", "CH4", "CO2_GF", "CH4_GF")
+  
+  # Loop through each pollutant
+  for(pollutant in pollutants) {
+    # Loop through each year
+    for(yr in years) {
+      # Create file name
+      file_name <- file.path(base_path, 
+                            paste0("council_", tolower(pollutant), "_pollutionrose_", yr, ".png"))
+      
+      # Filter data for the year
+      yearly_data <- data %>% filter(year == yr)
+      
+      # Create and save the plot
+      png(file_name, width = 10, height = 7, units = "in", res = 600)
+      pollutionRose(yearly_data, 
+                    pollutant = pollutant,
+                    main = paste(pollutant, "Flux by Wind Direction -", yr))
+      dev.off()
+      
+      # Print message to track progress
+      cat("Saved:", file_name, "\n")
+    }
+  }
+}
+
+# Use the function
+save_pollution_roses(flux_wind_yearly)
 ```
 
-#### Seasons to windroses by year 
+
+
+
+#### Seasons to windroses by year using df_avg
+
+#### important to note that these "season" don't match up with the seasonal delineations in the df --> need to make windroses for each season as defined from NEE, temp, etc
 ```{r}
 # Create data frame with both year and season
 flux_wind_year_season <- df_avg %>%
@@ -383,13 +462,127 @@ for(yr in 2017:2022) {
                 main = paste("CH4 Flux by Wind Direction and Season -", yr))
 }
 
+
+# For CO2
+for(yr in 2017:2022) {
+  yearly_data <- flux_wind_year_season %>% filter(year == yr)
+  
+  pollutionRose(yearly_data, pollutant = "CO2_GF",
+                type = "season",
+                main = paste("CO2_GF Flux by Wind Direction and Season -", yr))
+}
+
+# For CH4
+for(yr in 2017:2022) {
+  yearly_data <- flux_wind_year_season %>% filter(year == yr)
+  
+  pollutionRose(yearly_data, pollutant = "CH4_GF",
+                type = "season",
+                main = paste("CH4_GF Flux by Wind Direction and Season -", yr))
+}
+
+
+
+
 # Or for a specific year:
 # Example for 2019
-pollutionRose(flux_wind_year_season %>% filter(year == 2019),
-              pollutant = "CO2",
-              type = "season",
-              main = "CO2 Flux by Wind Direction and Season - 2019")
+# pollutionRose(flux_wind_year_season %>% filter(year == 2019),
+#               pollutant = "CO2",
+#               type = "season",
+#               main = "CO2 Flux by Wind Direction and Season - 2019")
 ```
+####Function to save images of C flux by wind direction for each year
+```{r}
+# Create a function to generate and save pollution roses
+save_seasonal_pollution_roses <- function(data, years = 2017:2022, 
+                               base_path = "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/") {
+  
+  # Define pollutants and their names for file saving
+  pollutants <- c("CO2", "CH4", "CO2_GF", "CH4_GF")
+  
+  # Loop through each pollutant
+  for(pollutant in pollutants) {
+    # Loop through each year
+    for(yr in years) {
+      # Create file name
+      file_name <- file.path(base_path, 
+                            paste0("council_seasonal_", tolower(pollutant), "_pollutionrose_", yr, ".png"))
+      
+      # Filter data for the year
+      yearly_data <- data %>% filter(year == yr)
+      
+      # Create and save the plot
+      png(file_name, width = 10, height = 7, units = "in", res = 600)
+      pollutionRose(yearly_data, 
+                    pollutant = pollutant,
+                    type = "season",
+                    main = paste(pollutant, "Seasonal Flux by Wind Direction -", yr))
+      dev.off()
+      
+      # Print message to track progress
+      cat("Saved:", file_name, "\n")
+    }
+  }
+}
+
+# Use the function
+save_seasonal_pollution_roses(flux_wind_year_season)
+```
+
+
+#trying to make windrose with my custom assigned seasons 
+```{r}
+#for CO2, not gapfilled 
+# Load required packages
+library(openair)
+
+# Clean the data first
+flux_wind_year_season_clean <- flux_wind_year_season %>%
+  filter(!is.na(season))
+
+# Function to create seasonal plots
+create_seasonal_plots <- function(data, pollutant_name, base_path) {
+  # Get unique seasons
+  seasons <- unique(data$season[!is.na(data$season)])
+  
+  # Create individual plots for each season
+  for(season_name in seasons) {
+    cat("Processing", season_name, "\n")
+    
+    seasonal_data <- data %>% 
+      filter(season == season_name)
+    
+    # Create file name - include pollutant name so we can create both CO2 and CH4 figs 
+  file_name <- file.path(base_path, 
+                          paste0("pollutionrose_", 
+                                tolower(pollutant_name), "_",  # Add gas name
+                                tolower(gsub(" ", "_", season_name)), 
+                                ".png"))
+    
+    # Create and save the plot
+    png(file_name, width = 7, height = 7, units = "in", res = 300)
+    pollutionRose(seasonal_data, 
+                  pollutant = pollutant_name,
+                  main = paste(pollutant_name, "Flux -", season_name, "custom, across all years"))
+    dev.off()
+    
+    cat("Saved:", file_name, "\n")
+  }
+}
+
+# Use the function to make seaosnal plots for CO2 - not GF
+create_seasonal_plots(flux_wind_year_season_clean, 
+                     "CO2", 
+                     "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses")
+
+
+# Create seasonal plots for CH4, not GF
+create_seasonal_plots(flux_wind_year_season_clean, 
+                     "CH4", 
+                     "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses")  
+
+```
+
 
 #Analysis of differences in C fluxes by wind direction 
 
