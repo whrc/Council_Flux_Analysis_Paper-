@@ -1104,93 +1104,17 @@ library(writexl)
 write_xlsx(seasonal_NEE_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_NEE_summary.xlsx")
 ```
 
-#Windrose to examine fluxes by wind direction 
-
-#### C fluxes by wind direction across all years 
-
-```{r}
-# First, install and load required package if you haven't already
-install.packages("openair")
-install.packages("Rtools")
-library(openair)
-```
-
-```{r}
-
-# Create a windRose plot for basic wind patterns
-# prepare the data with wind speed and direction
-wind_data <- df_avg %>%
-  select(WS, WD) %>%
-  rename(ws = WS,
-         wd = WD)
-
-# Basic wind rose
-windRose(wind_data)
-
-# create pollution roses for CO2 and CH4 fluxes
-#create dataset 
-flux_wind_data <- df_avg %>%
-  select(WD, WS, FC_F, FCH4_F, FC, FCH4) %>%
-  rename(wd = WD,
-         ws = WS,
-         CO2_GF = FC_F,
-         CH4_GF = FCH4_F,
-         CO2 = FC,
-         CH4 = FCH4)
-
-# CO2 flux pollution rose - not gapfilled 
-pollutionRose(flux_wind_data, pollutant = "CO2", 
-              key.position = "right",
-              main = "CO2 Flux by Wind Direction")
-
-# CH4 flux pollution rose
-pollutionRose(flux_wind_data, pollutant = "CH4",
-              key.position = "right",
-              main = "CH4 Flux by Wind Direction")
-
-#Gapfilled C fluxes
-pollutionRose(flux_wind_data, pollutant = "CO2", 
-              key.position = "right",
-              main = "CO2 Flux by Wind Direction")
-
-# CH4 flux pollution rose
-pollutionRose(flux_wind_data, pollutant = "CH4",
-              key.position = "right",
-              main = "CH4 Flux by Wind Direction")
 
 
-```
-#Windrose - seasonal C fluxes by WD across all years
-```{r}
-# create seasonal wind roses to see if patterns change
-# add season to the data
-flux_wind_seasonal <- df_avg %>%
-  select(date, WD, WS, FC_F, FCH4_F, FC, FCH4, season) %>%
-  rename(wd = WD,
-         ws = WS,
-         CO2_GF = FC_F,
-         CH4_GF = FCH4_F,
-           CO2 = FC,
-         CH4 = FCH4)
 
-# Seasonal wind roses for each flux - non-gapfilled 
-pollutionRose(flux_wind_seasonal, pollutant = "CO2",
-              type = "season",
-              main = "Seasonal CO2 Flux by Wind Direction")
 
-pollutionRose(flux_wind_seasonal, pollutant = "CH4",
-              type = "season",
-              main = "Seasonal CH4 Flux by Wind Direction")
 
-# Seasonal wind roses for each flux - gapfilled **
-pollutionRose(flux_wind_seasonal, pollutant = "CO2_GF",
-              type = "season",
-              main = "Seasonal CO2_F Flux by Wind Direction")
 
-pollutionRose(flux_wind_seasonal, pollutant = "CH4_GF",
-              type = "season",
-              main = "Seasonal CH4_F Flux by Wind Direction")
-```
+
+
+
+
+
 
 
 
