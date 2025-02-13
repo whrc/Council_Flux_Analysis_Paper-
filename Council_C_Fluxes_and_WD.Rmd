@@ -735,9 +735,48 @@ print(winter_means_FCH4)
 ##the only difference in CH4 flux among WD in the growing season are between W and S, no sig differences among other wind directions nor do any differ in the winter season 
 #though boxplot shows that maybe there is higher CH4 flux during the growing season when wind comes from the S, these stats say it's not a significant difference 
 ```
+#Trying to do a post-hoc analysis with letter groupings and adding to a figure
+```{r}
+#Install and load the dunn.test package for non-parametric posthoc tests (like a tukeyHSD)
+install.packages("dunn.test")
+library(dunn.test)
+install.packages("FSA")
+library(FSA)
+
+# Perform Dunn test with FSA
+dunn_result <- dunnTest(FCH4 ~ WD_cat, 
+                       data = growing_data_CH4,
+                       method = "bonferroni")
+print(dunn_result)
+#Z-score or Z-stat measures how many stdev away from the mean a datapoint is, and larger absolute values = bigger differences between groups
+#P.unadj = unadjusted p value, raw p before correcting for multiple comparisons, doesn't account for multiple comparisons so ignore this p value
+#Use the p.adj value - is corrected (in this case with Bonferroni), corrects for multiple comparisons to reduce chance of false positives
+
+# Convert to data frame
+dunn_df <- data.frame(
+    Comparison = dunn_result$res$Comparison,
+    P.adj = dunn_result$res$P.adj
+)
+
+print(dunn_df)
+
+# Now try the letter assignment
+letters <- rcompanion::cldList(P.adj ~ Comparison,
+                              data = dunn_df,
+                              threshold = 0.05)
+
+# Add to your boxplot
+ggplot(growing_data_CH4, aes(x = WD_cat, y = FCH4)) +
+  geom_boxplot() +
+  geom_text(data = letters,
+            aes(x = Group, y = max(growing_data_CH4$FCH4, na.rm = TRUE), 
+                label = Letter),
+            vjust = -0.5) +
+  theme_bw()
+```
 
 
-# Pairwise t-tests vs pairwise wilcox 
+# Pairwise t-tests vs pairwise wilcox - just exploring 
 ```{r}
 #trying good ol pairwise t-test
 
