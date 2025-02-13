@@ -1,0 +1,1125 @@
+---
+title: "C fluxes and WD" #looking at C fluxes and wind direction 
+output: html_document
+date: "2025-02-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Notes on site: Wind direction primarily blows from NW, except for Dec - Mar, when it primarily blows from SE direction. The site is largely tussock tundra but to the south there is thermokarst 
+
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+# Set working directory and then Load data
+
+```{r}
+#using the ".2" version to reflect the updated SWC used in RF 
+
+#original half-hourly dataframe 
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#needs continuous day variable - daily avg, calculated in processing steps
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+# #monthly avg, calculated in processing steps 
+# df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#original half-hourly dataframe using the SWC1
+#dforig = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+```
+
+```{r}
+#checking timestamp 
+ggplot(data = df,aes(TIMESTAMP_END,FC_F))+
+  geom_point()+
+  scale_x_datetime(limits = as.POSIXct(c('2021-09-28','2021-10-05')))+
+  scale_y_continuous(limits = c(-12,5))
+```
+
+
+#Add Seasonal delineations to df and df_avg (see older version of code for work on delineations)
+```{r}
+# add year column if not already present
+df <- df %>%
+  mutate(year = format(date, "%Y"))
+
+# Create DOY for df (half-hourly data)
+df$DOY <- yday(df$date)
+
+
+# Create seasonal assignments using both year and DOY
+df<- df %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
+      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
+      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+
+####################easona to daily avg dataset###########################
+
+# add year column if not already present
+df_avg <- df_avg %>%
+  mutate(year = format(date, "%Y"))
+
+
+# Create DOY For df_avg (daily data)
+df_avg$DOY <- yday(df_avg$date)
+
+
+# Create seasonal assignments using both year and DOY
+df_avg <- df_avg %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
+      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
+      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+
+
+#Windrose to examine fluxes by wind direction 
+
+#### C fluxes by wind direction across all years 
+
+```{r}
+# First, install and load required package if you haven't already
+install.packages("openair")
+install.packages("Rtools")
+library(openair)
+```
+
+```{r}
+
+# Create a windRose plot for basic wind patterns
+# prepare the data with wind speed and direction
+wind_data <- df_avg %>%
+  select(WS, WD) %>%
+  rename(ws = WS,
+         wd = WD)
+
+# Basic wind rose
+windRose(wind_data)
+
+# create pollution roses for CO2 and CH4 fluxes
+#create dataset 
+flux_wind_data <- df_avg %>%
+  select(WD, WS, FC_F, FCH4_F, FC, FCH4) %>%
+  rename(wd = WD,
+         ws = WS,
+         CO2_GF = FC_F,
+         CH4_GF = FCH4_F,
+         CO2 = FC,
+         CH4 = FCH4)
+
+# CO2 flux pollution rose - not gapfilled 
+pollutionRose(flux_wind_data, pollutant = "CO2", 
+              key.position = "right",
+              main = "CO2 Flux by Wind Direction")
+
+# CH4 flux pollution rose
+pollutionRose(flux_wind_data, pollutant = "CH4",
+              key.position = "right",
+              main = "CH4 Flux by Wind Direction")
+
+#Gapfilled C fluxes
+pollutionRose(flux_wind_data, pollutant = "CO2", 
+              key.position = "right",
+              main = "CO2 Flux by Wind Direction")
+
+# CH4 flux pollution rose
+pollutionRose(flux_wind_data, pollutant = "CH4",
+              key.position = "right",
+              main = "CH4 Flux by Wind Direction")
+
+
+```
+
+
+#Windrose - seasonal C fluxes by WD across all years
+```{r}
+# create seasonal wind roses to see if patterns change
+# add season to the data
+flux_wind_seasonal <- df_avg %>%
+  select(date, WD, WS, FC_F, FCH4_F, FC, FCH4, season) %>%
+  rename(wd = WD,
+         ws = WS,
+         CO2_GF = FC_F,
+         CH4_GF = FCH4_F,
+           CO2 = FC,
+         CH4 = FCH4)
+
+# Seasonal wind roses for each flux - non-gapfilled 
+pollutionRose(flux_wind_seasonal, pollutant = "CO2",
+              type = "season",
+              main = "Seasonal CO2 Flux by Wind Direction")
+
+pollutionRose(flux_wind_seasonal, pollutant = "CH4",
+              type = "season",
+              main = "Seasonal CH4 Flux by Wind Direction")
+
+# Seasonal wind roses for each flux - gapfilled **
+pollutionRose(flux_wind_seasonal, pollutant = "CO2_GF",
+              type = "season",
+              main = "Seasonal CO2_F Flux by Wind Direction")
+
+pollutionRose(flux_wind_seasonal, pollutant = "CH4_GF",
+              type = "season",
+              main = "Seasonal CH4_F Flux by Wind Direction")
+```
+
+####Windroses and C fluxes by year
+```{r}
+# Create plots by year
+# First, let's add a year column if it's not already there
+flux_wind_yearly <- df_avg %>%
+  select(date, WD, WS, FC, FCH4, FC_F, FCH4_F) %>%
+  mutate(year = year(date)) %>%  # Extract year from date
+  rename(wd = WD,
+         ws = WS,
+         CO2_GF = FC_F,
+         CH4_GF = FCH4_F,
+           CO2 = FC,
+         CH4 = FCH4)
+
+# Create plots for each year (2017-2022)
+# For CO2
+for(yr in 2017:2022) {
+  yearly_data <- flux_wind_yearly %>% filter(year == yr)
+  
+  pollutionRose(yearly_data, pollutant = "CO2",
+                main = paste("CO2 Flux by Wind Direction -", yr))
+}
+
+# For CH4
+for(yr in 2017:2022) {
+  yearly_data <- flux_wind_yearly %>% filter(year == yr)
+  
+  pollutionRose(yearly_data, pollutant = "CH4",
+                main = paste("CH4 Flux by Wind Direction -", yr))
+}
+```
+
+#### Seasons to windroses by year 
+```{r}
+# Create data frame with both year and season
+flux_wind_year_season <- df_avg %>%
+  select(date, WD, WS, FC, FCH4,FC_F, FCH4_F, season) %>%
+  mutate(year = year(date)) %>%  # Extract year from date
+  rename(wd = WD,
+         ws = WS,
+          CO2_GF = FC_F,
+         CH4_GF = FCH4_F,
+           CO2 = FC,
+         CH4 = FCH4)
+
+# Create seasonal plots for each year
+# For CO2
+for(yr in 2017:2022) {
+  yearly_data <- flux_wind_year_season %>% filter(year == yr)
+  
+  pollutionRose(yearly_data, pollutant = "CO2",
+                type = "season",
+                main = paste("CO2 Flux by Wind Direction and Season -", yr))
+}
+
+# For CH4
+for(yr in 2017:2022) {
+  yearly_data <- flux_wind_year_season %>% filter(year == yr)
+  
+  pollutionRose(yearly_data, pollutant = "CH4",
+                type = "season",
+                main = paste("CH4 Flux by Wind Direction and Season -", yr))
+}
+
+# Or for a specific year:
+# Example for 2019
+pollutionRose(flux_wind_year_season %>% filter(year == 2019),
+              pollutant = "CO2",
+              type = "season",
+              main = "CO2 Flux by Wind Direction and Season - 2019")
+```
+
+#Analysis of differences in C fluxes by wind direction 
+
+#Across all years, using df_avg
+
+####Create datasets for all, then for FC and for FCH4, and then also split by growing season and by winter 
+
+```{r}
+#Create datasets
+
+#For all 
+#Create datasets
+# For CO2 flux analysis - only need complete cases of FC and WD
+flux_by_wd <- df_avg %>%
+   select(WD, FC, FCH4, season) %>%
+  mutate(
+    WD_cat = cut(WD, 
+                 breaks = seq(0, 360, by = 45),
+                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+                 include.lowest = TRUE))
+
+
+# For CO2 flux analysis - only need complete cases of FC and WD
+flux_by_wd_CO2 <- df_avg %>%
+  filter(!is.na(FC), !is.na(WD)) %>%  # Only remove NAs from FC and WD so you have complete cases for these
+  select(WD, FC, season) %>%
+  mutate(
+    WD_cat = cut(WD, 
+                 breaks = seq(0, 360, by = 45),
+                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+                 include.lowest = TRUE)
+  )
+
+# For CH4 flux analysis - only need complete cases of FCH4 and WD
+flux_by_wd_CH4 <- df_avg %>%
+  filter(!is.na(FCH4), !is.na(WD)) %>%  # Only remove NAs from FCH4 and WD so you have complete cases for these 
+  select(WD, FCH4, season) %>%
+  mutate(
+    WD_cat = cut(WD, 
+                 breaks = seq(0, 360, by = 45),
+                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+                 include.lowest = TRUE)
+  )
+
+# Then split these into growing season and winter data
+growing_data_CO2 <- flux_by_wd_CO2 %>% filter(season == "Growing Season")
+winter_data_CO2 <- flux_by_wd_CO2 %>% filter(season == "Winter")
+
+growing_data_CH4 <- flux_by_wd_CH4 %>% filter(season == "Growing Season")
+winter_data_CH4 <- flux_by_wd_CH4 %>% filter(season == "Winter")
+```
+
+
+```{r}
+
+# Calculate summary statistics for each wind direction
+flux_summary_CO2 <- flux_by_wd_CO2 %>%
+  group_by(WD_cat) %>%
+  summarise(
+    mean_CO2 = mean(FC, na.rm = TRUE),
+    se_CO2 = sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC))),
+     n = n()
+  )
+
+# Calculate summary statistics for each wind direction
+flux_summary_CH4 <- flux_by_wd_CH4 %>%
+  group_by(WD_cat) %>%
+  summarise(
+    mean_CH4 = mean(FCH4, na.rm = TRUE),
+    se_CH4 = sd(FCH4, na.rm = TRUE)/sqrt(sum(!is.na(FCH4))),
+    n = n()
+  )
+
+
+# Create box plots for visual comparison
+# For CO2
+ggplot(flux_by_wd_CO2, aes(x = WD_cat, y = FC)) +
+  geom_boxplot() +
+  labs(title = expression(CO[2]~Flux~by~Wind~Direction),
+       x = "Wind Direction",
+       y = expression(CO[2]~Flux~(µmol/m^2/s))) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(size = 16, hjust = 0.5))
+
+# For CH4
+ggplot(flux_by_wd_CH4, aes(x = WD_cat, y = FCH4)) +
+  geom_boxplot() +
+  labs(title = expression(CH[4]~Flux~by~Wind~Direction),
+       x = "Wind Direction",
+       y = expression(CH[4]~Flux~(nmol/m^2/s))) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(size = 16, hjust = 0.5))
+
+# Perform statistical tests
+# Kruskal-Wallis test (non-parametric ANOVA)
+kw_CO2 <- kruskal.test(FC ~ WD_cat, data = flux_by_wd_CO2)
+kw_CH4 <- kruskal.test(FCH4 ~ WD_cat, data = flux_by_wd_CH4)
+
+# Print results
+print("CO2 flux differences by wind direction:")
+print(kw_CO2)
+print("CH4 flux differences by wind direction:")
+print(kw_CH4)
+
+#Results:
+#boxplot indicates there could be some diffs among wind directions, KW test supports this 
+#CO2 seems to have higher flux when wind blows from N, NE, and E
+#maybe some elevated CH4 in S, SE, SW wind direction 
+
+# [1] "CO2 flux differences by wind direction:"
+# 	Kruskal-Wallis rank sum test
+# 
+# data:  FC by WD_cat
+# Kruskal-Wallis chi-squared = 101.73, df = 7, p-value < 2.2e-16 --> *SIG
+# 
+# [1] "CH4 flux differences by wind direction:"
+# 
+# 	Kruskal-Wallis rank sum test
+# 
+# data:  FCH4 by WD_cat
+# Kruskal-Wallis chi-squared = 35.981, df = 7, p-value = 7.311e-06 --> *SIG
+
+
+#Pairwise stats 
+print("Daily Avg CO2- Comparing WD")
+pairwise.wilcox.test(flux_by_wd_CO2$FC, flux_by_wd_CO2$WD_cat,
+                     p.adjust.method = "bonferroni")
+
+#Results --> some sig diffs among WD
+# Pairwise comparisons using Wilcoxon rank sum exact test 
+# 
+# data:  flux_by_wd_CO2$FC and flux_by_wd_CO2$WD_cat 
+# 
+#    N       NE      E       SE      S       SW      W      
+# NE 1.00000 -       -       -       -       -       -      
+# E  1.00000 1.00000 -       -       -       -       -      
+# SE 1.00000 0.00042 0.00723 -       -       -       -      
+# S  1.00000 0.00029 0.00705 1.00000 -       -       -      
+# SW 1.00000 0.00024 0.03007 1.00000 1.00000 -       -      
+# W  1.00000 0.00174 0.43185 4.5e-05 3.4e-06 0.00607 -      
+# NW 1.00000 0.10718 1.00000 1.2e-08 1.4e-09 3.1e-07 0.03625
+# 
+# P value adjustment method: bonferroni 
+
+
+# CH4
+print("Daily Avg CH4 - Comparing WD")
+pairwise.wilcox.test(flux_by_wd_CH4$FCH4, flux_by_wd_CH4$WD_cat,
+                     p.adjust.method = "bonferroni")
+
+#Results CH4 --> also some differences among WD 
+# Pairwise comparisons using Wilcoxon rank sum exact test 
+# 
+# data:  flux_by_wd_CH4$FCH4 and flux_by_wd_CH4$WD_cat 
+# 
+#    N       NE      E       SE      S       SW      W      
+# NE 1.00000 -       -       -       -       -       -      
+# E  1.00000 1.00000 -       -       -       -       -      
+# SE 1.00000 1.00000 0.11866 -       -       -       -      
+# S  1.00000 1.00000 0.03331 1.00000 -       -       -      
+# SW 1.00000 1.00000 0.22142 1.00000 1.00000 -       -      
+# W  1.00000 1.00000 1.00000 0.04942 0.00038 0.36842 -      
+# NW 1.00000 1.00000 1.00000 0.14226 0.00559 0.95755 1.00000
+# 
+# P value adjustment method: bonferroni 
+
+
+# Calculate summary statistics for C fluxes by wind direction
+WD_summary <- flux_by_wd%>%
+  group_by(WD_cat) %>%
+  summarise(
+    mean_CO2 = mean(FC, na.rm = TRUE),
+    se_CO2 = sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC))),
+    mean_CH4 = mean(FCH4, na.rm = TRUE),
+    se_CH4 = sd(FCH4, na.rm = TRUE)/sqrt(sum(!is.na(FCH4))),
+    n = n()
+  )
+WD_summary
+
+```
+####Checking out normality and distribution of daily avg dataset 
+```{r}
+
+#Distribution of CO2
+shapiro.test(flux_by_wd$FC) 
+
+#Result --> not normal 
+# data:  flux_by_wd$FC
+# W = 0.95398, p-value = 2.398e-15
+
+# Q-Q plot
+ggplot(flux_by_wd, aes(sample = FC)) +
+  stat_qq() +
+  stat_qq_line() +
+  theme_bw()
+
+# Histogram with normal curve overlay
+ggplot(flux_by_wd, aes(x = FC)) +
+  geom_histogram(aes(y = ..density..), bins = 30) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(flux_by_wd$FC), 
+                           sd = sd(flux_by_wd$FC))) +
+  theme_bw()
+
+#-----------CH4----------------------------------------------------------------
+
+#Distribution of CH4
+shapiro.test(flux_by_wd$FCH4) 
+
+#Result --> not normal
+# data:  flux_by_wd$FCH4
+# W = 0.93415, p-value = 2.634e-15
+
+# Q-Q plot
+ggplot(flux_by_wd, aes(sample = FCH4)) +
+  stat_qq() +
+  stat_qq_line() +
+  theme_bw()
+#Result: 
+
+# Histogram with normal curve overlay
+ggplot(flux_by_wd, aes(x = FCH4)) +
+  geom_histogram(aes(y = ..density..), bins = 30) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(flux_by_wd$FCH4), 
+                           sd = sd(flux_by_wd$FCH4))) +
+  theme_bw()
+
+#All very skewed, supports use of non-parametric tests 
+```
+
+####WD and Season (winter & growing season) across all years - daily avg dataset 
+```{r}
+# Filter data for just winter and growing season, and prepare for analysis
+seasonal_flux_by_wd <- df_avg %>%
+  filter(season %in% c("Winter", "Growing Season")) %>%
+  select(WD, FC, FCH4, season) %>%
+  mutate(
+    WD_cat = cut(WD, 
+                 breaks = seq(0, 360, by = 45),
+                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+                 include.lowest = TRUE)
+  )
+
+# Create boxplots for CO2 flux by wind direction and season
+ggplot(seasonal_flux_by_wd, aes(x = WD_cat, y = FC, fill = season)) +
+  geom_boxplot() +
+  labs(title = expression(CO[2]~Flux~by~Wind~Direction~and~Season),
+       x = "Wind Direction",
+       y = expression(CO[2]~Flux~(µmol/m^2/s))) +
+  scale_fill_manual(values = c("darkgreen", "steelblue1")) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+# Create boxplots for CH4 flux by wind direction and season
+ggplot(seasonal_flux_by_wd, aes(x = WD_cat, y = FCH4, fill = season)) +
+  geom_boxplot() +
+  labs(title = expression(CH[4]~Flux~by~Wind~Direction~and~Season),
+       x = "Wind Direction",
+       y = expression(CH[4]~Flux~(nmol/m^2/s))) +
+  scale_fill_manual(values = c("darkgreen", "steelblue1")) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+# Calculate summary statistics for each season and wind direction
+seasonal_summary <- seasonal_flux_by_wd %>%
+  group_by(season, WD_cat) %>%
+  summarise(
+    mean_CO2 = mean(FC, na.rm = TRUE),
+    se_CO2 = sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC))),
+    mean_CH4 = mean(FCH4, na.rm = TRUE),
+    se_CH4 = sd(FCH4, na.rm = TRUE)/sqrt(sum(!is.na(FCH4))),
+    n = n()
+  )
+seasonal_summary
+
+
+
+#Results from daily avg data:
+#see much more variation in fluxes by season based on WD than what you see from the HH dataset
+#FC: potentially higher in N and Ne wind directions 
+#FCH4:do see possible elevated FCH4 in S, SE, SW wind directions 
+
+
+
+```
+####WD and season stats 
+```{r}
+# Analyze by season
+
+# For CO2
+# Growing Season analysis
+print("Daily Avg CO2 Growing Season - Comparing WD")
+pairwise.wilcox.test(growing_data_CO2$FC, growing_data_CO2$WD_cat,
+                     p.adjust.method = "bonferroni")
+
+#Results: --> no sig diffs 
+
+
+# Winter analysis
+print("Daily Avg CO2 Winter - Comparing WD")
+pairwise.wilcox.test(winter_data_CO2$FC, winter_data_CO2$WD_cat,
+                     p.adjust.method = "bonferroni")
+
+#Results: --> do see sig diffs, mainly in S, SE, SW winds from others 
+# 1] "Daily Avg CO2 Winter - Comparing WD"
+# 
+# 	Pairwise comparisons using Wilcoxon rank sum exact test 
+# 
+# data:  winter_data_CO2$FC and winter_data_CO2$WD_cat 
+# 
+#    N      NE     E      SE     S      SW     W     
+# NE 1.0000 -      -      -      -      -      -     
+# E  1.0000 1.0000 -      -      -      -      -     
+# SE 1.0000 0.0333 0.2830 -      -      -      -     
+# S  1.0000 0.0155 0.0247 1.0000 -      -      -     
+# SW 1.0000 0.0306 0.0589 1.0000 1.0000 -      -     
+# W  1.0000 0.0416 0.1016 1.0000 0.8656 1.0000 -     
+# NW 1.0000 0.6952 1.0000 0.5430 0.0063 0.1134 0.2837
+# 
+# P value adjustment method: bonferroni
+
+
+# Calculate median values for each direction in growing season
+growing_means_FC <- growing_data_CO2 %>%
+  group_by(WD_cat) %>%
+  summarise(
+    mean_FC = mean(FC, na.rm = TRUE),
+    n = n()
+  )
+
+# Calculate median values for each direction in growing season
+winter_means_FC <- winter_data_CO2 %>%
+  group_by(WD_cat) %>%
+  summarise(
+    mean_FC = mean(FC, na.rm = TRUE),
+    n = n()
+  )
+print(growing_means_FC)
+print(winter_means_FC)
+
+
+#~~~~For CH4~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Growing Season analysis
+print("Daily Avg CH4 Growing Season - Comparing WD")
+pairwise.wilcox.test(growing_data_CH4$FCH4, growing_data_CH4$WD_cat,
+                     p.adjust.method = "bonferroni")
+
+#Results: --> only diff btwn W and S 
+# [1] "Daily Avg CH4 Growing Season - Comparing WD"
+# 
+# 	Pairwise comparisons using Wilcoxon rank sum exact test 
+# 
+# data:  growing_data_CH4$FCH4 and growing_data_CH4$WD_cat 
+# 
+#    NE     E      SE     S      SW     W     
+# E  1.0000 -      -      -      -      -     
+# SE 1.0000 1.0000 -      -      -      -     
+# S  1.0000 1.0000 1.0000 -      -      -     
+# SW 1.0000 1.0000 1.0000 0.2009 -      -     
+# W  1.0000 1.0000 0.1088 0.0034 1.0000 -     
+# NW 1.0000 1.0000 1.0000 1.0000 1.0000 1.0000
+# 
+# P value adjustment method: bonferroni 
+
+# Winter analysis
+print("Daily Avg CH4 Winter - Comparing WD")
+pairwise.wilcox.test(winter_data_CH4$FCH4, winter_data_CH4$WD_cat,
+                     p.adjust.method = "bonferroni")
+
+#Results: --> no sig diffs 
+
+
+# Calculate median values for each direction in growing season
+growing_means_FCH4 <- growing_data_CH4 %>%
+  group_by(WD_cat) %>%
+  summarise(
+    mean_CH4 = mean(FCH4, na.rm = TRUE),
+    n = n()
+  )
+
+# Calculate median values for each direction in growing season
+winter_means_FCH4 <- winter_data_CH4 %>%
+  group_by(WD_cat) %>%
+  summarise(
+    mean_CH4 = mean(FCH4, na.rm = TRUE),
+    n = n()
+  )
+
+print(growing_means_FCH4)
+print(winter_means_FCH4)
+
+#Results
+#boxplots appear to show much more variability compared to the HH data - need to ask Kyle which to use?
+##the only difference in CH4 flux among WD in the growing season are between W and S, no sig differences among other wind directions nor do any differ in the winter season 
+#though boxplot shows that maybe there is higher CH4 flux during the growing season when wind comes from the S, these stats say it's not a significant difference 
+```
+
+
+# Pairwise t-tests vs pairwise wilcox 
+```{r}
+#trying good ol pairwise t-test
+
+print("CO2 Growing Season - t-tests comparing WD")
+pairwise.t.test(growing_data_CO2$FC, growing_data_CO2$WD_cat,
+                p.adjust.method = "bonferroni") #no sig diffs 
+
+print("CO2 WinterSeason - t-tests comparing WD:")
+pairwise.t.test(winter_data_CO2$FC, winter_data_CO2$WD_cat,
+                p.adjust.method = "bonferroni") #see some sig diffs
+
+
+print("CH4 Growing Season - t-tests comparing SE to other directions:")
+pairwise.t.test(growing_data_CH4$FCH4, growing_data_CH4$WD_cat,
+                p.adjust.method = "bonferroni") #no sig diffs
+
+print("CH4 Winter Season - t-tests comparing WD:")
+pairwise.t.test(winter_data_CH4$FCH4, winter_data_CH4$WD_cat,
+                p.adjust.method = "bonferroni") #sig diff in NE vs E and W
+
+# Trying Pairwise Wilcoxon tests (non-parametric) --> more appropriae for non-normally distributed data, as one would find in flux data and with categorical (WD) variables **but should ask Kyle bc he often mentions t-tests
+
+print("CO2 Growing Season - Wilcoxon tests comparing SE to other directions:")
+pairwise.wilcox.test(growing_data_CO2$FC, growing_data_CO2$WD_cat,
+                     p.adjust.method = "bonferroni") #no sig diffs 
+
+print("CO2 Winter Season - Wilcoxon tests comparing WD")
+pairwise.wilcox.test(winter_data_CO2$FC, winter_data_CO2$WD_cat,
+                     p.adjust.method = "bonferroni") 
+
+print("CH4 Growing Season - Wilcoxon tests comparing WD")
+pairwise.wilcox.test(growing_data_CH4$FCH4, growing_data_CH4$WD_cat,
+                     p.adjust.method = "bonferroni") #only sif diff in W vs S 
+
+print("CH4 Growing Season - Wilcoxon tests comparing SWD")
+pairwise.wilcox.test(winter_data_CH4$FCH4, winter_data_CH4$WD_cat,
+                     p.adjust.method = "bonferroni") #no sig diffs 
+
+
+# check normality of the data to help decide which test is more appropriate
+#Using a shapiro.wilkes test, W = perfect normality, <1 = deviation from normality, and p value is significance --> you want a p of 0.05 or greater to confirm normality, a low p value indicates non-normal distr
+
+shapiro.test(growing_data_CO2$FC) # W = 0.99732, p-value = 0.6908 --> normal 
+shapiro.test(winter_data_CO2$FC) # W = 0.9812, p-value = 0.0172 --> not normal
+shapiro.test(growing_data_CH4$FCH4) # W = 0.92303, p-value = 3.424e-12 --> not normal 
+shapiro.test(winter_data_CH4$FCH4) # W = 0.90968, p-value = 2.002e-08 --> not normal 
+
+
+# Q-Q plot
+#CO2 during growing 
+ggplot(growing_data_CO2, aes(sample = FC)) +
+  stat_qq() +
+  stat_qq_line() +
+  theme_bw()
+#Result: looks pretty good 
+
+# Histogram with normal curve overlay
+#Growing season CO2 looks normal, winter season is close but...not totally normal 
+ggplot(growing_data_CO2, aes(x = FC)) +
+  geom_histogram(aes(y = ..density..), bins = 30) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(growing_data_CO2$FC), 
+                           sd = sd(growing_data_CO2$FC))) +
+  theme_bw()
+#Result: looks pretty good 
+
+#CH4 for growing and winter both look very skewed 
+ggplot(winter_data_CH4, aes(x = FCH4)) +
+  geom_histogram(aes(y = ..density..), bins = 30) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(winter_data_CH4$FCH4), 
+                           sd = sd(winter_data_CH4$FCH4))) +
+  theme_bw()
+
+#Only CO2 in growing season is normally distributed, others are not 
+#supports the use of non-parametric tests, at least for WD and C fluxes
+```
+#*TO DO pick up here tomorrow to fix HH 
+
+#HH Analysis of differences in C fluxes by wind direction 
+####across all years
+
+####Create datasets for FC, for FCH4, and then also split by growing season and by winter 
+
+```{r}
+#Create datasets
+# For CO2 flux analysis - only need complete cases of FC and WD
+flux_by_wd_CO2_HH <- df %>%
+  filter(!is.na(FC), !is.na(WD)) %>%  # Only remove NAs from FC and WD
+  select(WD, FC, season) %>%
+  mutate(
+    WD_cat = cut(WD, 
+                 breaks = seq(0, 360, by = 45),
+                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+                 include.lowest = TRUE)
+  )
+
+# For CH4 flux analysis - only need complete cases of FCH4 and WD
+flux_by_wd_CH4_HH <- df %>%
+  filter(!is.na(FCH4), !is.na(WD)) %>%  # Only remove NAs from FCH4 and WD
+  select(WD, FCH4, season) %>%
+  mutate(
+    WD_cat = cut(WD, 
+                 breaks = seq(0, 360, by = 45),
+                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+                 include.lowest = TRUE)
+  )
+
+# Then split these into growing season and winter data
+growing_data_CO2_HH <- flux_by_wd_CO2_HH %>% filter(season == "Growing Season")
+winter_data_CO2_HH <- flux_by_wd_CO2_HH %>% filter(season == "Winter")
+
+growing_data_CH4 <- flux_by_wd_CH4 %>% filter(season == "Growing Season")
+winter_data_CH4 <- flux_by_wd_CH4 %>% filter(season == "Winter")
+```
+
+
+```{r}
+# First, let's prepare the data
+flux_by_wd_HH <- df %>%
+  select(WD, FC, FCH4) %>%
+  mutate(
+    # Create wind direction categories (e.g., in 45-degree segments)
+    WD_cat = cut(WD, 
+                 breaks = seq(0, 360, by = 45),
+                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+                 include.lowest = TRUE)
+  )
+
+# Calculate summary statistics for each wind direction
+flux_summary_HH <- flux_by_wd_HH %>%
+  group_by(WD_cat) %>%
+  summarise(
+    mean_CO2 = mean(FC, na.rm = TRUE),
+    se_CO2 = sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC))),
+    mean_CH4 = mean(FCH4, na.rm = TRUE),
+    se_CH4 = sd(FCH4, na.rm = TRUE)/sqrt(sum(!is.na(FCH4))),
+    n = n()
+  )
+
+# Create box plots for visual comparison
+# For CO2
+ggplot(flux_by_wd_HH, aes(x = WD_cat, y = FC)) +
+  geom_boxplot() +
+  labs(title = expression(CO[2]~Flux~by~Wind~Direction),
+       x = "Wind Direction",
+       y = expression(CO[2]~Flux~(µmol/m^2/s))) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(size = 16, hjust = 0.5))
+
+# For CH4
+ggplot(flux_by_wd_HH, aes(x = WD_cat, y = FCH4)) +
+  geom_boxplot() +
+  labs(title = expression(CH[4]~Flux~by~Wind~Direction),
+       x = "Wind Direction",
+       y = expression(CH[4]~Flux~(nmol/m^2/s))) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(size = 16, hjust = 0.5))
+
+# Perform statistical tests
+# Kruskal-Wallis test (non-parametric ANOVA)
+kw_CO2 <- kruskal.test(FC ~ WD_cat, data = flux_by_wd_HH)
+kw_CH4 <- kruskal.test(FCH4 ~ WD_cat, data = flux_by_wd_HH)
+
+# Print results
+print("CO2 flux differences by wind direction:")
+print(kw_CO2)
+print("CH4 flux differences by wind direction:")
+print(kw_CH4)
+
+#Results:
+#KW test shows high significance by wind direction for both fluxes, but the boxplot doesn't really reflect that 
+
+# [1] "CO2 flux differences by wind direction:"
+# 
+# 	Kruskal-Wallis rank sum test
+# 
+# data:  FC by WD_cat
+# Kruskal-Wallis chi-squared = 2318.8, df = 7, p-value < 2.2e-16
+# 
+# [1] "CH4 flux differences by wind direction:"
+# 
+# 	Kruskal-Wallis rank sum test
+# 
+# data:  FCH4 by WD_cat
+# Kruskal-Wallis chi-squared = 2788.2, df = 7, p-value < 2.2e-16
+
+```
+
+#HH dataset: effect of wind direction on C fluxes by season (winter and growing season) across all years 
+```{r}
+# Filter data for just winter and growing season, and prepare for analysis
+seasonal_flux_by_wd_HH <- df %>%
+  filter(season %in% c("Winter", "Growing Season")) %>%
+  select(WD, FC, FCH4, season) %>%
+  na.omit() %>%  # This removes any rows with NA values
+  mutate(
+    WD_cat = cut(WD, 
+                 breaks = seq(0, 360, by = 45),
+                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+                 include.lowest = TRUE)
+  )
+
+# Create boxplots for CO2 flux by wind direction and season
+ggplot(seasonal_flux_by_wd_HH, aes(x = WD_cat, y = FC, fill = season)) +
+  geom_boxplot() +
+  labs(title = expression(HH~CO[2]~Flux~by~Wind~Direction~and~Season),
+       x = "Wind Direction",
+       y = expression(CO[2]~Flux~(µmol/m^2/s))) +
+  scale_fill_manual(values = c("darkgreen", "steelblue1")) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+# Create boxplots for CH4 flux by wind direction and season
+ggplot(seasonal_flux_by_wd_HH, aes(x = WD_cat, y = FCH4, fill = season)) +
+  geom_boxplot() +
+  labs(title = expression(HH~CH[4]~Flux~by~Wind~Direction~and~Season),
+       x = "Wind Direction",
+       y = expression(CH[4]~Flux~(nmol/m^2/s))) +
+  scale_fill_manual(values = c("darkgreen", "steelblue1")) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+# Calculate summary statistics for each season and wind direction
+seasonal_summary_HH <- seasonal_flux_by_wd_HH %>%
+  group_by(season, WD_cat) %>%
+  summarise(
+    mean_CO2 = mean(FC, na.rm = TRUE),
+    se_CO2 = sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC))),
+    mean_CH4 = mean(FCH4, na.rm = TRUE),
+    se_CH4 = sd(FCH4, na.rm = TRUE)/sqrt(sum(!is.na(FCH4))),
+    n = n()
+  )
+seasonal_summary_HH
+
+
+
+#Results from HH data:
+#no clear difference in seasons among wind directions for either CO2 or CH4, but one can see that season has an effect more than wind direction 
+#noticeable inc in CH4 emissions during the growing season when wind is from SE*
+```
+
+####Stats for HH dataset testing diff in CH4 fluxes by season and WD
+```{r}
+# Analyze by season
+# Growing Season
+growing_data_HH <- seasonal_flux_by_wd_HH %>% filter(season == "Growing Season")
+winter_data_HH <- seasonal_flux_by_wd_HH %>% filter(season == "Winter")
+
+# For CH4
+# Growing Season analysis
+print("CH4 Growing Season - Comparing SE to other directions:")
+pairwise.wilcox.test(growing_data_HH$FCH4, growing_data_HH$WD_cat,
+                     p.adjust.method = "bonferroni")
+
+# Winter analysis
+print("HH CH4 Winter - Comparing SE to other directions:")
+pairwise.wilcox.test(winter_data_HH$FCH4, winter_data_HH$WD_cat,
+                     p.adjust.method = "bonferroni")
+
+# Calculate median values for each direction in growing season
+growing_means_HH <- growing_data_HH %>%
+  group_by(WD_cat) %>%
+  summarise(
+    mean_CH4 = median(FCH4, na.rm = TRUE),
+    n = n()
+  )
+
+# Calculate median values for each direction in growing season
+winter_means_HH <- winter_data_HH %>%
+  group_by(WD_cat) %>%
+  summarise(
+    mean_CH4 = median(FCH4, na.rm = TRUE),
+    n = n()
+  )
+
+print(growing_means_HH)
+print(winter_means_HH)
+
+#Results:
+#lots of sig diffs in HH CH4 flux among wind directions in both growing season and winter...need to ask Kyle about this and what to do with this? This makes me think that using the daily avg is better for overall practical assessment...
+```
+
+```{r}
+# Pairwise t-tests
+print("CH4 Growing Season - t-tests comparing SE to other directions:")
+pairwise.t.test(growing_data_HH$FCH4, growing_data_HH$WD_cat,
+                p.adjust.method = "bonferroni")
+
+# Pairwise Wilcoxon tests (non-parametric) --> more appropriae for non-normally distributed data, as one would find in flux data and with categorical (WD) variables **but should ask Kyle bc he often mentions t-tests
+print("CH4 Growing Season - Wilcoxon tests comparing SE to other directions:")
+pairwise.wilcox.test(growing_data_HH$FCH4, growing_data_HH$WD_cat,
+                     p.adjust.method = "bonferroni")
+
+# check normality of the data to help decide which test is more appropriate
+#Using a shapiro.wilkes test, W = perfect normality, <1 = deviation from normality, and p value is significance --> you want a p of 0.05 or greater to confirm normality, a low p value indicates non-normal distr
+
+shapiro.test(growing_data_HH$FCH4) #too big, won't run, exceeds the max sample size of 5000
+
+se_growing_ch4_HH <- growing_data_HH$FCH4[growing_data_HH$WD_cat == "SE"] #--> just for FCH4 data in SE direction 
+shapiro.test(se_growing_ch4_HH) #not norm, W=0.86 and p<0.001
+
+# Q-Q plot
+ggplot(growing_data_HH, aes(sample = FCH4)) +
+  stat_qq() +
+  stat_qq_line() +
+  theme_bw()
+#Result: S surve 
+
+# Histogram with normal curve overlay
+ggplot(growing_data_HH, aes(x = FCH4)) +
+  geom_histogram(aes(y = ..density..), bins = 30) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(growing_data_HH$FCH4), 
+                           sd = sd(growing_data_HH$FCH4))) +
+  theme_bw()
+#Result: positiviely skewed 
+
+#supports the use of non-parametric tests, at least for WD and C fluxes
+
+```
+
+
+
+####same fig as above but for every year
+```{r}
+# Create plots for each year (2017-2022)
+yearly_plots_CO2 <- lapply(2017:2022, function(yr) {
+  yearly_data <- df_avg %>% 
+    filter(year(date) == yr, season %in% c("Winter", "Growing Season"))
+  
+  ggplot(yearly_data, aes(x = WD_cat, y = FC, fill = season)) +
+    geom_boxplot() +
+    labs(title = paste("CO2 Flux by Wind Direction and Season -", yr),
+         x = "Wind Direction",
+         y = expression(CO[2]~Flux~(µmol/m^2/s))) +
+    scale_fill_manual(values = c("darkgreen", "steelblue1")) +
+    theme_bw() +
+    theme(axis.text = element_text(size = 12, face = "bold"),
+          axis.title = element_text(size = 14, face = "bold"),
+          plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+    ylim(-15, 10)  # Keep y-axis consistent across years
+})
+
+yearly_plots_CH4 <- lapply(2017:2022, function(yr) {
+  yearly_data <- df_avg %>% 
+    filter(year(date) == yr, season %in% c("Winter", "Growing Season"))
+  
+  ggplot(yearly_data, aes(x = WD_cat, y = FCH4, fill = season)) +
+    geom_boxplot() +
+    labs(title = paste("CH4 Flux by Wind Direction and Season -", yr),
+         x = "Wind Direction",
+         y = expression(CH[4]~Flux~(nmol/m^2/s))) +
+    scale_fill_manual(values = c("darkgreen", "steelblue1")) +
+    theme_bw() +
+    theme(axis.text = element_text(size = 12, face = "bold"),
+          axis.title = element_text(size = 14, face = "bold"),
+          plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+    ylim(-50, 100)  # Keep y-axis consistent across years
+})
+
+# Arrange plots in a grid
+library(gridExtra)
+
+# For CO2
+grid.arrange(grobs = yearly_plots_CO2, ncol = 2,
+             top = textGrob("CO2 Flux by Wind Direction and Season", 
+                          gp = gpar(fontsize = 20, fontface = "bold")))
+
+# For CH4
+grid.arrange(grobs = yearly_plots_CH4, ncol = 2,
+             top = textGrob("CH4 Flux by Wind Direction and Season", 
+                          gp = gpar(fontsize = 20, fontface = "bold")))
+```
+
+
+
