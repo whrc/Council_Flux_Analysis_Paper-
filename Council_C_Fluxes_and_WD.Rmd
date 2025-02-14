@@ -530,7 +530,7 @@ save_seasonal_pollution_roses(flux_wind_year_season)
 ```
 
 
-#trying to make windrose with my custom assigned seasons 
+#windrose with my custom assigned seasons 
 ```{r}
 #for CO2, not gapfilled 
 # Load required packages
@@ -586,9 +586,9 @@ create_seasonal_plots(flux_wind_year_season_clean,
 
 #Analysis of differences in C fluxes by wind direction 
 
-#Across all years, using df_avg
+##Across all years, using df_avg
 
-####Create datasets for all, then for FC and for FCH4, and then also split by growing season and by winter 
+####Create datasets for all, then for FC and for FCH4, and then also split by season
 
 ```{r}
 #Create datasets
@@ -630,9 +630,11 @@ flux_by_wd_CH4 <- df_avg %>%
 # Then split these into growing season and winter data
 growing_data_CO2 <- flux_by_wd_CO2 %>% filter(season == "Growing Season")
 winter_data_CO2 <- flux_by_wd_CO2 %>% filter(season == "Winter")
+fall_data_CO2 <- flux_by_wd_CO2 %>% filter(season == "Fall Senescence")
 
 growing_data_CH4 <- flux_by_wd_CH4 %>% filter(season == "Growing Season")
 winter_data_CH4 <- flux_by_wd_CH4 %>% filter(season == "Winter")
+fall_data_CH4 <- flux_by_wd_CH4 %>% filter(season == "Fall Senescence")
 ```
 
 
@@ -661,7 +663,7 @@ flux_summary_CH4 <- flux_by_wd_CH4 %>%
 # For CO2
 ggplot(flux_by_wd_CO2, aes(x = WD_cat, y = FC)) +
   geom_boxplot() +
-  labs(title = expression(CO[2]~Flux~by~Wind~Direction),
+  labs(title = expression(Daily~Avg~CO[2]~Flux~by~Wind~Direction),
        x = "Wind Direction",
        y = expression(CO[2]~Flux~(µmol/m^2/s))) +
   theme_bw() +
@@ -672,7 +674,7 @@ ggplot(flux_by_wd_CO2, aes(x = WD_cat, y = FC)) +
 # For CH4
 ggplot(flux_by_wd_CH4, aes(x = WD_cat, y = FCH4)) +
   geom_boxplot() +
-  labs(title = expression(CH[4]~Flux~by~Wind~Direction),
+  labs(title = expression(Daily~Avg~CH[4]~Flux~by~Wind~Direction),
        x = "Wind Direction",
        y = expression(CH[4]~Flux~(nmol/m^2/s))) +
   theme_bw() +
@@ -697,16 +699,13 @@ print(kw_CH4)
 #maybe some elevated CH4 in S, SE, SW wind direction 
 
 # [1] "CO2 flux differences by wind direction:"
-# 	Kruskal-Wallis rank sum test
-# 
-# data:  FC by WD_cat
+# Kruskal-Wallis rank sum test
 # Kruskal-Wallis chi-squared = 101.73, df = 7, p-value < 2.2e-16 --> *SIG
-# 
+
+
+
 # [1] "CH4 flux differences by wind direction:"
-# 
-# 	Kruskal-Wallis rank sum test
-# 
-# data:  FCH4 by WD_cat
+# Kruskal-Wallis rank sum test# 
 # Kruskal-Wallis chi-squared = 35.981, df = 7, p-value = 7.311e-06 --> *SIG
 
 
@@ -805,7 +804,7 @@ ggplot(flux_by_wd, aes(sample = FCH4)) +
   stat_qq() +
   stat_qq_line() +
   theme_bw()
-#Result: 
+
 
 # Histogram with normal curve overlay
 ggplot(flux_by_wd, aes(x = FCH4)) +
@@ -822,7 +821,7 @@ ggplot(flux_by_wd, aes(x = FCH4)) +
 ```{r}
 # Filter data for just winter and growing season, and prepare for analysis
 seasonal_flux_by_wd <- df_avg %>%
-  filter(season %in% c("Winter", "Growing Season")) %>%
+  filter(season %in% c("Winter", "Growing Season", "Fall Senescence")) %>%
   select(WD, FC, FCH4, season) %>%
   mutate(
     WD_cat = cut(WD, 
@@ -834,10 +833,10 @@ seasonal_flux_by_wd <- df_avg %>%
 # Create boxplots for CO2 flux by wind direction and season
 ggplot(seasonal_flux_by_wd, aes(x = WD_cat, y = FC, fill = season)) +
   geom_boxplot() +
-  labs(title = expression(CO[2]~Flux~by~Wind~Direction~and~Season),
+  labs(title = expression(Daily~Avg~CO[2]~Flux~by~Wind~Direction~and~Season),
        x = "Wind Direction",
        y = expression(CO[2]~Flux~(µmol/m^2/s))) +
-  scale_fill_manual(values = c("darkgreen", "steelblue1")) +
+  scale_fill_manual(values = c("brown", "darkgreen", "steelblue1")) +
   theme_bw() +
   theme(axis.text = element_text(size = 12, face = "bold"),
         axis.title = element_text(size = 14, face = "bold"),
@@ -848,8 +847,8 @@ ggplot(seasonal_flux_by_wd, aes(x = WD_cat, y = FCH4, fill = season)) +
   geom_boxplot() +
   labs(title = expression(CH[4]~Flux~by~Wind~Direction~and~Season),
        x = "Wind Direction",
-       y = expression(CH[4]~Flux~(nmol/m^2/s))) +
-  scale_fill_manual(values = c("darkgreen", "steelblue1")) +
+       y = expression(Daily~Avg~CH[4]~Flux~(nmol/m^2/s))) +
+  scale_fill_manual(values = c("brown", "darkgreen", "steelblue1")) +
   theme_bw() +
   theme(axis.text = element_text(size = 12, face = "bold"),
         axis.title = element_text(size = 14, face = "bold"),
@@ -871,7 +870,7 @@ seasonal_summary
 
 #Results from daily avg data:
 #see much more variation in fluxes by season based on WD than what you see from the HH dataset
-#FC: potentially higher in N and Ne wind directions 
+#FC: potentially higher in E and NE wind directions 
 #FCH4:do see possible elevated FCH4 in S, SE, SW wind directions 
 
 
@@ -895,7 +894,7 @@ print("Daily Avg CO2 Winter - Comparing WD")
 pairwise.wilcox.test(winter_data_CO2$FC, winter_data_CO2$WD_cat,
                      p.adjust.method = "bonferroni")
 
-#Results: --> do see sig diffs, mainly in S, SE, SW winds from others 
+#Results: --> do see sig diffs, mainly in S, SE, SW winds from NE, and S vs E, and W vs NE, S vs NE
 # 1] "Daily Avg CO2 Winter - Comparing WD"
 # 
 # 	Pairwise comparisons using Wilcoxon rank sum exact test 
@@ -913,8 +912,17 @@ pairwise.wilcox.test(winter_data_CO2$FC, winter_data_CO2$WD_cat,
 # 
 # P value adjustment method: bonferroni
 
+#Fall analysis 
+# Winter analysis
+print("Daily Avg CO2 Fall - Comparing WD")
+pairwise.wilcox.test(fall_data_CO2$FC, fall_data_CO2$WD_cat,
+                     p.adjust.method = "bonferroni")
 
-# Calculate median values for each direction in growing season
+#Results: no sig diffs 
+
+
+
+# Calculate avg values for each direction in growing season
 growing_means_FC <- growing_data_CO2 %>%
   group_by(WD_cat) %>%
   summarise(
@@ -922,7 +930,7 @@ growing_means_FC <- growing_data_CO2 %>%
     n = n()
   )
 
-# Calculate median values for each direction in growing season
+# Calculate avg values for each direction in growing season
 winter_means_FC <- winter_data_CO2 %>%
   group_by(WD_cat) %>%
   summarise(
@@ -940,7 +948,7 @@ print("Daily Avg CH4 Growing Season - Comparing WD")
 pairwise.wilcox.test(growing_data_CH4$FCH4, growing_data_CH4$WD_cat,
                      p.adjust.method = "bonferroni")
 
-#Results: --> only diff btwn W and S 
+#Results: --> only diff is btwn W and S 
 # [1] "Daily Avg CH4 Growing Season - Comparing WD"
 # 
 # 	Pairwise comparisons using Wilcoxon rank sum exact test 
@@ -964,8 +972,15 @@ pairwise.wilcox.test(winter_data_CH4$FCH4, winter_data_CH4$WD_cat,
 
 #Results: --> no sig diffs 
 
+# Fall analysis
+print("Daily Avg CH4 Fall - Comparing WD")
+pairwise.wilcox.test(fall_data_CH4$FCH4, fall_data_CH4$WD_cat,
+                     p.adjust.method = "bonferroni")
 
-# Calculate median values for each direction in growing season
+#Results: no sig diffs 
+
+
+# Calculate avg values for each direction in growing season
 growing_means_FCH4 <- growing_data_CH4 %>%
   group_by(WD_cat) %>%
   summarise(
@@ -973,7 +988,7 @@ growing_means_FCH4 <- growing_data_CH4 %>%
     n = n()
   )
 
-# Calculate median values for each direction in growing season
+# Calculate avg values for each direction in growing season
 winter_means_FCH4 <- winter_data_CH4 %>%
   group_by(WD_cat) %>%
   summarise(
@@ -985,11 +1000,13 @@ print(growing_means_FCH4)
 print(winter_means_FCH4)
 
 #Results
+#sig diffs in winter CO2 flux by wind, and growing season CH4 by wind 
 #boxplots appear to show much more variability compared to the HH data - need to ask Kyle which to use?
 ##the only difference in CH4 flux among WD in the growing season are between W and S, no sig differences among other wind directions nor do any differ in the winter season 
 #though boxplot shows that maybe there is higher CH4 flux during the growing season when wind comes from the S, these stats say it's not a significant difference 
 ```
 #Trying to do a post-hoc analysis with letter groupings and adding to a figure
+
 ```{r}
 #Install and load the dunn.test package for non-parametric posthoc tests (like a tukeyHSD)
 install.packages("dunn.test")
@@ -997,7 +1014,13 @@ library(dunn.test)
 install.packages("FSA")
 library(FSA)
 
-# Perform Dunn test with FSA
+```
+
+
+```{r}
+#May be differences in winter CO2, and growing season CH4 
+
+# Perform Dunn test with FSA for growing season CH4
 dunn_result <- dunnTest(FCH4 ~ WD_cat, 
                        data = growing_data_CH4,
                        method = "bonferroni")
@@ -1023,10 +1046,66 @@ letters <- rcompanion::cldList(P.adj ~ Comparison,
 ggplot(growing_data_CH4, aes(x = WD_cat, y = FCH4)) +
   geom_boxplot() +
   geom_text(data = letters,
-            aes(x = Group, y = max(growing_data_CH4$FCH4, na.rm = TRUE), 
+            aes(x = Group,
+                y = max(growing_data_CH4$FCH4, na.rm = TRUE) + 0.5, #trying to move letters higher but they won't
+                label = Letter),
+            vjust = -0.7) +
+  theme_bw()+
+     labs(title = expression(bold(Average~Daily~CH[4]~Flux~by~Wind~Direction~In~Winter)),
+       x = "Wind Direction",
+       y = expression(Daily~Avg~CH[4]~Flux~(nmolC/m^2/s))) +
+    theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+#save image
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/growing_season_CH4_by_WD.png",  
+       width = 10, height = 7, dpi = 600)
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Perform Dunn test with FSA for winter CO2 
+dunn_result2 <- dunnTest(FC ~ WD_cat, 
+                       data = winter_data_CO2,
+                       method = "bonferroni")
+print(dunn_result2)
+
+# Convert to data frame
+dunn_df2 <- data.frame(
+    Comparison = dunn_result2$res$Comparison,
+    P.adj = dunn_result2$res$P.adj
+)
+
+print(dunn_df2)
+
+# Now try the letter assignment
+letters <- rcompanion::cldList(P.adj ~ Comparison,
+                              data = dunn_df2,
+                              threshold = 0.05)
+
+# Add to your boxplot
+ggplot(winter_data_CO2, aes(x = WD_cat, y = FC)) +
+  geom_boxplot() +
+  geom_text(data = letters,
+            aes(x = Group, 
+                y = max(winter_data_CO2$FC, na.rm = TRUE) + 0.2, 
                 label = Letter),
             vjust = -0.5) +
-  theme_bw()
+  theme_bw()+
+    labs(title = expression(bold(Average~Daily~CO[2]~Flux~by~Wind~Direction~In~Winter)),
+       x = "Wind Direction",
+       y = expression(Daily~Avg~CO[2]~Flux~(umolC/m^2/s))) +
+    theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+
+
+#save image
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winter_CO2_by_WD.png",  
+       width = 10, height = 7, dpi = 600)
+
+
 ```
 
 
@@ -1038,9 +1117,14 @@ print("CO2 Growing Season - t-tests comparing WD")
 pairwise.t.test(growing_data_CO2$FC, growing_data_CO2$WD_cat,
                 p.adjust.method = "bonferroni") #no sig diffs 
 
-print("CO2 WinterSeason - t-tests comparing WD:")
+print("CO2 Winte rSeason - t-tests comparing WD:")
 pairwise.t.test(winter_data_CO2$FC, winter_data_CO2$WD_cat,
                 p.adjust.method = "bonferroni") #see some sig diffs
+
+
+print("CO2 Fall Season - t-tests comparing WD:")
+pairwise.t.test(fall_data_CO2$FC, fall_data_CO2$WD_cat,
+                p.adjust.method = "bonferroni") #see some sig diffs - W vs E 
 
 
 print("CH4 Growing Season - t-tests comparing SE to other directions:")
@@ -1051,6 +1135,10 @@ print("CH4 Winter Season - t-tests comparing WD:")
 pairwise.t.test(winter_data_CH4$FCH4, winter_data_CH4$WD_cat,
                 p.adjust.method = "bonferroni") #sig diff in NE vs E and W
 
+print("CH4 Fall Season - t-tests comparing WD:")
+pairwise.t.test(fall_data_CH4$FCH4, fall_data_CH4$WD_cat,
+                p.adjust.method = "bonferroni") #no sig diffs 
+
 # Trying Pairwise Wilcoxon tests (non-parametric) --> more appropriae for non-normally distributed data, as one would find in flux data and with categorical (WD) variables **but should ask Kyle bc he often mentions t-tests
 
 print("CO2 Growing Season - Wilcoxon tests comparing SE to other directions:")
@@ -1059,56 +1147,78 @@ pairwise.wilcox.test(growing_data_CO2$FC, growing_data_CO2$WD_cat,
 
 print("CO2 Winter Season - Wilcoxon tests comparing WD")
 pairwise.wilcox.test(winter_data_CO2$FC, winter_data_CO2$WD_cat,
-                     p.adjust.method = "bonferroni") 
+                     p.adjust.method = "bonferroni") #*Various sig diffs *
+# N      NE     E      SE     S      SW     W     
+# NE 1.0000 -      -      -      -      -      -     
+# E  1.0000 1.0000 -      -      -      -      -     
+# SE 1.0000 0.0333 0.2830 -      -      -      -     
+# S  1.0000 0.0155 0.0247 1.0000 -      -      -     
+# SW 1.0000 0.0306 0.0589 1.0000 1.0000 -      -     
+# W  1.0000 0.0416 0.1016 1.0000 0.8656 1.0000 -     
+# NW 1.0000 0.6952 1.0000 0.5430 0.0063 0.1134 0.2837
+ 
+
+print("CO2 Fall Season - Wilcoxon tests comparing WD")
+pairwise.wilcox.test(fall_data_CO2$FC, fall_data_CO2$WD_cat,
+                     p.adjust.method = "bonferroni") #no sig diffs 
+
+#~~~~~~~~~~~~~CH4~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 print("CH4 Growing Season - Wilcoxon tests comparing WD")
 pairwise.wilcox.test(growing_data_CH4$FCH4, growing_data_CH4$WD_cat,
-                     p.adjust.method = "bonferroni") #only sif diff in W vs S 
+                     p.adjust.method = "bonferroni") #only sig diff in W vs S 
 
 print("CH4 Growing Season - Wilcoxon tests comparing SWD")
 pairwise.wilcox.test(winter_data_CH4$FCH4, winter_data_CH4$WD_cat,
                      p.adjust.method = "bonferroni") #no sig diffs 
 
+print("CH4 Fall Season - Wilcoxon tests comparing WD")
+pairwise.wilcox.test(fall_data_CH4$FCH4, fall_data_CH4$WD_cat,
+                     p.adjust.method = "bonferroni") # no sig diffs 
+
 
 # check normality of the data to help decide which test is more appropriate
-#Using a shapiro.wilkes test, W = perfect normality, <1 = deviation from normality, and p value is significance --> you want a p of 0.05 or greater to confirm normality, a low p value indicates non-normal distr
+#Using a shapiro.wilkes test, W = 1 = perfect normality, < 1 = deviation from normality --> you want a p of 0.05 or greater to confirm normality, a low p value indicates non-normal distr
 
 shapiro.test(growing_data_CO2$FC) # W = 0.99732, p-value = 0.6908 --> normal 
-shapiro.test(winter_data_CO2$FC) # W = 0.9812, p-value = 0.0172 --> not normal
+shapiro.test(winter_data_CO2$FC) # W = 0.9812, p-value = 0.0172 --> not normal but QQ doesn't look terrible 
+shapiro.test(fall_data_CO2$FC) #W = 0.9303, p-value = 9.022e-07 --> not normal but QQ looks ok 
 shapiro.test(growing_data_CH4$FCH4) # W = 0.92303, p-value = 3.424e-12 --> not normal 
 shapiro.test(winter_data_CH4$FCH4) # W = 0.90968, p-value = 2.002e-08 --> not normal 
-
+shapiro.test(fall_data_CH4$FCH4) #W = 0.94007, p-value = 0.001055 --> not normal 
 
 # Q-Q plot
-#CO2 during growing 
-ggplot(growing_data_CO2, aes(sample = FC)) +
+#CO2  for different seasons (swap out seasons)
+ggplot(winter_data_CO2, aes(sample = FC)) +
   stat_qq() +
   stat_qq_line() +
   theme_bw()
-#Result: looks pretty good 
+#Result: winter & fall look ok, winter is a bit more wonky but not terrible 
 
 # Histogram with normal curve overlay
 #Growing season CO2 looks normal, winter season is close but...not totally normal 
-ggplot(growing_data_CO2, aes(x = FC)) +
+ggplot(winter_data_CO2, aes(x = FC)) +
   geom_histogram(aes(y = ..density..), bins = 30) +
   stat_function(fun = dnorm, 
-                args = list(mean = mean(growing_data_CO2$FC), 
-                           sd = sd(growing_data_CO2$FC))) +
+                args = list(mean = mean(winter_data_CO2$FC), 
+                           sd = sd(winter_data_CO2$FC))) +
   theme_bw()
-#Result: looks pretty good 
+#Result: growing season looks pretty good, fall doesn't look bad, winter is a bit messy and skewed 
 
 #CH4 for growing and winter both look very skewed 
-ggplot(winter_data_CH4, aes(x = FCH4)) +
+ggplot(growing_data_CH4, aes(x = FCH4)) +
   geom_histogram(aes(y = ..density..), bins = 30) +
   stat_function(fun = dnorm, 
-                args = list(mean = mean(winter_data_CH4$FCH4), 
-                           sd = sd(winter_data_CH4$FCH4))) +
+                args = list(mean = mean(growing_data_CH4$FCH4), 
+                           sd = sd(growing_data_CH4$FCH4))) +
   theme_bw()
+#Results: winter & growing season quite skewed, fall also very skewed and strangely distributed; 
+
 
 #Only CO2 in growing season is normally distributed, others are not 
 #supports the use of non-parametric tests, at least for WD and C fluxes
 ```
-#*TO DO pick up here tomorrow to fix HH 
+#*TO DO pick up here tomorrow to fix HH code 
 
 #HH Analysis of differences in C fluxes by wind direction 
 ####across all years
