@@ -1,5 +1,5 @@
 ---
-title: "C fluxes and WD" #looking at C fluxes and wind direction 
+title: "C fluxes and WD" #looking at C fluxes and wind direction *Skip to bottom, to "New datasets" and after - above this is exploratory, will clean up later 
 output: html_document
 date: "2025-02-12"
 ---
@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 #Notes on site: Wind direction primarily blows from NW, except for Dec - Mar, when it primarily blows from SE direction. The site is largely tussock tundra but to the south there is thermokarst 
 
+**TO DO: now redo all the stats with the WD_modal **
 
 ```{r, include=FALSE}
 rm(list = ls())
@@ -1051,7 +1052,7 @@ ggplot(growing_data_CH4, aes(x = WD_cat, y = FCH4)) +
                 label = Letter),
             vjust = -0.7) +
   theme_bw()+
-     labs(title = expression(bold(Average~Daily~CH[4]~Flux~by~Wind~Direction~In~Winter)),
+     labs(title = expression(bold(Average~Daily~CH[4]~Flux~by~Wind~Direction~In~Growing~Season)),
        x = "Wind Direction",
        y = expression(Daily~Avg~CH[4]~Flux~(nmolC/m^2/s))) +
     theme(axis.text = element_text(size = 12, face = "bold"),
@@ -1218,258 +1219,9 @@ ggplot(growing_data_CH4, aes(x = FCH4)) +
 #Only CO2 in growing season is normally distributed, others are not 
 #supports the use of non-parametric tests, at least for WD and C fluxes
 ```
-#*TO DO pick up here tomorrow to fix HH code 
-
-#HH Analysis of differences in C fluxes by wind direction 
-####across all years
-
-####Create datasets for FC, for FCH4, and then also split by growing season and by winter 
-
-```{r}
-#Create datasets
-# For CO2 flux analysis - only need complete cases of FC and WD
-flux_by_wd_CO2_HH <- df %>%
-  filter(!is.na(FC), !is.na(WD)) %>%  # Only remove NAs from FC and WD
-  select(WD, FC, season) %>%
-  mutate(
-    WD_cat = cut(WD, 
-                 breaks = seq(0, 360, by = 45),
-                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
-                 include.lowest = TRUE)
-  )
-
-# For CH4 flux analysis - only need complete cases of FCH4 and WD
-flux_by_wd_CH4_HH <- df %>%
-  filter(!is.na(FCH4), !is.na(WD)) %>%  # Only remove NAs from FCH4 and WD
-  select(WD, FCH4, season) %>%
-  mutate(
-    WD_cat = cut(WD, 
-                 breaks = seq(0, 360, by = 45),
-                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
-                 include.lowest = TRUE)
-  )
-
-# Then split these into growing season and winter data
-growing_data_CO2_HH <- flux_by_wd_CO2_HH %>% filter(season == "Growing Season")
-winter_data_CO2_HH <- flux_by_wd_CO2_HH %>% filter(season == "Winter")
-
-growing_data_CH4 <- flux_by_wd_CH4 %>% filter(season == "Growing Season")
-winter_data_CH4 <- flux_by_wd_CH4 %>% filter(season == "Winter")
-```
-
-
-```{r}
-# First, let's prepare the data
-flux_by_wd_HH <- df %>%
-  select(WD, FC, FCH4) %>%
-  mutate(
-    # Create wind direction categories (e.g., in 45-degree segments)
-    WD_cat = cut(WD, 
-                 breaks = seq(0, 360, by = 45),
-                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
-                 include.lowest = TRUE)
-  )
-
-# Calculate summary statistics for each wind direction
-flux_summary_HH <- flux_by_wd_HH %>%
-  group_by(WD_cat) %>%
-  summarise(
-    mean_CO2 = mean(FC, na.rm = TRUE),
-    se_CO2 = sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC))),
-    mean_CH4 = mean(FCH4, na.rm = TRUE),
-    se_CH4 = sd(FCH4, na.rm = TRUE)/sqrt(sum(!is.na(FCH4))),
-    n = n()
-  )
-
-# Create box plots for visual comparison
-# For CO2
-ggplot(flux_by_wd_HH, aes(x = WD_cat, y = FC)) +
-  geom_boxplot() +
-  labs(title = expression(CO[2]~Flux~by~Wind~Direction),
-       x = "Wind Direction",
-       y = expression(CO[2]~Flux~(µmol/m^2/s))) +
-  theme_bw() +
-  theme(axis.text = element_text(size = 12),
-        axis.title = element_text(size = 14),
-        plot.title = element_text(size = 16, hjust = 0.5))
-
-# For CH4
-ggplot(flux_by_wd_HH, aes(x = WD_cat, y = FCH4)) +
-  geom_boxplot() +
-  labs(title = expression(CH[4]~Flux~by~Wind~Direction),
-       x = "Wind Direction",
-       y = expression(CH[4]~Flux~(nmol/m^2/s))) +
-  theme_bw() +
-  theme(axis.text = element_text(size = 12),
-        axis.title = element_text(size = 14),
-        plot.title = element_text(size = 16, hjust = 0.5))
-
-# Perform statistical tests
-# Kruskal-Wallis test (non-parametric ANOVA)
-kw_CO2 <- kruskal.test(FC ~ WD_cat, data = flux_by_wd_HH)
-kw_CH4 <- kruskal.test(FCH4 ~ WD_cat, data = flux_by_wd_HH)
-
-# Print results
-print("CO2 flux differences by wind direction:")
-print(kw_CO2)
-print("CH4 flux differences by wind direction:")
-print(kw_CH4)
-
-#Results:
-#KW test shows high significance by wind direction for both fluxes, but the boxplot doesn't really reflect that 
-
-# [1] "CO2 flux differences by wind direction:"
-# 
-# 	Kruskal-Wallis rank sum test
-# 
-# data:  FC by WD_cat
-# Kruskal-Wallis chi-squared = 2318.8, df = 7, p-value < 2.2e-16
-# 
-# [1] "CH4 flux differences by wind direction:"
-# 
-# 	Kruskal-Wallis rank sum test
-# 
-# data:  FCH4 by WD_cat
-# Kruskal-Wallis chi-squared = 2788.2, df = 7, p-value < 2.2e-16
-
-```
-
-#HH dataset: effect of wind direction on C fluxes by season (winter and growing season) across all years 
-```{r}
-# Filter data for just winter and growing season, and prepare for analysis
-seasonal_flux_by_wd_HH <- df %>%
-  filter(season %in% c("Winter", "Growing Season")) %>%
-  select(WD, FC, FCH4, season) %>%
-  na.omit() %>%  # This removes any rows with NA values
-  mutate(
-    WD_cat = cut(WD, 
-                 breaks = seq(0, 360, by = 45),
-                 labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
-                 include.lowest = TRUE)
-  )
-
-# Create boxplots for CO2 flux by wind direction and season
-ggplot(seasonal_flux_by_wd_HH, aes(x = WD_cat, y = FC, fill = season)) +
-  geom_boxplot() +
-  labs(title = expression(HH~CO[2]~Flux~by~Wind~Direction~and~Season),
-       x = "Wind Direction",
-       y = expression(CO[2]~Flux~(µmol/m^2/s))) +
-  scale_fill_manual(values = c("darkgreen", "steelblue1")) +
-  theme_bw() +
-  theme(axis.text = element_text(size = 12, face = "bold"),
-        axis.title = element_text(size = 14, face = "bold"),
-        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
-
-# Create boxplots for CH4 flux by wind direction and season
-ggplot(seasonal_flux_by_wd_HH, aes(x = WD_cat, y = FCH4, fill = season)) +
-  geom_boxplot() +
-  labs(title = expression(HH~CH[4]~Flux~by~Wind~Direction~and~Season),
-       x = "Wind Direction",
-       y = expression(CH[4]~Flux~(nmol/m^2/s))) +
-  scale_fill_manual(values = c("darkgreen", "steelblue1")) +
-  theme_bw() +
-  theme(axis.text = element_text(size = 12, face = "bold"),
-        axis.title = element_text(size = 14, face = "bold"),
-        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
-
-# Calculate summary statistics for each season and wind direction
-seasonal_summary_HH <- seasonal_flux_by_wd_HH %>%
-  group_by(season, WD_cat) %>%
-  summarise(
-    mean_CO2 = mean(FC, na.rm = TRUE),
-    se_CO2 = sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC))),
-    mean_CH4 = mean(FCH4, na.rm = TRUE),
-    se_CH4 = sd(FCH4, na.rm = TRUE)/sqrt(sum(!is.na(FCH4))),
-    n = n()
-  )
-seasonal_summary_HH
 
 
 
-#Results from HH data:
-#no clear difference in seasons among wind directions for either CO2 or CH4, but one can see that season has an effect more than wind direction 
-#noticeable inc in CH4 emissions during the growing season when wind is from SE*
-```
-
-####Stats for HH dataset testing diff in CH4 fluxes by season and WD
-```{r}
-# Analyze by season
-# Growing Season
-growing_data_HH <- seasonal_flux_by_wd_HH %>% filter(season == "Growing Season")
-winter_data_HH <- seasonal_flux_by_wd_HH %>% filter(season == "Winter")
-
-# For CH4
-# Growing Season analysis
-print("CH4 Growing Season - Comparing SE to other directions:")
-pairwise.wilcox.test(growing_data_HH$FCH4, growing_data_HH$WD_cat,
-                     p.adjust.method = "bonferroni")
-
-# Winter analysis
-print("HH CH4 Winter - Comparing SE to other directions:")
-pairwise.wilcox.test(winter_data_HH$FCH4, winter_data_HH$WD_cat,
-                     p.adjust.method = "bonferroni")
-
-# Calculate median values for each direction in growing season
-growing_means_HH <- growing_data_HH %>%
-  group_by(WD_cat) %>%
-  summarise(
-    mean_CH4 = median(FCH4, na.rm = TRUE),
-    n = n()
-  )
-
-# Calculate median values for each direction in growing season
-winter_means_HH <- winter_data_HH %>%
-  group_by(WD_cat) %>%
-  summarise(
-    mean_CH4 = median(FCH4, na.rm = TRUE),
-    n = n()
-  )
-
-print(growing_means_HH)
-print(winter_means_HH)
-
-#Results:
-#lots of sig diffs in HH CH4 flux among wind directions in both growing season and winter...need to ask Kyle about this and what to do with this? This makes me think that using the daily avg is better for overall practical assessment...
-```
-
-```{r}
-# Pairwise t-tests
-print("CH4 Growing Season - t-tests comparing SE to other directions:")
-pairwise.t.test(growing_data_HH$FCH4, growing_data_HH$WD_cat,
-                p.adjust.method = "bonferroni")
-
-# Pairwise Wilcoxon tests (non-parametric) --> more appropriae for non-normally distributed data, as one would find in flux data and with categorical (WD) variables **but should ask Kyle bc he often mentions t-tests
-print("CH4 Growing Season - Wilcoxon tests comparing SE to other directions:")
-pairwise.wilcox.test(growing_data_HH$FCH4, growing_data_HH$WD_cat,
-                     p.adjust.method = "bonferroni")
-
-# check normality of the data to help decide which test is more appropriate
-#Using a shapiro.wilkes test, W = perfect normality, <1 = deviation from normality, and p value is significance --> you want a p of 0.05 or greater to confirm normality, a low p value indicates non-normal distr
-
-shapiro.test(growing_data_HH$FCH4) #too big, won't run, exceeds the max sample size of 5000
-
-se_growing_ch4_HH <- growing_data_HH$FCH4[growing_data_HH$WD_cat == "SE"] #--> just for FCH4 data in SE direction 
-shapiro.test(se_growing_ch4_HH) #not norm, W=0.86 and p<0.001
-
-# Q-Q plot
-ggplot(growing_data_HH, aes(sample = FCH4)) +
-  stat_qq() +
-  stat_qq_line() +
-  theme_bw()
-#Result: S surve 
-
-# Histogram with normal curve overlay
-ggplot(growing_data_HH, aes(x = FCH4)) +
-  geom_histogram(aes(y = ..density..), bins = 30) +
-  stat_function(fun = dnorm, 
-                args = list(mean = mean(growing_data_HH$FCH4), 
-                           sd = sd(growing_data_HH$FCH4))) +
-  theme_bw()
-#Result: positiviely skewed 
-
-#supports the use of non-parametric tests, at least for WD and C fluxes
-
-```
 
 
 
@@ -1522,6 +1274,385 @@ grid.arrange(grobs = yearly_plots_CO2, ncol = 2,
 grid.arrange(grobs = yearly_plots_CH4, ncol = 2,
              top = textGrob("CH4 Flux by Wind Direction and Season", 
                           gp = gpar(fontsize = 20, fontface = "bold")))
+```
+
+#Trying to create a dataset where we filter by wind direction first, then do a daily avg for data threshold of 50%
+
+#Circular average approach for determining prevailing wind 
+```{r}
+# First, let's create a function to find the prevailing wind direction
+# This uses circular statistics rather than simple averaging
+# Create a function for the prevailing wind direction
+get_prevailing_wind <- function(degrees) {
+  rad <- degrees * pi / 180
+  mean_sin <- mean(sin(rad), na.rm = TRUE)
+  mean_cos <- mean(cos(rad), na.rm = TRUE)
+  wd_avg <- atan2(mean_sin, mean_cos) * 180 / pi
+  return((wd_avg + 360) %% 360)
+}
+
+# Create daily averages with data threshold
+df_avg_FC <- df %>%
+  group_by(date = as.Date(date)) %>%
+  # Calculate number of valid FC and FCH4 observations
+  mutate(n_valid = sum(!is.na(FC))) %>%
+  # Filter for days with at least 50% data
+  filter(n_valid >= 0.5 * 48) %>%
+  # Special handling for wind direction, regular averaging for everything else
+  mutate(across(WD, get_prevailing_wind)) %>%
+  summarise(across(everything(), mean, na.rm = TRUE)) %>% #newer syntax:   summarise(across(everything(), \(x) mean(x, na.rm = TRUE))) %>%
+  ungroup()
+```
+#Double checking the prevailing winds calculation
+```{r}
+# Pick a specific date to examine
+example_date <- "2017-07-17"  # or any date you're interested in
+
+# Look at all wind directions for that day
+daily_winds <- df %>%
+  filter(as.Date(date) == example_date) %>%
+  select(date, WD) %>%
+  arrange(date)
+
+# Compare with the prevailing wind we calculated
+prevailing_wind <- df_avg %>%
+  filter(as.Date(date) == example_date) %>%
+  select(date, WD)
+
+print("Half-hourly wind directions:")
+print(daily_winds)
+print("Calculated prevailing wind:")
+print(prevailing_wind)
+
+# Create a visual check
+# Plot half-hourly directions as points and prevailing wind as a line
+ggplot() +
+  geom_point(data = daily_winds, aes(x = date, y = WD)) +
+  geom_hline(data = prevailing_wind, aes(yintercept = WD), color = "red", size = 1) +
+  labs(title = paste("Wind Directions on", example_date),
+       y = "Wind Direction (degrees)",
+       x = "Time") +
+  theme_bw()
+
+
+```
+#Modal approach for determining prevailing wind direction 
+```{r}
+#this shows which direction the wind blew from most often, can bin into cardinal directions, might better represent what we think of in terms of "prevailing wind" 
+
+# Function to find most common wind direction by binning
+get_modal_wind <- function(degrees) {
+  # Create bins for cardinal/intercardinal directions
+  bins <- cut(degrees, 
+             breaks = seq(0, 360, by = 45),
+             labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+             include.lowest = TRUE)
+  
+  # Find most frequent direction
+  modal_dir <- names(sort(table(bins), decreasing = TRUE)[1])
+  
+  # Return the center of that directional bin
+  dir_to_deg <- c("N" = 0, "NE" = 45, "E" = 90, "SE" = 135, 
+                  "S" = 180, "SW" = 225, "W" = 270, "NW" = 315)
+  
+  return(dir_to_deg[modal_dir])
+}
+
+# Compare approaches for your example day
+daily_summary <- df %>%
+  filter(as.Date(date) == example_date) %>%
+  summarise(
+    circular_mean = get_prevailing_wind(WD),
+    modal_direction = get_modal_wind(WD)
+  )
+```
+
+#comparing windroses of the diff approaches 
+```{r}
+# Filter half-hourly data for July 17, 2017 and convert to regular data frame
+hh_data <- df %>%
+  filter(as.Date(date) == "2018-07-17") %>%
+  select(WD, WS) %>%
+  as.data.frame()  # Convert to regular data frame
+
+# Now try the windrose
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/windrose_halfhourly_17july2018.png", width = 7, height = 7, units = "in", res = 300)
+windRose(hh_data, 
+         ws = "WS",
+         wd = "WD",
+         main = "Half-hourly Wind Directions - July 17, 2018")
+dev.off()
+
+
+# Create data frame for circular mean with multiple points
+circular_mean_data <- data.frame(
+    wd = rep(163.167, 48),  # Use 48 points (same as your half-hourly data)
+    ws = rep(mean(hh_data$WS), 48)  # Average wind speed repeated
+)
+
+# Create data frame for modal direction
+modal_data <- data.frame(
+    wd = rep(135, 48),  # Use 48 points
+    ws = rep(mean(hh_data$WS), 48)  # Average wind speed repeated
+)
+
+# Create other two windroses
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/windrose_circularmean_17july2018.png", width = 7, height = 7, units = "in", res = 300)
+windRose(circular_mean_data, main = "Circular Mean Wind Direction - July 17, 2018")
+dev.off()
+
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/windrose_modal_17july2018.png", width = 7, height = 7, units = "in", res = 300)
+windRose(modal_data, main = "Modal Wind Direction - July 17, 2018")
+dev.off()
+```
+#using windrose frequency of counts to determine prevailing wind and adding it to our daily avg
+```{r}
+# Function to get prevailing wind from frequency analysis
+get_prevailing_from_frequency <- function(wd_data) {
+  # Create frequency table of wind directions in 45-degree bins
+  bins <- cut(wd_data, 
+             breaks = seq(0, 360, by = 45),
+             labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+             include.lowest = TRUE)
+  
+  # Get the most frequent direction
+  freq_table <- table(bins)
+  prev_dir <- names(freq_table)[which.max(freq_table)]
+  
+  # Convert back to degrees (center of the most frequent bin)
+  dir_to_deg <- c("N" = 0, "NE" = 45, "E" = 90, "SE" = 135, 
+                  "S" = 180, "SW" = 225, "W" = 270, "NW" = 315)
+  
+  return(dir_to_deg[prev_dir])
+}
+
+# Add this to your daily averages
+df_avg_FC <- df %>%
+  group_by(date = as.Date(date)) %>%
+  mutate(n_valid = sum(!is.na(FC))) %>%
+  filter(n_valid >= 0.5 * 48) %>%
+  summarise(
+    across(everything(), \(x) mean(x, na.rm = TRUE)),
+    prevailing_wind = get_prevailing_from_frequency(WD)  # Add prevailing wind
+  ) %>%
+  ungroup()
+
+
+```
+#comparing approaches
+```{r}
+# Create comparison for a specific day (July 17, 2017)
+comparison_df <- df %>%
+  filter(as.Date(date) == "2017-07-17") %>%
+  summarise(
+    circular_mean = get_prevailing_wind(WD),
+    modal_direction = get_modal_wind(WD),
+    frequency_based = get_prevailing_from_frequency(WD)
+  )
+
+# We could also look at several days
+multi_day_comparison <- df %>%
+  group_by(date = as.Date(date)) %>%
+  filter(n() >= 24) %>%  # Only include days with at least 24 observations
+  summarise(
+    circular_mean = get_prevailing_wind(WD),
+    modal_direction = get_modal_wind(WD),
+    frequency_based = get_prevailing_from_frequency(WD)
+  )
+
+# Print results
+print("Single day comparison (July 17, 2017):")
+print(comparison_df)
+
+print("\nFirst few days of comparison:")
+print(head(multi_day_comparison))
+
+# Calculate differences between methods
+multi_day_comparison <- multi_day_comparison %>%
+  mutate(
+    diff_circular_modal = abs(circular_mean - modal_direction),
+    diff_circular_freq = abs(circular_mean - frequency_based),
+    diff_modal_freq = abs(modal_direction - frequency_based)
+  )
+
+# Summary of differences
+print("\nSummary of differences between methods:")
+summary(multi_day_comparison[, c("diff_circular_modal", "diff_circular_freq", "diff_modal_freq")])
+```
+#looking at prev wind direction calculation agreement - july 17, 2017
+```{r}
+# First, let's look at when we have good data
+first_valid_data <- df %>%
+  filter(!is.na(WD)) %>%
+  summarise(first_date = min(as.Date(date)))
+print("First date with valid wind data:")
+print(first_valid_data)
+
+# Modified multi-day comparison
+multi_day_comparison <- df %>%
+  group_by(date = as.Date(date)) %>%
+  filter(n() >= 24,  # Only include days with at least 24 observations
+         !all(is.na(WD))) %>%  # Exclude days with all NA wind directions
+  summarise(
+    n_obs = n(),
+    n_valid = sum(!is.na(WD)),
+    circular_mean = if(sum(!is.na(WD)) >= 12) get_prevailing_wind(WD) else NA,
+    modal_direction = if(sum(!is.na(WD)) >= 12) get_modal_wind(WD) else NA,
+    frequency_based = if(sum(!is.na(WD)) >= 12) get_prevailing_from_frequency(WD) else NA
+  ) %>%
+  filter(!is.na(circular_mean))  # Only keep days where we could calculate all methods
+
+# Look at results
+print("Number of days with valid comparisons:")
+print(nrow(multi_day_comparison))
+
+print("\nFirst few days of valid comparisons:")
+print(head(multi_day_comparison))
+
+# Calculate differences for valid days
+valid_comparisons <- multi_day_comparison %>%
+  mutate(
+    diff_circular_modal = abs(circular_mean - modal_direction),
+    diff_circular_freq = abs(circular_mean - frequency_based),
+    diff_modal_freq = abs(modal_direction - frequency_based)
+  )
+
+print("\nSummary of differences between methods:")
+summary(valid_comparisons[, c("diff_circular_modal", "diff_circular_freq", "diff_modal_freq")])
+```
+#looking at prev wind direction calculation agreement - july 17, 2019/any year of interest
+```{r}
+# Single day comparison for July 17, 2019 / any dates 
+comparison_df_2019 <- df %>%
+  filter(as.Date(date) == "2019-07-17") %>%
+  summarise(
+    circular_mean = get_prevailing_wind(WD),
+    modal_direction = get_modal_wind(WD),
+    frequency_based = get_prevailing_from_frequency(WD)
+  )   %>% 
+  as.data.frame() 
+
+# Let's also look at the number of observations for that day
+daily_stats_2019 <- df %>%
+  filter(as.Date(date) == "2019-07-17") %>%
+  summarise(
+    n_obs = n(),
+    n_valid = sum(!is.na(WD))
+  )
+
+print("July 17, 2019 comparison:")
+print(comparison_df_2019)
+print("\nObservation counts for July 17, 2019:")
+print(daily_stats_2019)
+
+# We could also create the windrose for this day to visualize - doesn't seem to work if there are NAs, so made a clean dataset
+hh_data_2019 <- df %>%
+  filter(as.Date(date) == "2019-07-17") %>%
+  select(WD, WS) %>%
+  as.data.frame()
+
+# Try modified windrose code
+# Make sure column names are lowercase as openair expects
+hh_data_2019_clean <- hh_data_2019 %>%
+  rename(wd = WD, ws = WS) %>%
+  na.omit()  # Remove any rows with NAs
+
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/windrose_july17_2019.png", width = 7, height = 7, units = "in", res = 300)
+windRose(hh_data_2019_clean, 
+         main = "Half-hourly Wind Directions - July 17, 2019")
+dev.off()
+```
+
+
+# *** New datasets: calc prevailing WD for that day usng modal/frequency approach (similar to what wind roses use), then do a daily avg for data threshold of 50% across all variables --> create a df_avg for FC and FCH4 individually so lack to FCH4 doesn't affect potential days that could be used for FC --> to use these for stats 
+ #####actually separating out FC and FCH4 is not necessary - can just join wind data to df_avg which already used timeAverage to get variable averages
+ 
+#### Modal / frequency approach to determining prevailing wind direction for each day 
+```{r}
+#function for getting modal wind
+get_modal_wind <- function(degrees) {
+  # Create bins for cardinal/intercardinal directions
+  bins <- cut(degrees,
+             breaks = seq(0, 360, by = 45),
+             labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+             include.lowest = TRUE)
+
+  # Find most frequent direction
+  modal_dir <- names(sort(table(bins), decreasing = TRUE)[1])
+
+  # Return the center of that directional bin
+  dir_to_deg <- c("N" = 0, "NE" = 45, "E" = 90, "SE" = 135,
+                  "S" = 180, "SW" = 225, "W" = 270, "NW" = 315)
+
+  return(dir_to_deg[modal_dir])
+}
+
+
+
+# First calculate modal-based wind direction for each day
+daily_wind <- df %>%
+  group_by(date = as.Date(date)) %>%
+  filter(n() >= 24) %>%  # At least 50% of daily observations
+  summarise(
+    # Use get_modal_wind function we developed earlier
+    WD_modalfreq = get_modal_wind(WD), #modal wind approach, freq-approach 
+    n_wind_obs = sum(!is.na(WD)),
+  ) %>%
+  filter(n_wind_obs >= 24)  # Ensure we have enough valid wind measurements
+```
+
+#Can just do this to add the daily prevailing wind
+```{r}
+# Join with modal wind direction
+df_avg$date <- as.Date(df_avg$date) 
+df_avg <- df_avg %>%
+  left_join(daily_wind, by = "date")
+```
+
+
+#Adding a column for cardinal directions for WD degrees
+```{r}
+# Function to convert degrees to cardinal directions using exact matches
+degrees_to_cardinal <- function(degrees) {
+  dir_to_deg <- c("N" = 0, "NE" = 45, "E" = 90, "SE" = 135,
+                  "S" = 180, "SW" = 225, "W" = 270, "NW" = 315)
+  
+  # Match degrees to cardinal directions
+  cardinal <- names(dir_to_deg)[match(degrees, dir_to_deg)]
+  return(cardinal)
+}
+
+# Calculate daily wind with both degrees and cardinal directions
+daily_wind2 <- df %>%
+  group_by(date = as.Date(date)) %>%
+  filter(n() >= 24) %>%  # At least 50% of daily observations
+  summarise(
+    # Use get_modal_wind function we developed earlier
+    WD_modal = get_modal_wind(WD), #modal wind approach, freq-approach 
+    WD_cardinal = degrees_to_cardinal(WD_modal),
+    n_wind_obs = sum(!is.na(WD)),
+  ) %>%
+  filter(n_wind_obs >= 24)  # Ensure we have enough valid wind measurements
+
+#convert daily wind dataset date to iDate so it can merge with df_avg
+# Convert date in daily_wind2 to IDate
+library(data.table)
+daily_wind2$date <- as.IDate(daily_wind2$date)
+
+# Join with your averaged datasets
+df_avg2 <- df_avg %>%
+  left_join(daily_wind2, by = "date")
+
+#remove n_wind_obs from df_avg2 
+df_avg2 <- df_avg2 %>% select(-n_wind_obs)
+
+#update the df_avg with the new daily WD via the modal approach and cardinal directions of WD, which also has seasons
+
+write.csv(x = df_avg2,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',quote = F,row.names = F)
+
+
+#save new HH df with seasons added 
+write.csv(x=df, file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv', quote = F, row.names = F)
 ```
 
 
