@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 #Notes on site: Wind direction primarily blows from NW, except for Dec - Mar, when it primarily blows from SE direction. The site is largely tussock tundra but to the south there is thermokarst 
 
-**TO DO: now redo all the stats with the WD_modal **
+#**TO DO: now redo all the stats with the WD_modal **
 
 ```{r, include=FALSE}
 rm(list = ls())
@@ -49,11 +49,6 @@ df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/counci
 #needs continuous day variable - daily avg, calculated in processing steps
 df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-# #monthly avg, calculated in processing steps 
-# df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
-
-#original half-hourly dataframe using the SWC1
-#dforig = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 ```
 
 ```{r}
@@ -65,7 +60,7 @@ ggplot(data = df,aes(TIMESTAMP_END,FC_F))+
 ```
 
 
-#Add Seasonal delineations to df and df_avg (see older version of code for work on delineations)
+#Add Seasonal delineations to df and df_avg if not already (see older version of code for work on delineations)
 ```{r}
 # add year column if not already present
 df <- df %>%
@@ -184,18 +179,29 @@ library(openair)
 # Create a windRose plot for basic wind patterns
 # prepare the data with wind speed and direction
 wind_data <- df_avg %>%
-  select(WS, WD) %>%
+  select(WS, WD_modal) %>%
   rename(ws = WS,
+         wd = WD_modal)
+
+wind_data_hh <- df %>%
+  select(WS, WD) %>%
+   rename(ws = WS,
          wd = WD)
+
 
 #*Note: openair / WindRose function doesn't create a ggplot object, so you can't save with ggsave 
 
 # Basic wind rose
  windRose(wind_data,
-           main = "Wind Direction all years")
+           main = "Wind Direction all years wd_modal")
+ 
+ # Basic wind rose
+ windRose(wind_data_hh,
+           main = "Wind Direction all years HH")
+
 
 # alt method for saving image: Create PNG directly
-png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_windrose_allyears.png",
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/Council_WD_all_years/wd_modal_council_windrose_allyears.png",
     width = 10, height = 7, units = "in", res = 600)
 windRose(wind_data, main = "Wind Direction all years")
 dev.off()
@@ -204,8 +210,9 @@ dev.off()
 # create pollution roses for CO2 and CH4 fluxes
 #create dataset 
 flux_wind_data <- df_avg %>%
-  select(WD, WS, FC_F, FCH4_F, FC, FCH4) %>%
-  rename(wd = WD,
+  select(WD, WS, FC_F, FCH4_F, FC, FCH4, WD_modal) %>%
+  rename(wd_orig = WD,
+         wd = WD_modal,
          ws = WS,
          CO2_GF = FC_F,
          CH4_GF = FCH4_F,
@@ -213,45 +220,45 @@ flux_wind_data <- df_avg %>%
          CH4 = FCH4)
 
 # CO2 flux pollution rose - not gapfilled 
-png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CO2_pollutionrose.png",
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/Council_WD_all_years/wd_modal_council_CO2_pollutionrose.png",
     width = 10, height = 7, units = "in", res = 600)
 
 pollutionRose(flux_wind_data, pollutant = "CO2", 
               key.position = "right",
-              main = "CO2 Flux by Wind Direction")
+              main = "CO2 Flux by Wind Direction (wd_modal)")
 
 dev.off()
 
 # CH4 flux pollution rose
-png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CH4_pollutionrose.png",
+png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/Council_WD_all_years/wd_modal_council_CH4_pollutionrose.png",
     width = 10, height = 7, units = "in", res = 600)
 
 pollutionRose(flux_wind_data, pollutant = "CH4",
               key.position = "right",
-              main = "CH4 Flux by Wind Direction")
+              main = "CH4 Flux by Wind Direction (wd_modal)")
 
 dev.off()
-
-#Gapfilled C fluxes
-png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CO2_GF_pollutionrose.png",
-    width = 10, height = 7, units = "in", res = 600)
-
-pollutionRose(flux_wind_data, pollutant = "CO2_GF", 
-              key.position = "right",
-              main = "CO2_GF Flux by Wind Direction")
-
-dev.off()
-
-# CH4 flux pollution rose
-png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CH4_GF_pollutionrose.png",
-    width = 10, height = 7, units = "cm", res = 600)
-
-pollutionRose(flux_wind_data, pollutant = "CH4_GF",
-              key.position = "right",
-              main = "CH4_GF Flux by Wind Direction")
-
-
-dev.off()
+ 
+# #Gapfilled C fluxes using orig WD -- ignore for now 
+# png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CO2_GF_pollutionrose.png",
+#     width = 10, height = 7, units = "in", res = 600)
+# 
+# pollutionRose(flux_wind_data, pollutant = "CO2_GF", 
+#               key.position = "right",
+#               main = "CO2_GF Flux by Wind Direction")
+# 
+# dev.off()
+# 
+# # CH4 flux pollution rose using orig WD -- ignore for now 
+# png("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_CH4_GF_pollutionrose.png",
+#     width = 10, height = 7, units = "cm", res = 600)
+# 
+# pollutionRose(flux_wind_data, pollutant = "CH4_GF",
+#               key.position = "right",
+#               main = "CH4_GF Flux by Wind Direction")
+# 
+# 
+# dev.off()
 
 #Method 2 for saving non ggplot objects, this uses pixel width and height and lets you plot the image first, then save, whereas the other way only saves, doesn't display plot it makes in Rmarkdown panel 
 # Method 2: Save after plotting
@@ -269,8 +276,6 @@ dev.off()
 # dev.off()
 
 ```
-
-
 #Windrose - seasonal C fluxes by WD across all years - using df_avg
 
 ####uses open-air's season defintiions, need to adjust it to my assigned seasonal definitions 
@@ -278,8 +283,10 @@ dev.off()
 # create seasonal wind roses to see if patterns change
 # add season to the data
 flux_wind_seasonal <- df_avg %>%
-  select(date, WD, WS, FC_F, FCH4_F, FC, FCH4, season) %>%
-  rename(wd = WD,
+  select(date, WD, WS, FC_F, FCH4_F, FC, FCH4, season, WD_modal) %>%
+  rename(wd_orig = WD,
+         wd = WD_modal,
+         wd_modal = WD_modal,
          ws = WS,
          CO2_GF = FC_F,
          CH4_GF = FCH4_F,
@@ -289,37 +296,39 @@ flux_wind_seasonal <- df_avg %>%
 # Seasonal wind roses for each flux - non-gapfilled 
 pollutionRose(flux_wind_seasonal, pollutant = "CO2",
               type = "season",
-              main = "Seasonal CO2 Flux by Wind Direction")
+              main = "Seasonal CO2 Flux by Wind Direction (wd_modal)")
 
-dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CO2.png",
+dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/wd_modal_council_seasonal_pollutionrose_CO2.png",
          width = 6000, height = 4200, res = 600)
 dev.off()
 
 
 pollutionRose(flux_wind_seasonal, pollutant = "CH4",
               type = "season",
-              main = "Seasonal CH4 Flux by Wind Direction")
+              main = "Seasonal CH4 Flux by Wind Direction (wd_modal)")
 
 dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CH4.png",
          width = 6000, height = 4200, res = 600)
 dev.off()
 
-# Seasonal wind roses for each flux - gapfilled **
-pollutionRose(flux_wind_seasonal, pollutant = "CO2_GF",
-              type = "season",
-              main = "Seasonal CO2_F Flux by Wind Direction")
 
-dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CO2_GF.png",
-         width = 6000, height = 4200, res = 600)
-dev.off()
 
-pollutionRose(flux_wind_seasonal, pollutant = "CH4_GF",
-              type = "season",
-              main = "Seasonal CH4_F Flux by Wind Direction")
-
-dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CH4_GF.png",
-         width = 6000, height = 4200, res = 600)
-dev.off()
+# # Seasonal wind roses for each flux - gapfilled ** -- ignore for now
+# pollutionRose(flux_wind_seasonal, pollutant = "CO2_GF",
+#               type = "season",
+#               main = "Seasonal CO2_F Flux by Wind Direction")
+# 
+# dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CO2_GF.png",
+#          width = 6000, height = 4200, res = 600)
+# dev.off()
+# 
+# pollutionRose(flux_wind_seasonal, pollutant = "CH4_GF",
+#               type = "season",
+#               main = "Seasonal CH4_F Flux by Wind Direction")
+# 
+# dev.copy(png, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/council_seasonal_pollutionrose_CH4_GF.png",
+#          width = 6000, height = 4200, res = 600)
+# dev.off()
 
 
 # Create one plot with all seasons
@@ -341,9 +350,10 @@ dev.off()
 # Create plots by year
 # First, let's add a year column if it's not already there
 flux_wind_yearly <- df_avg %>%
-  select(date, WD, WS, FC, FCH4, FC_F, FCH4_F) %>%
+  select(date, WD, WD_modal, WS, FC, FCH4, FC_F, FCH4_F) %>%
   mutate(year = year(date)) %>%  # Extract year from date
-  rename(wd = WD,
+  rename(wd_orig = WD,
+         wd = WD_modal,
          ws = WS,
          CO2_GF = FC_F,
          CH4_GF = FCH4_F,
@@ -356,7 +366,7 @@ for(yr in 2017:2022) {
   yearly_data <- flux_wind_yearly %>% filter(year == yr)
   
   pollutionRose(yearly_data, pollutant = "CO2",
-                main = paste("CO2 Flux by Wind Direction -", yr))
+                main = paste("CO2 Flux by Wind Direction (wd_modal) -", yr))
 }
 
 # For CH4
@@ -364,28 +374,28 @@ for(yr in 2017:2022) {
   yearly_data <- flux_wind_yearly %>% filter(year == yr)
   
   pollutionRose(yearly_data, pollutant = "CH4",
-                main = paste("CH4 Flux by Wind Direction -", yr))
+                main = paste("CH4 Flux by Wind Direction (wd_modal) -", yr))
 }
 
 
 
 
-# Create plots for each year (2017-2022) - gapfilled C fluxes
-# For CO2
-for(yr in 2017:2022) {
-  yearly_data <- flux_wind_yearly %>% filter(year == yr)
-  
-  pollutionRose(yearly_data, pollutant = "CO2_GF",
-                main = paste("CO2_GF Flux by Wind Direction -", yr))
-}
-
-# For CH4
-for(yr in 2017:2022) {
-  yearly_data <- flux_wind_yearly %>% filter(year == yr)
-  
-  pollutionRose(yearly_data, pollutant = "CH4_GF",
-                main = paste("CH4_GF Flux by Wind Direction -", yr))
-}
+# Create plots for each year (2017-2022) - gapfilled C fluxes -- ignore for now 
+# # For CO2
+# for(yr in 2017:2022) {
+#   yearly_data <- flux_wind_yearly %>% filter(year == yr)
+#   
+#   pollutionRose(yearly_data, pollutant = "CO2_GF",
+#                 main = paste("CO2_GF Flux by Wind Direction -", yr))
+# }
+# 
+# # For CH4
+# for(yr in 2017:2022) {
+#   yearly_data <- flux_wind_yearly %>% filter(year == yr)
+#   
+#   pollutionRose(yearly_data, pollutant = "CH4_GF",
+#                 main = paste("CH4_GF Flux by Wind Direction -", yr))
+# }
 
 
 ```
@@ -393,10 +403,10 @@ for(yr in 2017:2022) {
 ```{r}
 # Create a function to generate and save pollution roses
 save_pollution_roses <- function(data, years = 2017:2022, 
-                               base_path = "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/") {
+                               base_path = "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Windroses/Council_C flux_WD_individual years/") {
   
   # Define pollutants and their names for file saving
-  pollutants <- c("CO2", "CH4", "CO2_GF", "CH4_GF")
+  pollutants <- c("CO2", "CH4")
   
   # Loop through each pollutant
   for(pollutant in pollutants) {
@@ -404,7 +414,7 @@ save_pollution_roses <- function(data, years = 2017:2022,
     for(yr in years) {
       # Create file name
       file_name <- file.path(base_path, 
-                            paste0("council_", tolower(pollutant), "_pollutionrose_", yr, ".png"))
+                            paste0("wd_modal_council_", tolower(pollutant), "_pollutionrose_", yr, ".png"))
       
       # Filter data for the year
       yearly_data <- data %>% filter(year == yr)
@@ -413,7 +423,7 @@ save_pollution_roses <- function(data, years = 2017:2022,
       png(file_name, width = 10, height = 7, units = "in", res = 600)
       pollutionRose(yearly_data, 
                     pollutant = pollutant,
-                    main = paste(pollutant, "Flux by Wind Direction -", yr))
+                    main = paste(pollutant, "Flux by Wind Direction (wd_modal) -", yr))
       dev.off()
       
       # Print message to track progress
@@ -431,13 +441,15 @@ save_pollution_roses(flux_wind_yearly)
 
 #### Seasons to windroses by year using df_avg
 
-#### important to note that these "season" don't match up with the seasonal delineations in the df --> need to make windroses for each season as defined from NEE, temp, etc
+#### important to note that these "seasons" don't match up with the seasonal delineations in the df --> need to make windroses for each season as defined from NEE, temp, etc
+
 ```{r}
 # Create data frame with both year and season
 flux_wind_year_season <- df_avg %>%
-  select(date, WD, WS, FC, FCH4,FC_F, FCH4_F, season) %>%
+  select(date, WD, WD_modal, WS, FC, FCH4,FC_F, FCH4_F, season) %>%
   mutate(year = year(date)) %>%  # Extract year from date
-  rename(wd = WD,
+  rename(wd_orig = WD,
+         wd = WD_modal,
          ws = WS,
           CO2_GF = FC_F,
          CH4_GF = FCH4_F,
@@ -451,7 +463,7 @@ for(yr in 2017:2022) {
   
   pollutionRose(yearly_data, pollutant = "CO2",
                 type = "season",
-                main = paste("CO2 Flux by Wind Direction and Season -", yr))
+                main = paste("CO2 Flux by Wind Direction and Season (wd_modal) -", yr))
 }
 
 # For CH4
@@ -460,27 +472,27 @@ for(yr in 2017:2022) {
   
   pollutionRose(yearly_data, pollutant = "CH4",
                 type = "season",
-                main = paste("CH4 Flux by Wind Direction and Season -", yr))
+                main = paste("CH4 Flux by Wind Direction and Season (wd_modal) -", yr))
 }
 
 
-# For CO2
-for(yr in 2017:2022) {
-  yearly_data <- flux_wind_year_season %>% filter(year == yr)
-  
-  pollutionRose(yearly_data, pollutant = "CO2_GF",
-                type = "season",
-                main = paste("CO2_GF Flux by Wind Direction and Season -", yr))
-}
-
-# For CH4
-for(yr in 2017:2022) {
-  yearly_data <- flux_wind_year_season %>% filter(year == yr)
-  
-  pollutionRose(yearly_data, pollutant = "CH4_GF",
-                type = "season",
-                main = paste("CH4_GF Flux by Wind Direction and Season -", yr))
-}
+# # For CO2 gapfilled
+# for(yr in 2017:2022) {
+#   yearly_data <- flux_wind_year_season %>% filter(year == yr)
+#   
+#   pollutionRose(yearly_data, pollutant = "CO2_GF",
+#                 type = "season",
+#                 main = paste("CO2_GF Flux by Wind Direction and Season -", yr))
+# }
+# 
+# # For CH4 gapfilled 
+# for(yr in 2017:2022) {
+#   yearly_data <- flux_wind_year_season %>% filter(year == yr)
+#   
+#   pollutionRose(yearly_data, pollutant = "CH4_GF",
+#                 type = "season",
+#                 main = paste("CH4_GF Flux by Wind Direction and Season -", yr))
+# }
 
 
 
@@ -492,7 +504,12 @@ for(yr in 2017:2022) {
 #               type = "season",
 #               main = "CO2 Flux by Wind Direction and Season - 2019")
 ```
+
+
+
 ####Function to save images of C flux by wind direction for each year
+
+###*Note to self: didn't re-save these with wd_modal - 2.25.2025
 ```{r}
 # Create a function to generate and save pollution roses
 save_seasonal_pollution_roses <- function(data, years = 2017:2022, 
@@ -597,8 +614,10 @@ create_seasonal_plots(flux_wind_year_season_clean,
 #For all 
 #Create datasets
 # For CO2 flux analysis - only need complete cases of FC and WD
+
+#**NOTE: the wd_cat and the WD_modal do not always agree in this dataset -- need to examine ** 2.25.2025
 flux_by_wd <- df_avg %>%
-   select(WD, FC, FCH4, season) %>%
+   select(WD, WD_modal, WD_cardinal, FC, FCH4, season) %>%
   mutate(
     WD_cat = cut(WD, 
                  breaks = seq(0, 360, by = 45),
@@ -609,7 +628,7 @@ flux_by_wd <- df_avg %>%
 # For CO2 flux analysis - only need complete cases of FC and WD
 flux_by_wd_CO2 <- df_avg %>%
   filter(!is.na(FC), !is.na(WD)) %>%  # Only remove NAs from FC and WD so you have complete cases for these
-  select(WD, FC, season) %>%
+  select(WD, WD_modal, WD_cardinal, FC, season) %>%
   mutate(
     WD_cat = cut(WD, 
                  breaks = seq(0, 360, by = 45),
@@ -620,7 +639,7 @@ flux_by_wd_CO2 <- df_avg %>%
 # For CH4 flux analysis - only need complete cases of FCH4 and WD
 flux_by_wd_CH4 <- df_avg %>%
   filter(!is.na(FCH4), !is.na(WD)) %>%  # Only remove NAs from FCH4 and WD so you have complete cases for these 
-  select(WD, FCH4, season) %>%
+  select(WD, WD_modal, WD_cardinal, FCH4, season) %>%
   mutate(
     WD_cat = cut(WD, 
                  breaks = seq(0, 360, by = 45),
@@ -643,7 +662,7 @@ fall_data_CH4 <- flux_by_wd_CH4 %>% filter(season == "Fall Senescence")
 
 # Calculate summary statistics for each wind direction
 flux_summary_CO2 <- flux_by_wd_CO2 %>%
-  group_by(WD_cat) %>%
+  group_by(WD_cardinal) %>%
   summarise(
     mean_CO2 = mean(FC, na.rm = TRUE),
     se_CO2 = sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC))),
@@ -652,7 +671,7 @@ flux_summary_CO2 <- flux_by_wd_CO2 %>%
 
 # Calculate summary statistics for each wind direction
 flux_summary_CH4 <- flux_by_wd_CH4 %>%
-  group_by(WD_cat) %>%
+  group_by(WD_cardinal) %>%
   summarise(
     mean_CH4 = mean(FCH4, na.rm = TRUE),
     se_CH4 = sd(FCH4, na.rm = TRUE)/sqrt(sum(!is.na(FCH4))),
@@ -672,11 +691,33 @@ ggplot(flux_by_wd_CO2, aes(x = WD_cat, y = FC)) +
         axis.title = element_text(size = 14),
         plot.title = element_text(size = 16, hjust = 0.5))
 
+#modal WD - cardinal 
+ggplot(flux_by_wd_CO2, aes(x = WD_cardinal, y = FC)) +
+  geom_boxplot() +
+  labs(title = expression(Daily~Avg~CO[2]~Flux~by~Wind~Direction),
+       x = "Wind Direction wd-modal",
+       y = expression(CO[2]~Flux~(µmol/m^2/s))) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(size = 16, hjust = 0.5))
+
 # For CH4
 ggplot(flux_by_wd_CH4, aes(x = WD_cat, y = FCH4)) +
   geom_boxplot() +
   labs(title = expression(Daily~Avg~CH[4]~Flux~by~Wind~Direction),
        x = "Wind Direction",
+       y = expression(CH[4]~Flux~(nmol/m^2/s))) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(size = 16, hjust = 0.5))
+
+#WD modal - cardinal 
+ggplot(flux_by_wd_CH4, aes(x = WD_cardinal, y = FCH4)) +
+  geom_boxplot() +
+  labs(title = expression(Daily~Avg~CH[4]~Flux~by~Wind~Direction),
+       x = "Wind Direction (wd-modal)",
        y = expression(CH[4]~Flux~(nmol/m^2/s))) +
   theme_bw() +
   theme(axis.text = element_text(size = 12),
@@ -1303,6 +1344,8 @@ df_avg_FC <- df %>%
   summarise(across(everything(), mean, na.rm = TRUE)) %>% #newer syntax:   summarise(across(everything(), \(x) mean(x, na.rm = TRUE))) %>%
   ungroup()
 ```
+
+
 #Double checking the prevailing winds calculation
 ```{r}
 # Pick a specific date to examine
@@ -1439,11 +1482,12 @@ df_avg_FC <- df %>%
 
 
 ```
-#comparing approaches
+
+#comparing daily WD approaches
 ```{r}
 # Create comparison for a specific day (July 17, 2017)
 comparison_df <- df %>%
-  filter(as.Date(date) == "2017-07-17") %>%
+  filter(as.Date(date) == "2019-10-17") %>%
   summarise(
     circular_mean = get_prevailing_wind(WD),
     modal_direction = get_modal_wind(WD),
@@ -1461,7 +1505,7 @@ multi_day_comparison <- df %>%
   )
 
 # Print results
-print("Single day comparison (July 17, 2017):")
+print("Single day comparison (Oct 17, 2019):")
 print(comparison_df)
 
 print("\nFirst few days of comparison:")
