@@ -164,105 +164,106 @@ df_avg_2023 <- df_avg %>% filter(year == "2023")
 ```
 
 #Add Seasonal delineations to df and df_avg (redundant with seasonal delineations below, can ignore those)
+#New uploads includes these already, so can skip this part
 ```{r}
-# add year column if not already present
-df <- df %>%
-  mutate(year = format(date, "%Y"))
-
-# Create DOY for df (half-hourly data)
-df$DOY <- yday(df$date)
-
-
-# Create seasonal assignments using both year and DOY
-df<- df %>%
-  mutate(
-    season = case_when(
-      # 2017 seasons
-      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
-      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
-      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
-      
-      
-      # 2018 seasons
-      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
-      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
-      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
-      
-      # 2019 seasons
-      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
-      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
-      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
-      
-      # 2020 seasons
-      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
-      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
-      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
-      
-      # 2021 seasons
-      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
-      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
-      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
-      
-      # 2022 seasons
-      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
-      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
-      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
-      
-      # not doing one for 2023 ** incomplete year 
-      TRUE ~ NA_character_
-    )
-  )
-
-####################easona to daily avg dataset###########################
-
-# add year column if not already present
-df_avg <- df_avg %>%
-  mutate(year = format(date, "%Y"))
-
-
-# Create DOY For df_avg (daily data)
-df_avg$DOY <- yday(df_avg$date)
-
-
-# Create seasonal assignments using both year and DOY
-df_avg <- df_avg %>%
-  mutate(
-    season = case_when(
-      # 2017 seasons
-      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
-      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
-      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
-      
-      
-      # 2018 seasons
-      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
-      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
-      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
-      
-      # 2019 seasons
-      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
-      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
-      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
-      
-      # 2020 seasons
-      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
-      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
-      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
-      
-      # 2021 seasons
-      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
-      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
-      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
-      
-      # 2022 seasons
-      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
-      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
-      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
-      
-      # not doing one for 2023 ** incomplete year 
-      TRUE ~ NA_character_
-    )
-  )
+# # add year column if not already present
+# df <- df %>%
+#   mutate(year = format(date, "%Y"))
+# 
+# # Create DOY for df (half-hourly data)
+# df$DOY <- yday(df$date)
+# 
+# 
+# # Create seasonal assignments using both year and DOY
+# df<- df %>%
+#   mutate(
+#     season = case_when(
+#       # 2017 seasons
+#       year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+#       year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+#       year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+#       
+#       
+#       # 2018 seasons
+#       year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
+#       year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
+#       year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
+#       
+#       # 2019 seasons
+#       year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+#       year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+#       year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
+#       
+#       # 2020 seasons
+#       year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
+#       year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
+#       year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
+#       
+#       # 2021 seasons
+#       year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
+#       year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
+#       year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
+#       
+#       # 2022 seasons
+#       year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
+#       year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
+#       year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
+#       
+#       # not doing one for 2023 ** incomplete year 
+#       TRUE ~ NA_character_
+#     )
+#   )
+# 
+# ####################easona to daily avg dataset###########################
+# 
+# # add year column if not already present
+# df_avg <- df_avg %>%
+#   mutate(year = format(date, "%Y"))
+# 
+# 
+# # Create DOY For df_avg (daily data)
+# df_avg$DOY <- yday(df_avg$date)
+# 
+# 
+# # Create seasonal assignments using both year and DOY
+# df_avg <- df_avg %>%
+#   mutate(
+#     season = case_when(
+#       # 2017 seasons
+#       year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+#       year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+#       year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+#       
+#       
+#       # 2018 seasons
+#       year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
+#       year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
+#       year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
+#       
+#       # 2019 seasons
+#       year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+#       year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+#       year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
+#       
+#       # 2020 seasons
+#       year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
+#       year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
+#       year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
+#       
+#       # 2021 seasons
+#       year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
+#       year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
+#       year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
+#       
+#       # 2022 seasons
+#       year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
+#       year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
+#       year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
+#       
+#       # not doing one for 2023 ** incomplete year 
+#       TRUE ~ NA_character_
+#     )
+#   )
 ```
 
 
@@ -483,6 +484,48 @@ ggsave(
   dpi = 600,                 # Resolution in dots per inch
   units = "cm"               # Units for width and height (can be "in", "cm", or "mm")
 )
+
+```
+
+#Arrange timeseries figures into a grid to save as single figure
+```{r}
+# Install if you don't have it
+ #install.packages("patchwork")
+library(patchwork)
+
+# Arrange plots in two columns (3 rows x 2 columns) 
+combined_plot <- (annual_timeseries_2017_plot + annual_timeseries_2018_plot) /
+                 (annual_timeseries_2019_plot + annual_timeseries_2020_plot) /
+                 (annual_timeseries_2021_plot + annual_timeseries_2022_plot) +
+                 plot_layout(guides = "collect") # Collects all legends into one
+
+# Add a common title if desired
+combined_plot <- combined_plot & 
+  #plot_annotation(
+    #title = "Annual Flux Timeseries (2017-2022)",
+   # theme = theme(plot.title = element_text(size = 16, hjust = 0.5))
+  #) &
+  
+  # Increase legend text size, key size, and spacing
+  theme(
+    #legend.title = element_text(size = 14),    # Increase legend title size
+    legend.text = element_text(size = 14, face = "bold"),     # Increase legend text size
+    legend.key.size = unit(2, "cm"),         # Increase the size of the legend keys/symbols - doesn't seem to work
+    legend.key.width = unit(3, "cm"),        # Make keys wider for line symbols - doesn't work
+    legend.key.height = unit(3, "cm"),       # Control height separately - doesnt work
+    #legend.spacing = unit(0.1, "cm"),          # Add more spacing between legend items
+    #legend.margin = margin(10, 10, 10, 10)     # Add margin around the legend
+    legend.position = "bottom",
+    legend.box = "horizontal",
+  
+  )
+
+combined_plot
+
+
+# Then save it
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/combined_annual_timeseries.png", combined_plot, width = 20, height = 20, dpi = 600)
+
 
 ```
 
@@ -1303,6 +1346,7 @@ seasonal_timeseries_2019_plot <- ggplot(data = df_avg_2019) +
   # lines for soil and air temperature 
   geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature")) + #divided to scale
   geom_line(aes(x = date, y = TA/15, colour = "Air Temperature")) +
+    geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
   
   
   # NEE (converting from umol/m2/s to gC/m2/day)
@@ -1317,7 +1361,7 @@ seasonal_timeseries_2019_plot <- ggplot(data = df_avg_2019) +
   # color legend for the lines
   scale_color_manual(
     name = "",
-    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3"))+
+    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3","ERA5 Air Temperature" = "darkgreen"))+
   
   # vertical lines for specific events
   geom_vline(xintercept = as.POSIXct("2019-05-24"))+ #end of winter, DOY 144* 
@@ -1751,6 +1795,53 @@ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper
 #   )
 
 ```
+
+
+#Arrange timeseries figures into a grid to save as single figure
+```{r}
+# Install if you don't have it
+ #install.packages("patchwork")
+library(patchwork)
+
+# Arrange plots in two columns (3 rows x 2 columns) 
+combined_plot2 <- (seasonal_timeseries_2017_plot + seasonal_timeseries_2018_plot) /
+                 (seasonal_timeseries_2019_plot + seasonal_timeseries_2020_plot) /
+                 (seasonal_timeseries_2021_plot + seasonal_timeseries_2022_plot) +
+                 plot_layout(guides = "collect") # Collects all legends into one
+
+# Add a common title if desired
+combined_plot2 <- combined_plot2 & 
+  #plot_annotation(
+    #title = "seasonal Flux Timeseries (2017-2022)",
+   # theme = theme(plot.title = element_text(size = 16, hjust = 0.5))
+  #) &
+  
+  # Increase legend text size, key size, and spacing
+  theme(
+    #legend.title = element_text(size = 14),    # Increase legend title size
+    legend.text = element_text(size = 14, face = "bold"),     # Increase legend text size
+    legend.key.size = unit(2, "cm"),         # Increase the size of the legend keys/symbols - doesn't seem to work
+    legend.key.width = unit(3, "cm"),        # Make keys wider for line symbols - doesn't work
+    legend.key.height = unit(3, "cm"),       # Control height separately - doesnt work
+    legend.spacing = unit(0.1, "cm"),          # Add more spacing between legend items
+    legend.margin = margin(10, 10, 10, 10),     # Add margin around the legend
+    legend.position = "bottom",
+    legend.box = "horizontal",
+  
+  )
+
+combined_plot2
+
+# Then save it
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/combined_seasonal_timeseries.png", combined_plot2, width = 20, height = 20, dpi = 600)
+
+
+
+```
+
+
+
+
 
 #2017 - 2023 MOSNTER Seasonal plot
 ```{r}
