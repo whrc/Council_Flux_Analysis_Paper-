@@ -1807,7 +1807,7 @@ library(patchwork)
 combined_plot2 <- (seasonal_timeseries_2017_plot + seasonal_timeseries_2018_plot) /
                  (seasonal_timeseries_2019_plot + seasonal_timeseries_2020_plot) /
                  (seasonal_timeseries_2021_plot + seasonal_timeseries_2022_plot) +
-                 plot_layout(guides = "collect") # Collects all legends into one
+                 plot_layout(guides = "collect") # Collects all legends into one -- need to ensure the legends are exactly the same among all figures you're trying to group 
 
 # Add a common title if desired
 combined_plot2 <- combined_plot2 & 
