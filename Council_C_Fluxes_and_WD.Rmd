@@ -1699,5 +1699,329 @@ write.csv(x = df_avg2,file = 'C:/Users/kkent/Documents/Council Data/Council BASE
 write.csv(x=df, file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv', quote = F, row.names = F)
 ```
 
+# C fluxes by WD from HH data 
 
+####Assign cardinal WD
+```{r}
+library(dplyr)
+
+# Assign cardinal directions based on wind direction in degrees
+df2 <- df %>%
+  mutate(
+    wind_direction_cardinal = case_when(
+      WD >= 337.5 | WD < 22.5  ~ "N",
+      WD >= 22.5 & WD < 67.5  ~ "NE",
+      WD >= 67.5 & WD < 112.5 ~ "E",
+      WD >= 112.5 & WD < 157.5 ~ "SE",
+      WD >= 157.5 & WD < 202.5 ~ "S",
+      WD >= 202.5 & WD < 247.5 ~ "SW",
+      WD >= 247.5 & WD < 292.5 ~ "W",
+      WD >= 292.5 & WD < 337.5 ~ "NW",
+      #TRUE ~ NA_character_ # Handle any missing or invalid values -- not needed in this case 
+    )
+  )
+#checking to see if NA values 
+sum(is.na(df2$WD)) # 66561 NAs
+
+#Take out NAs
+df2 <- df2 %>% filter(!is.na(wind_direction_cardinal))
+
+# Convert wind_direction_cardinal to an ordered factor so that WD appears in order 
+df2$wind_direction_cardinal <- factor(df2$wind_direction_cardinal, 
+                                      levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))
+
+#Extract year and create column for year 
+library(lubridate)
+df2$year <- year(df2$date)
+
+
+
+#subset by year 
+df2_2017 <- df2 %>% filter(year == "2017") 
+df2_2018 <- df2 %>% filter(year == "2018") 
+df2_2019 <- df2 %>% filter(year == "2019") 
+df2_2020 <- df2 %>% filter(year == "2020") 
+df2_2021 <- df2 %>% filter(year == "2021") 
+df2_2022 <- df2 %>% filter(year == "2022") 
+df2_2023 <- df2 %>% filter(year == "2023") 
+
+```
+
+
+
+#### FCO2 - umol/m2/s (HH data, not gapfilled)
+```{r}
+# Create the boxplot with the correct order
+ggplot(df2, aes(x = wind_direction_cardinal, y = FC)) +
+  geom_boxplot() +
+  labs(x = "Wind Direction", 
+       y = expression(FC~(umol~C~m^{-2}~s^{-1})), 
+       title = "HH FC (umolC/m²/s) by Wind Direction (2017 - 2023)") +
+  theme_bw() +
+  geom_hline(yintercept = 0)
+
+
+#scatterplot
+ggplot(df2, aes(x = date, y = FC, color = wind_direction_cardinal, na.omit))+
+  geom_point(alpha = 0.6, size = 2) + #makes points a bit transparent 
+ labs( x = "date",
+       y = expression(FC~(umol~C~m^{-2}~s^{-1})), 
+       title = "HH FC (umolC/m²/s) by Wind Direction (2017 - 2023)", 
+       color = "WD")+
+  theme_bw() 
+
+#facet wrapped scatterplot
+ggplot(df2, aes(x = date, y = FC, color = wind_direction_cardinal, na.omit))+
+  geom_point(alpha = 0.6, size = 2) + #makes points a bit transparent 
+   facet_wrap(~wind_direction_cardinal) +
+ labs( x = "date",
+       y = expression(FC~(umol~C~m^{-2}~s^{-1})), 
+       title = "HH FC (umolC/m²/s) by Wind Direction (2017 - 2023)", 
+       color = "WD")+
+  theme_bw() 
+ 
+
+
+# Create boxplots for each year (2017-2022) - not GF
+
+for(yr in 2017:2022) {
+  yearly_data <- df2 %>% filter(year == yr)
+  
+boxplot <- ggplot(yearly_data, aes(x = wind_direction_cardinal, y = FC)) +
+  geom_boxplot() +
+  labs(x = "Wind Direction", 
+       y = expression(FC~(umol~C~m^{-2}~s^{-1})), 
+      title = paste("HH FC (umolC/m²/s) by Wind Direction -", yr))+  # Dynamic year title
+  theme_bw() +
+  geom_hline(yintercept = 0)
+
+print(boxplot)
+}
+
+
+# Create scatterplots for each year (2017-2022) - not GF
+
+#Facetwrapped
+
+for(yr in 2017:2022) {
+  
+  yearly_data <- df2 %>% filter(year == yr)
+  
+scatterplot <- ggplot(yearly_data, aes(x = date, y = FC, color = wind_direction_cardinal))+
+  geom_point(alpha = 0.6, size = 2) + #makes points a bit transparent 
+   facet_wrap(~wind_direction_cardinal) +
+ labs( x = "date",
+       y = expression(FC~(umol~C~m^{-2}~s^{-1})), 
+        color = "WD",
+       title = paste("HH FC (umolC/m²/s) by Wind Direction -", yr)) +
+  theme_bw() 
+
+print(scatterplot)
+
+}
+
+
+#Regular scatterplot
+
+for(yr in 2017:2022) {
+  
+  yearly_data <- df2 %>% filter(year == yr)
+  
+scatterplot2 <- ggplot(yearly_data, aes(x = date, y = FC, color = wind_direction_cardinal))+
+  geom_point(alpha = 0.6, size = 2) + #makes points a bit transparent 
+   
+ labs( x = "date",
+       y = expression(FC~(umol~C~m^{-2}~s^{-1})), 
+        color = "WD",
+       title = paste("HH FC (umolC/m²/s) by Wind Direction -", yr)) +
+  theme_bw() 
+
+print(scatterplot2)
+
+}
+
+
+```
+
+#### FCH4 - nmol/m2/s (HH data, not gapfilled)
+```{r}
+# Create the boxplot with the correct order
+ggplot(df2, aes(x = wind_direction_cardinal, y = FCH4)) +
+  geom_boxplot() +
+  labs(x = "Wind Direction", 
+       y = expression(FCH4~(nmol~C~m^{-2}~s^{-1})), 
+       title = "HH FCH4 (nmol/m²/s) by Wind Direction (2017 - 2023)") +
+  theme_bw() +
+  theme( axis.text = element_text(size = 14, face = "bold"),
+     axis.title = element_text(size = 16, face = "bold")) +
+  geom_hline(yintercept = 0)
+
+
+#scatterplot
+ggplot(df2, aes(x = date, y = FCH4, color = wind_direction_cardinal, na.omit))+
+  geom_point(alpha = 0.6, size = 2) + #makes points a bit transparent 
+ labs( x = "date",
+       y = expression(FCH4~(nmol~C~m^{-2}~s^{-1})), 
+       title = "HH FCH4 (nmol/m²/s) by Wind Direction (2017 - 2023)", 
+       color = "WD")+
+  theme_bw() +
+   theme( axis.text = element_text(size = 14, face = "bold"),
+     axis.title = element_text(size = 16, face = "bold")) 
+
+#facet wrapped scatterplot
+ggplot(df2, aes(x = date, y = FCH4, color = wind_direction_cardinal, na.omit))+
+  geom_point(alpha = 0.6, size = 2) + #makes points a bit transparent 
+   facet_wrap(~wind_direction_cardinal) +
+ labs( x = "date",
+       y = expression(FCH4~(nmol~C~m^{-2}~s^{-1})), 
+       title = "HH FCH4 (nmol/m²/s) by Wind Direction (2017 - 2023)", 
+       color = "WD")+
+  theme_bw() +
+  theme (axis.text = element_text(size = 14, face = "bold"),
+     axis.title = element_text(size = 16, face = "bold")) 
+ 
+
+
+# Create boxplots for each year (2017-2022) - not GF
+
+for(yr in 2017:2022) {
+  yearly_data <- df2 %>% filter(year == yr)
+  
+boxplot <- ggplot(yearly_data, aes(x = wind_direction_cardinal, y = FCH4)) +
+  geom_boxplot() +
+  labs(x = "Wind Direction", 
+       y = expression(FCH4~(nmol~C~m^{-2}~s^{-1})), 
+      title = paste("HH FCH4 (nmol/m²/s) by Wind Direction -", yr))+  # Dynamic year title
+  theme_bw() +
+   theme (axis.text = element_text(size = 14, face = "bold"),
+     axis.title = element_text(size = 16, face = "bold")) +
+  geom_hline(yintercept = 0)
+
+print(boxplot)
+}
+
+
+# Create scatterplots for each year (2017-2022) - not GF
+
+#Facetwrapped
+
+for(yr in 2017:2022) {
+  
+  yearly_data <- df2 %>% filter(year == yr)
+  
+scatterplot <- ggplot(yearly_data, aes(x = date, y = FCH4, color = wind_direction_cardinal))+
+  geom_point(alpha = 0.6, size = 2) + #makes points a bit transparent 
+   facet_wrap(~wind_direction_cardinal) +
+ labs( x = "date",
+       y = expression(FCH4~(nmol~C~m^{-2}~s^{-1})), 
+        color = "WD",
+       title = paste("HH FCH4 (nmol/m²/s) by Wind Direction -", yr)) +
+  theme_bw() +
+  theme(
+    axis.text = element_text(size = 14, face = "bold"),
+     axis.title = element_text(size = 16, face = "bold")) 
+
+
+print(scatterplot)
+
+}
+
+
+#Regular scatterplot
+
+for(yr in 2017:2022) {
+  
+  yearly_data <- df2 %>% filter(year == yr)
+  
+scatterplot2 <- ggplot(yearly_data, aes(x = date, y = FCH4, color = wind_direction_cardinal))+
+  geom_point(alpha = 0.6, size = 2) + #makes points a bit transparent 
+   
+ labs( x = "date",
+       y = expression(FCH4~(nmol~C~m^{-2}~s^{-1})), 
+        color = "WD",
+       title = paste("HH FCH4 (nmol/m²/s) by Wind Direction -", yr)) +
+  theme_bw() +
+   theme (axis.text = element_text(size = 14, face = "bold"),
+     axis.title = element_text(size = 16, face = "bold")) 
+
+print(scatterplot2)
+
+}
+
+
+```
+
+#HH pollution rose for FCH4
+```{r}
+# Create data frame with both year and season
+flux_wind_year_seasonCH4 <- df2 %>%
+  select(date, WD, WS, FCH4, FCH4_F, season) %>%
+  mutate(year = year(date)) %>%  # Extract year from date
+  rename(wd = WD,
+         ws = WS,
+        FCH4_GF = FCH4_F,
+        FCH4 = FCH4)
+
+FCH4_season_clean <- flux_wind_year_seasonCH4 %>%
+  filter(!is.na(season))
+
+FCH4_season_clean <- flux_wind_year_seasonCH4 %>%
+  filter(!is.na(FCH4))
+
+# Create a pollution rose for each season
+# Option 1: Single function call with faceting
+pollutionRose(FCH4_season_clean, 
+              pollutant = "FCH4", 
+              type = "season",
+              key.position = "right",
+              key.title = expression(CH[4]~flux~(nmol~m^{-2}~s^{-1})),
+              main = "CH4 Flux by Wind Direction and Season")
+
+
+
+sum(is.na(FCH4_season_clean$FCH4))
+
+# Get unique seasons
+seasons <- unique(FCH4_season_clean$season)
+
+# Loop through each season
+for(s in seasons) {
+  # Subset data for the current season
+  season_data <- FCH4_season_clean %>% 
+    filter(season == s)
+  
+  # Create pollution rose for this season
+  pollutionRose(season_data, 
+                pollutant = "FCH4",
+                key.position = "right",
+                key.title = expression(CH[4]~flux~(nmol~m^{-2}~s^{-1})),
+                main = paste("FCH4 Flux (nmol/m2/s) by Wind Direction -", s))
+}
+```
+```{r}
+# Modified approach with error handling
+seasons <- unique(flux_wind_year_seasonCH4$season)
+
+for(s in seasons) {
+  # Subset data for the current season
+  season_data <- flux_wind_year_seasonCH4 %>% 
+    filter(season == s)
+  
+  # Check if there's valid data to plot
+  if(sum(!is.na(season_data$FCH4) & !is.na(season_data$wd)) > 0) {
+    # Create pollution rose for this season
+    pollutionRose(season_data, 
+                  pollutant = "FCH4",
+                  key.position = "right",
+                  key.title = expression(CH[4]~flux~(nmol~m^{-2}~s^{-1})),
+                  main = paste("CH4 Flux (nmolC/m2/s) by Wind Direction -", s))
+    
+    # If you want to save plots
+    # dev.copy(png, paste0("methane_pollutionrose_", s, ".png"), width=800, height=600)
+    # dev.off()
+  } else {
+    message(paste("Skipping season", s, "- no valid data"))
+  }
+}
+```
 
