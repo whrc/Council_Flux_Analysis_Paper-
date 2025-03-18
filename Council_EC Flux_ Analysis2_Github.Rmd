@@ -1104,6 +1104,9 @@ library(writexl)
 write_xlsx(seasonal_NEE_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_NEE_summary.xlsx")
 ```
 
+```{r}
+
+```
 
 
 
