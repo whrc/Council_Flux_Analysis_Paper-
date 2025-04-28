@@ -195,9 +195,9 @@ df_avg <- df_avg %>%
 
 #Save dataset with seasons added 
 
-write.csv(df, "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023seasons_for analysis.2.csv", row.names = FALSE)
+write.csv(df, "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv", row.names = FALSE)
 
-write.csv(df_avg, "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023seasons_for analysis.2.csv", row.names = FALSE)
+write.csv(df_avg, "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv", row.names = FALSE)
 
 
 ```

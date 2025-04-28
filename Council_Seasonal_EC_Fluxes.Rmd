@@ -46,7 +46,7 @@ Sys.setenv(TZ='UTC')
 # Set working directory and then Load data
 
 ```{r}
-#using the ".2" version to reflect the updated SWC used in RF 
+#using the ".2" version to reflect the updated SWC used in RF - these should have seasons added already to each DOY
 
 #original half-hourly dataframe 
 df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
@@ -54,11 +54,6 @@ df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/counci
 #needs continuous day variable - daily avg, calculated in processing steps
 df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-# #monthly avg, calculated in processing steps 
-# df_monthly_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
-
-#original half-hourly dataframe using the SWC1
-#dforig = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 ```
 
 
@@ -100,44 +95,21 @@ ggplot(data = df,aes(TIMESTAMP_END,FC_F))+
 
 #Create yearly dataframes
 
-#create TIMESTAMP variable that is = to TIMESTAMP_END
+#create TIMESTAMP variable that is = to TIMESTAMP_END (currently the function is no longer working, not sure why, see workaround below)
 
 ```{r}
  
-df$TIMESTAMP = df$TIMESTAMP_END
-
-year_df <- function(df, year) {
-  df %>%
-    filter(format(date, "%Y") == as.character(year)) %>%
-    mutate(DOY = yday(date))
-}
-
-
-#for orig dataset using SWC1
-
-# year_df2 <- function(df, year) {
-#   dforig %>%
+# df$TIMESTAMP = df$TIMESTAMP_END
+# 
+# year_df <- function(df, year) {
+#   df %>%
 #     filter(format(date, "%Y") == as.character(year)) %>%
 #     mutate(DOY = yday(date))
 # }
-
-
-```
-
-#Creates data frames of each year containing the daily averages of each value- useful for focusing on one year at a time
-```{r}
-#create dataframes for each year for the data you have so you can look at annual trends 
-
-#map out the timestamp of the daily avg dataset
-df_avg$date <- as.POSIXct(df_avg$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
-
-df_avg_2017 <- df_avg %>% filter(year == "2017") 
-df_avg_2018 <- df_avg %>% filter(year == "2018") 
-df_avg_2019 <- df_avg %>% filter(year == "2019") 
-df_avg_2020 <- df_avg %>% filter(year == "2020") 
-df_avg_2021 <- df_avg %>% filter(year == "2021") 
-df_avg_2022 <- df_avg %>% filter(year == "2022") 
-df_avg_2023 <- df_avg %>% filter(year == "2023") 
+# 
+# 
+# #map out the timestamp of the daily avg dataset
+# df_avg$date <- as.POSIXct(df_avg$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
 
 
 #for some reason the yr function is not working 
@@ -161,115 +133,37 @@ df_avg_2023 <- df_avg %>% filter(year == "2023")
 # df_2022 <- year_df(df, 2022)
 # df_2023 <- year_df(df, 2023)
 
-
-
 ```
 
-#Add Seasonal delineations to df and df_avg (redundant with seasonal delineations below, can ignore those)
-#New uploads includes these already, so can skip this part
+#Creates data frames of each year containing the daily averages of each value- useful for focusing on one year at a time
 ```{r}
-# # add year column if not already present
-# df <- df %>%
-#   mutate(year = format(date, "%Y"))
-# 
-# # Create DOY for df (half-hourly data)
-# df$DOY <- yday(df$date)
-# 
-# 
-# # Create seasonal assignments using both year and DOY
-# df<- df %>%
-#   mutate(
-#     season = case_when(
-#       # 2017 seasons
-#       year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
-#       year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
-#       year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
-#       
-#       
-#       # 2018 seasons
-#       year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
-#       year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
-#       year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
-#       
-#       # 2019 seasons
-#       year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
-#       year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
-#       year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
-#       
-#       # 2020 seasons
-#       year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
-#       year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
-#       year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
-#       
-#       # 2021 seasons
-#       year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
-#       year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
-#       year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
-#       
-#       # 2022 seasons
-#       year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
-#       year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
-#       year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
-#       
-#       # not doing one for 2023 ** incomplete year 
-#       TRUE ~ NA_character_
-#     )
-#   )
-# 
-# ####################easona to daily avg dataset###########################
-# 
-# # add year column if not already present
-# df_avg <- df_avg %>%
-#   mutate(year = format(date, "%Y"))
-# 
-# 
-# # Create DOY For df_avg (daily data)
-# df_avg$DOY <- yday(df_avg$date)
-# 
-# 
-# # Create seasonal assignments using both year and DOY
-# df_avg <- df_avg %>%
-#   mutate(
-#     season = case_when(
-#       # 2017 seasons
-#       year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
-#       year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
-#       year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
-#       
-#       
-#       # 2018 seasons
-#       year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
-#       year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
-#       year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
-#       
-#       # 2019 seasons
-#       year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
-#       year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
-#       year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
-#       
-#       # 2020 seasons
-#       year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
-#       year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
-#       year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
-#       
-#       # 2021 seasons
-#       year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
-#       year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
-#       year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
-#       
-#       # 2022 seasons
-#       year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
-#       year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
-#       year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
-#       
-#       # not doing one for 2023 ** incomplete year 
-#       TRUE ~ NA_character_
-#     )
-#   )
+#create dataframes for each year for the data you have so you can look at annual trends 
+
+#map out the timestamp of the daily avg dataset
+df_avg$date <- as.POSIXct(df_avg$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
+
+df_avg_2017 <- df_avg %>% filter(year == "2017") 
+df_avg_2018 <- df_avg %>% filter(year == "2018") 
+df_avg_2019 <- df_avg %>% filter(year == "2019") 
+df_avg_2020 <- df_avg %>% filter(year == "2020") 
+df_avg_2021 <- df_avg %>% filter(year == "2021") 
+df_avg_2022 <- df_avg %>% filter(year == "2022") 
+df_avg_2023 <- df_avg %>% filter(year == "2023") 
+
+#for HH data
+df <- df %>%
+  mutate(year = format(date, "%Y"))
+
+df_2017 <- df %>% filter(year == "2017") 
+df_2018 <- df %>% filter(year == "2018") 
+df_2019 <- df %>% filter(year == "2019") 
+df_2020 <- df %>% filter(year == "2020") 
+df_2021 <- df %>% filter(year == "2021") 
+df_2022 <- df %>% filter(year == "2022") 
+df_2023 <- df %>% filter(year == "2023") 
+
+
 ```
-
-
-
 
 
 #ERA5 air temp vs site air temp 
