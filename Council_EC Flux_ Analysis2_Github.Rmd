@@ -553,7 +553,6 @@ cor.test(df_avg$FC, df_avg$TA_ERA5, method="spearman")
 
 #Adding p-values to corr figure - help from Claude
 ```{r}
-
 # Step 1: Calculate correlation and p-values
 library(Hmisc)
 corr_result <- rcorr(as.matrix(env_flux_daily_notGF), type = "spearman")
@@ -637,7 +636,8 @@ ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text = element_text(size = 12, face = "bold"),
         plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +                 
-  labs(title = "Correlation Matrix of C Fluxes and Environmental Variables")
+  labs(title = "Correlation Matrix of C Fluxes and Environmental Variables",
+       fill = "Spearman's \nCorrelation \n(ρ)")
 
 
 
@@ -645,6 +645,110 @@ ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
 ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/flux_Spearmancorrelation_matrix_allyears_notGF.png",
        width = 11, height = 8, dpi = 600)
 ```
+
+#Adding in p-value adjustments based on sample size / number of pairwise pairings
+
+
+####Options include Bonferroni (much more conservative, use when you don't want ANY false positivies from a few critical hypotheses you're testing) and Benjamini-Hochberg (little less conservative, but has more power & keeps false positivies below 5% -may be better for very large datasets/exploratory work) 
+
+coding help from chatGPT
+```{r}
+
+# 1. Load libraries
+library(Hmisc)    # for rcorr()
+library(reshape2) # for melt()
+library(ggplot2)  # for plotting
+
+# 2. Compute Spearman correlations + raw p-values
+corr_result <- rcorr(as.matrix(env_flux_daily_notGF), type = "spearman")
+# corr_result$r is the matrix of ρ’s
+# corr_result$P is the matrix of raw p-values
+
+# 3. Flatten the raw p-values to a vector
+p_raw_flat <- as.vector(corr_result$P)
+
+# 4. Apply multiple‐testing corrections to that vector
+p_adjBH_flat  <- p.adjust(p_raw_flat, method = "BH")          # Benjamini–Hochberg
+p_adjBon_flat <- p.adjust(p_raw_flat, method = "bonferroni")  # Bonferroni
+
+# 5. Reassemble adjusted p’s into matrices matching the original dimensions
+p_adjBH_mat  <- matrix(p_adjBH_flat,
+                       nrow = nrow(corr_result$P),
+                       ncol = ncol(corr_result$P),
+                       dimnames = dimnames(corr_result$P))
+
+p_adjBon_mat <- matrix(p_adjBon_flat,
+                       nrow = nrow(corr_result$P),
+                       ncol = ncol(corr_result$P),
+                       dimnames = dimnames(corr_result$P))
+
+# 6. Melt correlation coefficients and all three p-value matrices
+cor_long     <- melt(corr_result$r,
+                     varnames   = c("Var1","Var2"),
+                     value.name = "Correlation")
+
+p_raw_long    <- melt(corr_result$P,
+                      varnames   = c("Var1","Var2"),
+                      value.name = "p_raw")
+
+p_bh_long     <- melt(p_adjBH_mat,
+                      varnames   = c("Var1","Var2"),
+                      value.name = "p_adjBH")
+
+p_bonf_long   <- melt(p_adjBon_mat,
+                      varnames   = c("Var1","Var2"),
+                      value.name = "p_adjBon")
+
+# 7. Combine them all into one data frame
+cor_long$p_raw    <- p_raw_long$p_raw
+cor_long$p_adjBH  <- p_bh_long$p_adjBH
+cor_long$p_adjBon <- p_bonf_long$p_adjBon
+
+# 8. (Optional) Add significance stars for each correction
+#    – here we flag p < .05, p < .01, p < .001
+cor_long$sigBH  <- cut(cor_long$p_adjBH,
+                       breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
+                       labels = c("***", "**", "*", ""))
+
+cor_long$sigBon <- cut(cor_long$p_adjBon,
+                       breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
+                       labels = c("***", "**", "*", ""))
+
+# Now cor_long has columns:
+#   Correlation   – the Spearman ρ
+#   p_raw         – the unadjusted p-value
+#   p_adjBH       – the FDR-adjusted p-value
+#   p_adjBon      – the Bonferroni-adjusted p-value
+#   sigBH, sigBon – significance stars for each
+
+# 9. (Re)plot your heatmap, for example annotating based on BH but you could easily switch to Bonferroni
+ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile() +
+  geom_text(
+    data = subset(cor_long, abs(Correlation) > 0.3 | p_adjBon < 0.05),
+    aes(label = paste0(sprintf("%.2f", Correlation), sigBon)),
+    color = "white", size = 4, fontface = "bold"
+  ) +
+  scale_fill_gradient2(
+    low = "red", mid = "white", high = "blue",
+    midpoint = 0, limits = c(-1,1)
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text   = element_text(size = 12, face = "bold"),
+    plot.title  = element_text(size = 16, face = "bold", hjust = 0.5)
+  ) +
+  labs(
+    title = "Correlation Matrix of C Fluxes and Environmental Variables",
+    fill = "Spearman ρ"
+  )
+
+
+```
+
+
+
 
 
 
