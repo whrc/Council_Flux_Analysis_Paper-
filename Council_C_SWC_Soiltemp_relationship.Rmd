@@ -1,0 +1,2458 @@
+---
+title: "Soil temp & C fluxes" #includes soil temp and SWC (all to 15cm depth) 
+#AMERIFLUX data is in micro mol/m2/s for CO2 and nano mol/m2/s for CH4 --> convert to make the units in gC/m2/day for timeseries figures 
+# 12 = molar mass of C 
+#nmol C to g C = 10^-9 * 12 & umol C to g C = 10^-6 * 12
+#Notes on site: Wind direction primarily blows from NW, except for Dec - Mar, when it primarily blows from SE direction. The site is largely tussock tundra but to the south there is thermokarst 
+output: html_document
+date: "2025-04-28"
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## based on Dani's Churchill CO2 Analysis code on github 
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+Sys.setenv(TZ='UTC')
+```
+
+# Set working directory and then Load data
+
+```{r}
+#using the ".2" version to reflect the updated SWC used in RF - should have seasons already included for each DOY
+
+#needs continuous day variable - daily avg, calculated in processing steps
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#needs continuous day variable - daily avg, calculated in processing steps
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+```
+
+#create a useable timestamp - not necessary here as it's already in the correct format from our BASE processing code, but leaving as reference just in case  
+```{r}
+#ignore this if df is already in correct format, as this might mess up the formatting here and cause issues with analysis
+# df$TIMESTAMP_END = as.character(df$TIMESTAMP_END)
+# df$TIMESTAMP_START = as.character(df$TIMESTAMP_START)
+# 
+# df$TIMESTAMP_END = as.POSIXct(df$TIMESTAMP_END, tz="UTC", format = "%Y%m%d%H%M")
+# df$TIMESTAMP_START = as.POSIXct(df$TIMESTAMP_START, tz="UTC", format = "%Y%m%d%H%M")
+```
+
+
+```{r}
+#checking timestamp 
+ggplot(data = df,aes(TIMESTAMP_END,FC_F))+
+  geom_point()+
+  scale_x_datetime(limits = as.POSIXct(c('2021-09-28','2021-10-05')))+
+  scale_y_continuous(limits = c(-12,5))
+```
+
+
+#Yearly dataframes
+
+```{r}
+df$TIMESTAMP = df$TIMESTAMP_END
+df_avg$TIMESTAMP = df_avg$TIMESTAMP_END
+
+#create dataframes for each year for the data you have so you can look at annual trends 
+
+#map out the timestamp of the daily avg dataset
+df_avg$date <- as.POSIXct(df_avg$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
+
+df_avg_2017 <- df_avg %>% filter(year == "2017") 
+df_avg_2018 <- df_avg %>% filter(year == "2018") 
+df_avg_2019 <- df_avg %>% filter(year == "2019") 
+df_avg_2020 <- df_avg %>% filter(year == "2020") 
+df_avg_2021 <- df_avg %>% filter(year == "2021") 
+df_avg_2022 <- df_avg %>% filter(year == "2022") 
+df_avg_2023 <- df_avg %>% filter(year == "2023") 
+
+
+#for HH data
+df <- df %>%
+  mutate(year = format(date, "%Y"))
+
+df_2017 <- df %>% filter(year == "2017") 
+df_2018 <- df %>% filter(year == "2018") 
+df_2019 <- df %>% filter(year == "2019") 
+df_2020 <- df %>% filter(year == "2020") 
+df_2021 <- df %>% filter(year == "2021") 
+df_2022 <- df %>% filter(year == "2022") 
+df_2023 <- df %>% filter(year == "2023") 
+
+
+#spot check df to make sure it worked correctly 
+
+```
+
+#Comparing SWC and soil temp from the different locations 
+```{r}
+#SWC 
+ggplot(data = df) +
+  geom_line(aes(TIMESTAMP, SWC_1_1_1, col = 'SWC1 margin pond'))+
+  geom_line(aes(TIMESTAMP, SWC_2_1_1, col = 'SWC2 lichen berries')) +
+  geom_line(aes(TIMESTAMP, SWC_3_1_1, col = 'SWC3 tussock')) +
+  labs(title = "Comparing SWC locations")+
+  labs( x = "Timestamp",
+        y = "SWC")+
+  scale_y_continuous()+
+  theme_minimal()
+
+
+#soil temp
+ggplot(data = df) +
+    geom_line(aes(TIMESTAMP, TS_5_1_1, col = 'TS5 unknown')) + #putting it at front so other colored lines are not obscured by TS5
+  geom_line(aes(TIMESTAMP, TS_1_1_1, col = 'TS1 margin pond'))+
+  geom_line(aes(TIMESTAMP, TS_2_1_1, col = 'TS2 lichen berries')) +
+  geom_line(aes(TIMESTAMP, TS_3_1_1, col = 'TS3 tussock')) +
+  geom_line(aes(TIMESTAMP, TS_4_1_1, col = 'TS4 EC tower')) +
+  #geom_line(aes(TIMESTAMP, TS_5_1_1, col = 'TS5 unknown')) +
+  labs(title = "Comparing Soil temp among locations")+
+  labs( x = "Timestamp",
+        y = "Soil temp (C)")+
+  scale_y_continuous()+
+  theme_minimal()
+```
+#Timeseries - SWC and soil temp Facet wrapped by year 
+```{r}
+#facet-wrapped by year 
+
+df <- df %>%
+  mutate(month = format(date, "%m"))
+
+df <- df %>%
+  mutate(monthday  = as.Date(format(TIMESTAMP,   # force every point into a "2000‐MM-DD" date
+                      "2000-%m-%d")))
+
+
+#SWC 
+ggplot(data = df) +
+  geom_line(aes(monthday, SWC_1_1_1, col = 'SWC1 Margin Pond'))+
+  geom_line(aes(monthday, SWC_2_1_1, col = 'SWC2 Lichen & Berries')) +
+  geom_line(aes(monthday, SWC_3_1_1, col = 'SWC3 Tussock')) +
+  facet_wrap(~year, ncol = 1)+ #sets 1 column for panels 
+  scale_x_date(
+    date_breaks = "1 month",
+    date_labels = "%b"          #to change numerical month to "jan", "feb" 
+  ) +  
+  scale_y_continuous()+
+  labs(
+    title = "Soil Water Content to 15cm Depth",
+    x     = NULL,
+    y     = "Soil Water Content to 15cm Depth (%SWC)",
+    color = "Sensor"
+  ) +
+  theme_bw() +
+  theme(
+    strip.text      = element_text(face = "bold"),    # bold year labels
+    axis.text.x     = element_text(face= "bold", angle = 0)#,        # horizontal months
+    #panel.spacing.y = unit(0.5, "lines")              # tighten vertical spacing
+  )
+
+
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/EC.SWC_timeseries_allyears.png", 
+#        width = 10, height = 12, dpi = 600)
+
+
+#soil temp
+ggplot(data = df) +
+    #geom_line(aes(TIMESTAMP, TS_5_1_1, col = 'TS5 unknown')) + #putting it at front so other colored lines are not obscured by TS5
+  geom_line(aes(monthday, TS_1_1_1, col = 'TS1 Margin Pond'))+
+  geom_line(aes(monthday, TS_2_1_1, col = 'TS2 Lichen & Berries')) +
+  geom_line(aes(monthday, TS_3_1_1, col = 'TS3 Tussock')) +
+  geom_line(aes(monthday, TS_4_1_1, col = 'TS4 EC Tower')) +
+   facet_wrap(~year, ncol = 1)+ #sets 1 column for panels 
+  scale_x_date(
+    date_breaks = "1 month",
+    date_labels = "%b"          #to change numerical month to "jan", "feb" 
+  ) +  
+  scale_y_continuous()+
+  labs(
+    title = "Soil Temperature to 15cm Depth", face = "bold",
+    x     = NULL,
+    y     = "Soil Temperature to 15cm Depth (C)",
+    color = "Sensor"
+  ) +
+  theme_bw() +
+  theme(
+    strip.text      = element_text(face = "bold"),    # bold year labels
+    axis.text.x     = element_text(face= "bold", angle = 0)#,        # horizontal months
+    #panel.spacing.y = unit(0.5, "lines")              # tighten vertical spacing
+  )
+
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/EC.soiltemp_timeseries_allyears.png",
+#        width = 10, height = 12, dpi = 600)
+
+```
+#Removing Winter - Dataset without winter season 
+
+```{r}
+df_avg_nowinter <- df_avg %>%
+  filter(season!= "Winter")
+
+#map out the timestamp of the daily avg dataset
+df_avg_nowinter$date <- as.POSIXct(df_avg_nowinter$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
+
+df_avg_nowinter_2017 <- df_avg_nowinter %>% filter(year == "2017") 
+df_avg_nowinter_2018 <- df_avg_nowinter %>% filter(year == "2018") 
+df_avg_nowinter_2019 <- df_avg_nowinter %>% filter(year == "2019") 
+df_avg_nowinter_2020 <- df_avg_nowinter %>% filter(year == "2020") 
+df_avg_nowinter_2021 <- df_avg_nowinter %>% filter(year == "2021") 
+df_avg_nowinter_2022 <- df_avg_nowinter %>% filter(year == "2022") 
+df_avg_nowinter_2023 <- df_avg_nowinter %>% filter(year == "2023") 
+
+```
+
+
+
+#Soil Temperature Relationship
+
+####Exploratory plot of relationships 
+```{r}
+ggplot(data = df_avg_nowinter, (aes(x=TS_3_1_1, y = FC_night)))+
+  geom_point()+
+  geom_smooth(method = "auto") +
+  facet_wrap(~year) 
+
+```
+
+#Comparing Different models for Temp - comparing the best fit - df_avg
+####Exponential is best for FC_night, quadratic is best for FCH4
+
+```{r}
+
+# Function to compare different model types
+compare_model_types <- function(flux_var, temp_var, df) {
+  # Results dataframe
+  results <- data.frame(
+    model_type = c("Exponential", "Linear", "Quadratic", "Logarithmic"),
+    r_squared = numeric(4)
+  )
+  
+  # 1. Exponential model: flux ~ a * exp(b * temp)
+  tryCatch({
+    exp_model <- nls(as.formula(paste(flux_var, "~ a * exp(b *", temp_var, ")")), 
+                     data = df, start = list(a = 1, b = 0.1))
+    RSS <- sum(residuals(exp_model)^2)
+    TSS <- sum((df[[flux_var]] - mean(df[[flux_var]], na.rm = TRUE))^2, na.rm = TRUE)
+    results$r_squared[1] <- 1 - (RSS/TSS)
+  }, error = function(e) {
+    results$r_squared[1] <<- NA
+  })
+  
+  # 2. Linear model: flux ~ a + b * temp
+  linear_model <- lm(as.formula(paste(flux_var, "~", temp_var)), data = df)
+  results$r_squared[2] <- summary(linear_model)$r.squared
+  
+  # 3. Quadratic model: flux ~ a + b * temp + c * temp^2
+  quad_model <- lm(as.formula(paste(flux_var, "~", temp_var, "+", "I(", temp_var, "^2)")), data = df)
+  results$r_squared[3] <- summary(quad_model)$r.squared
+  
+  # 4. Logarithmic model: flux ~ a + b * log(temp+c)
+  # Adding constant to temperature to handle negative values
+  df$temp_adjusted <- df[[temp_var]] + abs(min(df[[temp_var]], na.rm = TRUE)) + 1
+  log_model <- lm(as.formula(paste(flux_var, "~ log(temp_adjusted)")), data = df)
+  results$r_squared[4] <- summary(log_model)$r.squared
+  
+  return(results)
+}
+
+# Compare model types for FC_night
+model_comparison_FC_night <- compare_model_types("FC_night", "TS_3_1_1", df_avg)
+print(model_comparison_FC_night)
+#exponential is best when including winter seasons 
+
+# Compare model types for FCH4
+model_comparison_FCH4 <- compare_model_types("FCH4", "TS_3_1_1", df_avg)
+print(model_comparison_FCH4)
+#suggests quadratic is best when including winter season 
+```
+
+
+#Different models - comparing the best fit - no winter 
+####Results suggest exponential is best, as expected, but R2 still quite low 
+```{r}
+#uses function created in code chunk above 
+
+# Compare model types for FC_night
+model_comparison_FC_night <- compare_model_types("FC_night", "TS_3_1_1", df_avg_nowinter)
+print(model_comparison_FC_night)
+#suggests exponential is best when not including winter season 
+
+# Compare model types for FCH4
+model_comparison_FCH4 <- compare_model_types("FCH4", "TS_3_1_1", df_avg_nowinter)
+print(model_comparison_FCH4)
+#suggests exponential is best when not including winter season 
+
+```
+
+
+#Comparing different models - SWC - df_avg
+```{r}
+
+# Function to compare different model types
+compare_model_types <- function(flux_var, SWC_var, df) {
+  # Results dataframe
+  results <- data.frame(
+    model_type = c("Exponential", "Linear", "Quadratic", "Logarithmic"),
+    r_squared = numeric(4)
+  )
+  
+  # 1. Exponential model: flux ~ a * exp(b * SWC)
+  tryCatch({
+    exp_model <- nls(as.formula(paste(flux_var, "~ a * exp(b *", SWC_var, ")")), 
+                     data = df, start = list(a = 1, b = 0.1))
+    RSS <- sum(residuals(exp_model)^2)
+    TSS <- sum((df[[flux_var]] - mean(df[[flux_var]], na.rm = TRUE))^2, na.rm = TRUE)
+    results$r_squared[1] <- 1 - (RSS/TSS)
+  }, error = function(e) {
+    results$r_squared[1] <<- NA
+  })
+  
+  # 2. Linear model: flux ~ a + b * SWC
+  linear_model <- lm(as.formula(paste(flux_var, "~", SWC_var)), data = df)
+  results$r_squared[2] <- summary(linear_model)$r.squared
+  
+  # 3. Quadratic model: flux ~ a + b * SWC + c * SWC^2
+  quad_model <- lm(as.formula(paste(flux_var, "~", SWC_var, "+", "I(", SWC_var, "^2)")), data = df)
+  results$r_squared[3] <- summary(quad_model)$r.squared
+  
+  # 4. Logarithmic model: flux ~ a + b * log(SWC+c)
+  # Adding constant to SWCerature to handle negative values
+  df$SWC_adjusted <- df[[SWC_var]] + abs(min(df[[SWC_var]], na.rm = TRUE)) + 1
+  log_model <- lm(as.formula(paste(flux_var, "~ log(SWC_adjusted)")), data = df)
+  results$r_squared[4] <- summary(log_model)$r.squared
+  
+  return(results)
+}
+
+# Compare model types for FC_night
+model_comparison_FC_night <- compare_model_types("FC_night", "SWC_3_1_1", df_avg)
+print(model_comparison_FC_night)
+#exponential is best when including winter seasons 
+
+# Compare model types for FCH4
+model_comparison_FCH4 <- compare_model_types("FCH4", "SWC_3_1_1", df_avg)
+print(model_comparison_FCH4)
+#suggests quadratic is best when including winter season 
+```
+
+#Different models - comparing the best fit - no winter 
+####Results suggest exponential is best, as expected, but R2 still quite low 
+```{r}
+
+# Compare model types for FC_night
+model_comparison_FC_night <- compare_model_types("FC_night", "SWC_3_1_1", df_avg_nowinter)
+print(model_comparison_FC_night)
+#suggests exponential is best when not including winter season 
+
+# Compare model types for FCH4
+model_comparison_FCH4 <- compare_model_types("FCH4", "SWC_3_1_1", df_avg_nowinter)
+print(model_comparison_FCH4)
+#suggests exponential is best when not including winter season 
+
+```
+
+### Create Exp. Model for soil temp v C fluxes 
+```{r}
+
+###Across all years - all seasons 
+
+#co2
+exp_model_FCnight <- nls(FC_night ~ a * exp(b * TS_3_1_1), data = df_avg, start = list(a = 1, b = 0.1))
+
+# Generate predicted values
+df_avg$predicted_FCnight <- predict(exp_model_FCnight, newdata = df_avg)
+
+
+#ch4
+exp_model_ch4 <- nls(FCH4 ~ a * exp(b * TS_3_1_1), data = df_avg, start = list(a = 1, b = 0.1))
+
+# Generate predicted values
+df_avg$predicted_ch4 <- predict(exp_model_ch4, newdata = df_avg)
+
+
+
+####all years, no winter 
+
+#co2
+exp_model_nowinter <- nls(FC_night ~ a * exp(b * TS_3_1_1), data = df_avg_nowinter, start = list(a = 1, b = 0.1))
+
+# Generate predicted values
+df_avg_nowinter$predicted_FCnight <- predict(exp_model_nowinter, newdata = df_avg_nowinter)
+
+
+#ch4
+exp_model_ch4_nowinter <- nls(FCH4 ~ a * exp(b * TS_3_1_1), data = df_avg_nowinter, start = list(a = 1, b = 0.1))
+
+# Generate predicted values
+df_avg_nowinter$predicted_ch4 <- predict(exp_model_ch4_nowinter, newdata = df_avg_nowinter)
+
+
+```
+
+## R Squared Values of exponential models 
+```{r}
+# R squared values
+
+r_squared <- function(model, column) {
+  
+  RSS <- sum(residuals(model)^2) # Residual sum of sqares
+  TSS <- sum((column - mean(column, na.rm = TRUE))^2, na.rm = TRUE) # Total sum of squares
+  
+  return(1-(RSS/TSS)) # R squared
+  
+  
+}
+
+#All seasons
+rsq_co2 <- r_squared(exp_model_FCnight, df_avg$FC_night)
+rsq_ch4 <- r_squared(exp_model_ch4, df_avg$FCH4)
+
+print(rsq_co2)
+print(rsq_ch4)
+
+#No Winter season
+rsq_co2_nw <- r_squared(exp_model_nowinter, df_avg_nowinter$FC_night)
+rsq_ch4_nw <- r_squared(exp_model_ch4_nowinter, df_avg_nowinter$FCH4)
+
+print(rsq_co2_nw)
+print(rsq_ch4_nw)
+
+
+#checking agreement of predicted and obs data 
+
+ggplot(data = df_avg) +
+  theme_bw() +
+  geom_point(aes(x=predicted_FCnight, y = FC_night))
+
+summary(lm(df_avg$FC_night ~ df_avg$predicted_FCnight)) #R2 = 0.4778, slope = 1
+
+ggplot(data = df_avg) +
+  theme_bw() +
+  geom_point(aes(x=predicted_ch4, y= FCH4))
+
+summary(lm(df_avg$FCH4 ~ df_avg$predicted_ch4)) #R2 = 0.06 * BAD * slope = 0.9
+
+
+ggplot(data = df_avg_nowinter) +
+  theme_bw() +
+  geom_point(aes(x=predicted_FCnight, y = FC_night))
+
+summary(lm(df_avg_nowinter$FC_night ~ df_avg_nowinter$predicted_FCnight)) #R2 = 0.33; slope = 1
+
+ggplot(data = df_avg) +
+  theme_bw() +
+  geom_point(aes(x=predicted_ch4, y= FCH4))
+
+summary(lm(df_avg_nowinter$FCH4 ~ df_avg_nowinter$predicted_ch4)) #R2 = 0.1 * BAD * slope = 0.98
+
+```
+
+### Plots - observed vs predicted for C and temp 
+```{r}
+
+#FC
+
+ggplot(data = df_avg, (aes(x=TS_3_1_1, y = FC_night)))+
+  geom_point()+
+  facet_wrap(~year) +
+    stat_smooth(method = "auto") +
+  labs(
+    title = "FC_night vs Soil temp"
+  )
+
+
+ggplot(data = df_avg, (aes(x=TS_3_1_1, y = FC_night)))+
+  geom_point()+
+  facet_wrap(~year) +
+    stat_smooth(method = "auto") +
+  geom_line(aes(x=TS_3_1_1, y = predicted_FCnight, color = "red"))+
+    labs(
+    title = "FC_night vs Soil temp & predicted FC_night"
+  )
+
+#FC - no winter 
+
+ggplot(data = df_avg_nowinter, (aes(x=TS_3_1_1, y = FC_night)))+
+  geom_point()+
+  facet_wrap(~year) +
+    stat_smooth(method = "auto") +
+    labs(
+    title = "FC_night vs Soil temp - No Winter"
+  )
+
+
+ggplot(data = df_avg_nowinter, (aes(x=TS_3_1_1, y = FC_night)))+
+  geom_point()+
+  facet_wrap(~year) +
+    stat_smooth(method = "auto") +
+  geom_line(aes(x=TS_3_1_1, y = predicted_FCnight, color = "red"))+
+    labs(
+    title = "FC_night vs Soil temp & predicted FC_night - No Winter"
+  )
+
+
+#FCH4 
+ggplot(data = df_avg, (aes(x=TS_3_1_1, y = FCH4)))+
+  geom_point()+
+  facet_wrap(~year) +
+    stat_smooth(method = "auto") +
+    labs(
+    title = "FCH4 vs Soil temp"
+  )
+
+
+ggplot(data = df_avg, (aes(x=TS_3_1_1, y = FCH4)))+
+  geom_point()+
+  facet_wrap(~year) +
+    stat_smooth(method = "auto") +
+  geom_line(aes(x=TS_3_1_1, y = predicted_ch4, color = "red"))+
+    labs(
+    title = "FCH4 vs Soil temp & predicted FCH4"
+  )
+
+#FCH4 - no winter 
+ggplot(data = df_avg_nowinter, (aes(x=TS_3_1_1, y = FCH4)))+
+  geom_point()+
+  facet_wrap(~year) +
+    stat_smooth(method = "auto") +
+    labs(
+    title = "FCH4 vs Soil temp & predicted FCH4 - No Winter"
+  )
+
+
+ggplot(data = df_avg_nowinter, (aes(x=TS_3_1_1, y = FCH4)))+
+  geom_point()+
+  facet_wrap(~year) +
+    stat_smooth(method = "auto") +
+  geom_line(aes(x=TS_3_1_1, y = predicted_ch4, color = "red")) +
+    labs(
+    title = "FCH4 vs Soil temp & predicted FCH4 - No Winter"
+  )
+```
+
+
+
+#Flux variables vs. TS3 (tussock soil temp to 15cm) to visualize temperature/co2 flux relationship
+
+Temp relationship plots with daily averages
+
+```{r}
+#Across all years with all seasons 
+
+co2model <- ggplot(data=df_avg)+
+  theme_bw()+
+  geom_hline(yintercept = 0)+
+  geom_vline(xintercept = 0)+
+  geom_point(aes(x=TS_3_1_1, y=FC_night, col = DOY, shape = factor(year)))+
+  geom_line(aes(x = TS_3_1_1, y = predicted_FCnight))+
+  scale_color_gradient(low = "navy", high = "salmon")+
+  labs(
+    x = expression("15cm Soil Temperature ("*degree*"C)"),
+    y = expression("Half-hourly CO "[2] * " Flux ("*mu*mol~m^-2~s^-1*")"),
+    title = expression("Nighttime CO"[2] * " Flux vs. Soil Temperature"))+
+  scale_shape_manual(name = "Year", values = c(15, 16, 17, 18, 21, 23, 24 ))+ #one symbol for each year 
+  scale_x_continuous(limits=c(-11,19))+
+  scale_y_continuous(limits=c(-3,6))+
+theme(axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), 
+  axis.title = element_text(size = 14),legend.position = 'none')+
+  annotate("text",
+           x = -Inf, y = Inf,
+           hjust = -0.1, vjust = 1.3,
+           label = paste0("R² = ", round(rsq_co2, 2)),
+           size = 5)
+
+co2model
+
+
+#Methane vs. soil temp
+
+ch4model <- ggplot(data=df_avg)+
+  geom_vline(xintercept=0)+
+  theme_bw()+
+  geom_point(aes(x=TS_3_1_1, y=FCH4*(1/1000), col = DOY,  shape = factor(year)))+
+  geom_line(aes(x = TS_3_1_1, y = predicted_ch4*(1/1000)))+
+scale_color_gradient(low = "navy", high = "salmon")+
+  labs(
+    x = expression("15cm Soil Temperature ("*degree*"C)"),
+    y = expression("Half-hourly CH"[4] * " Flux ("*mu*mol~m^-2~s^-1*")"),
+    title = expression("CH"[4] * " Flux vs. Soil Temperature")
+  )+
+  scale_x_continuous(limits = c(-11, 19))+
+  scale_y_continuous(limits = c(-0.02, 0.05))+
+  scale_shape_manual(name = "Year", values = c(15, 16, 17, 18, 21, 23, 24 ))+ #one symbol for each year 
+theme(axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), 
+  axis.title = element_text(size = 14),legend.position = 'none')+
+  annotate("text", 
+           x = -Inf, y = Inf, 
+           hjust = -0.1, vjust = 1.3,
+           label = paste0("R² = ", round(rsq_ch4, 2)),
+           size = 5)
+
+ch4model
+# 
+# png(filename = './modelgrid.png',width = 9.3,height = 5.9,units = 'in',res = 2000)
+# grid.arrange(co2model, ch4model, nrow = 1)
+# dev.off()
+
+
+
+CH4vTemp <- ggplot(data=df_avg)+
+  geom_vline(xintercept=0)+
+  theme_bw()+
+  geom_point(aes(x=TS_3_1_1, y=FCH4*(1/1000)))
+
+CH4vTemp
+
+CH4vTemp_nw <- ggplot(data=df_avg_nowinter)+
+  geom_vline(xintercept=0)+
+  theme_bw()+
+  geom_point(aes(x=TS_3_1_1, y=FCH4*(1/1000)))
+
+CH4vTemp_nw
+
+```
+
+
+#Flux variables vs TS3 - Winter removed
+
+```{r}
+
+co2model_nw <- ggplot(data=df_avg_nowinter)+
+  theme_bw()+
+  geom_hline(yintercept = 0)+
+  geom_vline(xintercept = 0)+
+  geom_point(aes(x=TS_3_1_1, y=FC_night, col = DOY, shape = factor(year)))+
+  geom_line(aes(x = TS_3_1_1, y = predicted_FCnight))+
+  scale_color_gradient(low = "navy", high = "salmon")+
+  labs(
+    x = expression("15cm Soil Temperature ("*degree*"C)"),
+    y = expression("Half-hourly CO "[2] * " Flux ("*mu*mol~m^-2~s^-1*")"),
+    title = expression("Nighttime CO"[2] * " Flux vs. Soil Temperature, No Winter"))+
+  scale_shape_manual(name = "Year", values = c(15, 16, 17, 18, 21, 23, 24 ))+ #one symbol for each
+  scale_x_continuous(limits=c(-5, 19))+
+  scale_y_continuous(limits=c(-3, 6))+
+theme(axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), 
+  axis.title = element_text(size = 14),legend.position = 'none')+
+  annotate("text", 
+           x = -Inf, y = Inf, 
+           hjust = -0.1, vjust = 1.3,
+           label = paste0("R² = ", round(rsq_co2_nw, 2)),
+           size = 5)
+
+co2model_nw
+
+
+
+#Methane vs. soil temp
+
+ch4model_nw <- ggplot(data=df_avg_nowinter)+
+  geom_vline(xintercept=0)+
+  theme_bw()+
+  geom_point(aes(x = TS_3_1_1, y=FCH4*(1/1000), col = DOY,  shape = factor(year)))+
+  geom_line(aes(x = TS_3_1_1, y = predicted_ch4*(1/1000)))+
+scale_color_gradient(low = "navy", high = "salmon")+
+  labs(
+    x = expression("15cm Soil Temperature ("*degree*"C)"),
+    y = expression("Half-hourly CH"[4] * " Flux ("*mu*mol~m^-2~s^-1*")"),
+    title = expression("CH"[4] * " Flux vs. Soil Temperature, No Winter")
+  )+
+  scale_x_continuous(limits = c(-5, 19))+
+  scale_y_continuous(limits = c(-0.02, 0.05))+
+  scale_shape_manual(name = "Year", values = c(15, 16, 17, 18, 21, 23, 24 ))+ #one symbol for each
+theme(axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), 
+  axis.title = element_text(size = 14),legend.position = 'none')+
+  annotate("text", 
+           x = -Inf, y = Inf, 
+           hjust = -0.1, vjust = 1.3,
+           label = paste0("R² = ", round(rsq_ch4_nw, 2)),
+           size = 5)
+
+ch4model_nw
+
+
+# png(filename = './modelgridco2.png',width = 7,height = 10,units = 'in',res = 2000)
+# grid.arrange(co2model, co2model_ns, nrow = 2)
+# dev.off()
+# 
+# png(filename = './modelgridch4.png',width = 7,height = 10,units = 'in',res = 2000)
+# grid.arrange(ch4model, ch4model_ns, nrow = 2)
+# dev.off()
+
+
+
+
+```
+
+#Other temp sensors - Trying relationship based on different temp sensors 
+
+function to test other soil sensors & compare linear vs exponential fitted lines 
+```{r}
+# Function to create comparative plots for different soil temperature sensors
+compare_soil_temp_sensors <- function(flux_var, df) {
+  temp_cols <- c("TS_1_1_1", "TS_2_1_1", "TS_3_1_1", "TS_4_1_1")
+  temp_names <- c("Margin Pond", "Lichen & Berries", "Tussock", "EC Tower")
+  
+  # Create a 2x2 panel of plots
+  plots <- list()
+  
+  for (i in seq_along(temp_cols)) {
+    temp_col <- temp_cols[i]
+    temp_name <- temp_names[i]
+    
+    # Create basic plot
+    p <- ggplot(df, aes_string(x = temp_col, y = flux_var)) +
+      geom_point(alpha = 0.4) +
+      theme_bw() +
+      labs(
+        x = paste0(temp_name, " Soil Temp (°C)"),
+        y = if(flux_var == "FC_night") "Nighttime CO2 Flux (μmol/m²/s)" else "CH4 Flux (nmol/m²/s)"
+      )
+    
+    # Try exponential model
+    tryCatch({
+      exp_model <- nls(as.formula(paste(flux_var, "~ a * exp(b *", temp_col, ")")), 
+                      data = df, start = list(a = 1, b = 0.1))
+      
+      # Calculate R²
+      RSS <- sum(residuals(exp_model)^2)
+      TSS <- sum((df[[flux_var]] - mean(df[[flux_var]], na.rm = TRUE))^2, na.rm = TRUE)
+      r2_exp <- 1 - (RSS/TSS)
+      
+      # Generate prediction data
+      pred_data <- data.frame(x = seq(min(df[[temp_col]], na.rm = TRUE), 
+                                     max(df[[temp_col]], na.rm = TRUE), 
+                                     length.out = 100))
+      names(pred_data)[1] <- temp_col
+      
+      # Calculate predictions
+      pred_data[[flux_var]] <- predict(exp_model, newdata = pred_data)
+      
+      # Add to plot
+      p <- p + geom_line(data = pred_data, aes_string(x = temp_col, y = flux_var), 
+                         color = "red", size = 1)
+      
+      # Add R² annotation for exponential model
+      p <- p + annotate("text", x = max(df[[temp_col]], na.rm = TRUE) * 0.8, 
+                       y = max(df[[flux_var]], na.rm = TRUE) * 0.9,
+                       label = paste0("Exp. R² = ", round(r2_exp, 3)))
+    }, error = function(e) {
+      # If exponential model fails, just note it
+      p <- p + annotate("text", x = mean(df[[temp_col]], na.rm = TRUE), 
+                       y = max(df[[flux_var]], na.rm = TRUE) * 0.9,
+                       label = "Exp. model failed")
+    })
+    
+    # Add linear model
+    tryCatch({
+      linear_model <- lm(as.formula(paste(flux_var, "~", temp_col)), data = df)
+      r2_linear <- summary(linear_model)$r.squared
+      
+      p <- p + geom_smooth(method = "lm", color = "blue", se = FALSE, linetype = "dashed") +
+        annotate("text", x = max(df[[temp_col]], na.rm = TRUE) * 0.8, 
+                 y = max(df[[flux_var]], na.rm = TRUE) * 0.8,
+                 label = paste0("Linear R² = ", round(r2_linear, 3)))
+    }, error = function(e) {
+      # If linear model fails, just note it
+    })
+    
+    plots[[i]] <- p
+  }
+  
+  # Arrange plots in a grid
+  grid_title <- if(flux_var == "FC_night") "Nighttime CO2 Flux vs. Different Soil Temperature Sensors" else "CH4 Flux vs. Different Soil Temperature Sensors"
+  
+  # Return list of plots (can be arranged with grid.arrange from gridExtra package)
+  return(list(plots = plots, title = grid_title))
+}
+
+
+# Compare temperature sensors for FC_night - all seasons
+fc_night_sensor_plots <- compare_soil_temp_sensors("FC_night", df_avg)
+grid.arrange(grobs = fc_night_sensor_plots$plots, top = fc_night_sensor_plots$title)
+#TS3 = best R2, 0.52 exp
+
+# Compare temperature sensors for FCH4 - no winter 
+fch4_sensor_plots <- compare_soil_temp_sensors("FCH4", df_avg)
+grid.arrange(grobs = fch4_sensor_plots$plots, top = fch4_sensor_plots$title)
+#EC tower best R2, 0.17 exp; tussock = R2 0.08 exp, next best is margin pond R2 = 0.13 exp
+
+#No Winter 
+
+
+# Compare temperature sensors for FC_night - no winter 
+fc_night_sensor_plots_nw <- compare_soil_temp_sensors("FC_night", df_avg_nowinter)
+grid.arrange(grobs = fc_night_sensor_plots_nw$plots, top = fc_night_sensor_plots_nw$title)
+#TS3 tussock = best R2, 0.39, exp
+
+# Compare temperature sensors for FCH4 - no winter 
+fch4_sensor_plots_nw <- compare_soil_temp_sensors("FCH4", df_avg_nowinter)
+grid.arrange(grobs = fch4_sensor_plots_nw$plots, top = fch4_sensor_plots_nw$title)
+#EC tower = best R2, 0.27, exp; tussock R2 = 0.13, exp
+
+#Exponential curves fit better than linear* 
+```
+
+####validating 
+```{r}
+# create a function to fit models for all temperature sensors and compare results
+# This will help us identify which temperature sensor best explains flux variations
+
+fit_compare_sensors <- function(flux_var, df) {
+  # List of temperature columns to test
+  temp_cols <- c("TS_1_1_1", "TS_2_1_1", "TS_3_1_1", "TS_4_1_1")
+  
+  # Store results
+  results <- data.frame(sensor = temp_cols, 
+                       r_squared = numeric(length(temp_cols)),
+                       a_coef = numeric(length(temp_cols)),
+                       b_coef = numeric(length(temp_cols)))
+  
+  # Loop through each temperature sensor
+  for (i in seq_along(temp_cols)) {
+    temp_col <- temp_cols[i]
+    
+    # Create formula dynamically
+    formula <- as.formula(paste(flux_var, "~ a * exp(b *", temp_col, ")"))
+    
+    # Fit exponential model
+    tryCatch({
+      model <- nls(formula, data = df, start = list(a = 1, b = 0.1))
+      
+      # Calculate R-squared
+      RSS <- sum(residuals(model)^2)
+      TSS <- sum((df[[flux_var]] - mean(df[[flux_var]], na.rm = TRUE))^2, na.rm = TRUE)
+      r2 <- 1 - (RSS/TSS)
+      
+      # Store results
+      results$r_squared[i] <- r2
+      results$a_coef[i] <- coef(model)["a"]
+      results$b_coef[i] <- coef(model)["b"]
+    }, error = function(e) {
+      # Handle errors (e.g., model failure to converge)
+      results$r_squared[i] <<- NA
+      results$a_coef[i] <<- NA
+      results$b_coef[i] <<- NA
+    })
+  }
+  
+  return(results)
+}
+
+# Apply function to compare sensors for nighttime CO2 flux - no winter 
+FC_night_sensor_comparison <- fit_compare_sensors("FC_night", df_avg_nowinter)
+print(FC_night_sensor_comparison)
+
+#TS3 has highest R2 of 0.39
+
+# Apply function to compare sensors for CH4 flux - no winter 
+FCH4_sensor_comparison <- fit_compare_sensors("FCH4", df_avg_nowinter)
+print(FCH4_sensor_comparison)
+
+
+#a_coef represents base flux at temp = 0; basal respiration rate 
+#b_coef represents the temp sensitivity coefficient, how quickly flux inc when temp increases
+
+#TS 3 R2 = 0.12; best is TS4 (EC tower) at 0.27 --> but will continue to use TS3 for continuity with CO2 fluxes and primary landscape type 
+```
+#Other SWC sensors - Trying relationship based on different SWC sensors 
+
+function to test other SWC sensors & compare linear vs exponential fitted lines 
+```{r}
+# Function to create comparative plots for different soil temperature sensors
+compare_soil_SWC_sensors <- function(flux_var, df) {
+  SWC_cols <- c("SWC_1_1_1", "SWC_2_1_1", "SWC_3_1_1")
+  SWC_names <- c("Margin Pond", "Lichen & Berries", "Tussock")
+  
+  # Create a 2x2 panel of plots
+  plots <- list()
+  
+  for (i in seq_along(SWC_cols)) {
+    SWC_col <- SWC_cols[i]
+    SWC_name <- SWC_names[i]
+    
+    # Create basic plot
+    p <- ggplot(df, aes_string(x = SWC_col, y = flux_var)) +
+      geom_point(alpha = 0.4) +
+      theme_bw() +
+      labs(
+        x = paste0(SWC_name, " SWC (%)"),
+        y = if(flux_var == "FC_night") "Nighttime CO2 Flux (μmol/m²/s)" else "CH4 Flux (nmol/m²/s)"
+      )
+    
+    # Try exponential model
+    tryCatch({
+      exp_model <- nls(as.formula(paste(flux_var, "~ a * exp(b *", SWC_col, ")")), 
+                      data = df, start = list(a = 1, b = 0.1))
+      
+      # Calculate R²
+      RSS <- sum(residuals(exp_model)^2)
+      TSS <- sum((df[[flux_var]] - mean(df[[flux_var]], na.rm = TRUE))^2, na.rm = TRUE)
+      r2_exp <- 1 - (RSS/TSS)
+      
+      # Generate prediction data
+      pred_data <- data.frame(x = seq(min(df[[SWC_col]], na.rm = TRUE), 
+                                     max(df[[SWC_col]], na.rm = TRUE), 
+                                     length.out = 100))
+      names(pred_data)[1] <- SWC_col
+      
+      # Calculate predictions
+      pred_data[[flux_var]] <- predict(exp_model, newdata = pred_data)
+      
+      # Add to plot
+      p <- p + geom_line(data = pred_data, aes_string(x = SWC_col, y = flux_var), 
+                         color = "red", size = 1)
+      
+      # Add R² annotation for exponential model
+      p <- p + annotate("text", x = max(df[[SWC_col]], na.rm = TRUE) * 0.8, 
+                       y = max(df[[flux_var]], na.rm = TRUE) * 0.9,
+                       label = paste0("Exp. R² = ", round(r2_exp, 3)))
+    }, error = function(e) {
+      # If exponential model fails, just note it
+      p <- p + annotate("text", x = mean(df[[SWC_col]], na.rm = TRUE), 
+                       y = max(df[[flux_var]], na.rm = TRUE) * 0.9,
+                       label = "Exp. model failed")
+    })
+    
+    # Add linear model
+    tryCatch({
+      linear_model <- lm(as.formula(paste(flux_var, "~", SWC_col)), data = df)
+      r2_linear <- summary(linear_model)$r.squared
+      
+      p <- p + geom_smooth(method = "lm", color = "blue", se = FALSE, linetype = "dashed") +
+        annotate("text", x = max(df[[SWC_col]], na.rm = TRUE) * 0.8, 
+                 y = max(df[[flux_var]], na.rm = TRUE) * 0.8,
+                 label = paste0("Linear R² = ", round(r2_linear, 3)))
+    }, error = function(e) {
+      # If linear model fails, just note it
+    })
+    
+    plots[[i]] <- p
+  }
+  
+  # Arrange plots in a grid
+  grid_title <- if(flux_var == "FC_night") "Nighttime CO2 Flux vs. Different SWC Sensors" else "CH4 Flux vs. Different SWC Sensors"
+  
+  # Return list of plots (can be arranged with grid.arrange from gridExtra package)
+  return(list(plots = plots, title = grid_title))
+}
+
+# Compare SWC sensors for FC_night - all seasons
+fc_night_sensor_plotsSWC <- compare_soil_SWC_sensors("FC_night", df_avg)
+grid.arrange(grobs = fc_night_sensor_plotsSWC$plots, top = fc_night_sensor_plotsSWC$title)
+
+# Compare SWC sensors for FCH4 - all seasons 
+fch4_sensor_plotsSWC <- compare_soil_SWC_sensors("FCH4", df_avg)
+grid.arrange(grobs = fch4_sensor_plotsSWC$plots, top = fch4_sensor_plotsSWC$title)
+
+# No Winter 
+
+# Compare SWCerature sensors for FC_night
+fc_night_sensor_plotsSWC_nw <- compare_soil_SWC_sensors("FC_night", df_avg_nowinter)
+grid.arrange(grobs = fc_night_sensor_plotsSWC_nw$plots, top = fc_night_sensor_plotsSWC_nw$title)
+
+# Compare SWCerature sensors for FCH4
+fch4_sensor_plotsSWC_nw <- compare_soil_SWC_sensors("FCH4", df_avg_nowinter)
+grid.arrange(grobs = fch4_sensor_plotsSWC_nw$plots, top = fch4_sensor_plotsSWC_nw$title)
+```
+
+####validating 
+```{r}
+# function to fit models for all temperature sensors and compare results
+# This will help us identify which SWC sensor best explains flux variations
+
+fit_compare_sensors <- function(flux_var, df) {
+  # List of temperature columns to test
+  SWC_cols <- c("SWC_1_1_1", "SWC_2_1_1", "SWC_3_1_1")
+  
+  # Store results
+  results <- data.frame(sensor = SWC_cols, 
+                       r_squared = numeric(length(SWC_cols)),
+                       a_coef = numeric(length(SWC_cols)),
+                       b_coef = numeric(length(SWC_cols)))
+  
+  # Loop through each temperature sensor
+  for (i in seq_along(SWC_cols)) {
+    SWC_col <- SWC_cols[i]
+    
+    # Create formula dynamically
+    formula <- as.formula(paste(flux_var, "~ a * exp(b *", SWC_col, ")"))
+    
+    # Fit exponential model
+    tryCatch({
+      model <- nls(formula, data = df, start = list(a = 1, b = 0.1))
+      
+      # Calculate R-squared
+      RSS <- sum(residuals(model)^2)
+      TSS <- sum((df[[flux_var]] - mean(df[[flux_var]], na.rm = TRUE))^2, na.rm = TRUE)
+      r2 <- 1 - (RSS/TSS)
+      
+      # Store results
+      results$r_squared[i] <- r2
+      results$a_coef[i] <- coef(model)["a"]
+      results$b_coef[i] <- coef(model)["b"]
+    }, error = function(e) {
+      # Handle errors (e.g., model failure to converge)
+      results$r_squared[i] <<- NA
+      results$a_coef[i] <<- NA
+      results$b_coef[i] <<- NA
+    })
+  }
+  
+  return(results)
+}
+
+# Apply function to compare sensors for nighttime CO2 flux
+FC_night_sensor_comparisonSWC <- fit_compare_sensors("FC_night", df_avg_nowinter)
+print(FC_night_sensor_comparisonSWC)
+
+#all very low R2, suggests water isn't a main driver of FC_night - SWC1 and SWC3 perform best
+
+# Apply function to compare sensors for CH4 flux
+FCH4_sensor_comparisonSWC <- fit_compare_sensors("FCH4", df_avg_nowinter)
+print(FCH4_sensor_comparisonSWC)
+
+#a_coef represents base flux at temp = 0; basal respiration rate 
+#b_coef represents the SWC sensitivity coefficient, how quickly flux inc when SWC increases
+#also all quite low, highest R2 in SWC3 =0.13
+```
+
+#Interactive model 
+```{r}
+
+# Interactive model for CO2 flux
+co2_interact_model <- lm(FC_night ~ TS_3_1_1 * SWC_3_1_1, data = df_avg)
+summary(co2_interact_model)
+#R2 = 0.49
+
+# Interactive model for CH4 flux
+ch4_interact_model <- lm(FCH4 ~ TS_3_1_1 * SWC_3_1_1, data = df_avg)
+summary(ch4_interact_model)
+#R2 = 0.29
+
+#No Winter
+
+# Interactive model for CO2 flux
+co2_interact_model_nw <- lm(FC_night ~ TS_3_1_1 * SWC_3_1_1, data = df_avg_nowinter)
+summary(co2_interact_model_nw)
+#R2 = 0.3457
+
+# Interactive model for CH4 flux
+ch4_interact_model_nw <- lm(FCH4 ~ TS_3_1_1 * SWC_3_1_1, data = df_avg_nowinter)
+summary(ch4_interact_model_nw)
+#R2 = 0.277
+```
+#C vs Temp Seasonal Variation - soil temp TS3
+
+```{r}
+# FC_night scatter plot with coloring by season - no winter 
+ggplot(df_avg_nowinter, aes(x = TS_3_1_1, y = FC_night, color = season)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "Nighttime CO2 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CO2 Flux by Season - NW")
+
+
+# FCH4 scatter plot with coloring by season - no winter 
+ggplot(df_avg_nowinter, aes(x = TS_3_1_1, y = FCH4, color = season)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by Season - NW")
+
+
+# FC_night scatter plot with coloring by season
+ggplot(df_avg, aes(x = TS_3_1_1, y = FC_night, color = season)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "Nighttime CO2 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CO2 Flux by Season")
+
+
+# FCH4 scatter plot with coloring by season
+ggplot(df_avg, aes(x = TS_3_1_1, y = FCH4, color = season)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by Season")
+
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg, aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg, aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and FC_night Flux by SWC")
+
+
+# FCH4 scatter plot with coloring by SWC - no winter 
+ggplot(df_avg_nowinter, aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC - NW")
+
+# FC_night scatter plot with coloring by SWC - no winter
+ggplot(df_avg_nowinter, aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and FC_night Flux by SWC - NW")
+
+
+shapiro_test <- shapiro.test(df_avg_nowinter$FC_night)
+print(shapiro_test)
+
+```
+
+#TO DO: try just 2019, with the most real methane data ** see if this U shape holds**
+
+```{r}
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2019"), aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2019"), aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and FC_night Flux by SWC")
+```
+#all years 
+
+```{r}
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2017"), aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC - 2017")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2017"), aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and FC_night Flux by SWC - 2017")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2018"), aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC - 2018")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2018"), aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and FC_night Flux by SWC - 2018")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2019"), aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC- 2019")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2019"), aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and FC_night Flux by SWC - 2019")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2020"), aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC- 2020")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2020"), aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and FC_night Flux by SWC - 2020")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2021"), aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC- 2021")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2021"), aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and FC_night Flux by SWC - 2021")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2022"), aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC- 2022")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2022"), aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and FC_night Flux by SWC - 2022")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2023"), aes(x = TS_3_1_1, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC- 2023")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2023"), aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and FC_night Flux by SWC - 2023")
+ 
+```
+
+#with air temp 
+```{r}
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2017"), aes(x = TA , y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand CH4 Flux by SWC - 2017")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2017"), aes(x = TA, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand FC_night Flux by SWC - 2017")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2018"), aes(x = TA, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand CH4 Flux by SWC - 2018")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2018"), aes(x = TA, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand FC_night Flux by SWC - 2018")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2019"), aes(x = TA, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand CH4 Flux by SWC- 2019")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2019"), aes(x = TA, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand FC_night Flux by SWC - 2019")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2020"), aes(x = TA, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand CH4 Flux by SWC- 2020")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2020"), aes(x = TA, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand FC_night Flux by SWC - 2020")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2021"), aes(x = TA, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand CH4 Flux by SWC- 2021")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2021"), aes(x = TA, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand FC_night Flux by SWC - 2021")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2022"), aes(x = TA, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand CH4 Flux by SWC- 2022")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2022"), aes(x = TA, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand FC_night Flux by SWC - 2022")
+
+# FCH4 scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2023"), aes(x = TA, y = FCH4, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand CH4 Flux by SWC- 2023")
+
+# FC_night scatter plot with coloring by SWC - all seasons 
+ggplot(df_avg %>%
+         filter(year == "2023"), aes(x = TA, y = FC_night, color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Air Temp(°C)", y = "FC_night Flux (μmol/m²/s)", 
+       title = "Relationship between Air Tempand FC_night Flux by SWC - 2023")
+ 
+
+```
+
+
+
+#C vs SWC by season - SWC 3
+```{r}
+# FC_night scatter plot with coloring by season - no winter 
+ggplot(df_avg_nowinter, aes(x = SWC_3_1_1, y = FC_night, color = season)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  labs(x = "SWC", y = "Nighttime CO2 Flux (μmol/m²/s)", 
+       title = "Relationship between SWC and CO2 Flux by Season - NW")
+
+
+# FCH4 scatter plot with coloring by season - no winter 
+ggplot(df_avg_nowinter, aes(x = SWC_3_1_1, y = FCH4, color = season)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  labs(x = "SWC", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between SWC and CH4 Flux by Season - NW")
+
+
+# FC_night scatter plot with coloring by season
+ggplot(df_avg, aes(x = SWC_3_1_1, y = FC_night, color = season)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  labs(x = "SWC", y = "Nighttime CO2 Flux (μmol/m²/s)", 
+       title = "Relationship between SWC and CO2 Flux by Season")
+
+
+# FCH4 scatter plot with coloring by season
+ggplot(df_avg, aes(x = SWC_3_1_1, y = FCH4, color = season)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  labs(x = "SWC", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between SWC and CH4 Flux by Season")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Annual variation - soil temp TS3
+```{r}
+# Function to calculate and compare R² by year
+get_yearly_r2_fixed <- function(data, flux_var, temp_var) {
+  years <- 2017:2023
+  result <- data.frame(
+    year = years,
+    r_squared = numeric(length(years)),
+    a_coef = numeric(length(years)),
+    b_coef = numeric(length(years)),
+    n_obs = numeric(length(years)) # Added to check sample size
+  )
+  
+  for (i in seq_along(years)) {
+    # Explicitly convert year to character for filtering
+    yr <- as.character(years[i])
+    
+    # Create a new dataframe for this year only
+    df_year <- data[data$year == yr, ]
+    
+    # Print diagnostic info to check
+    cat("Processing year:", yr, "with", nrow(df_year), "observations\n")
+    
+    # Only proceed if we have enough data points
+    if (nrow(df_year) >= 10) {
+      tryCatch({
+        # Create formula with explicit column names
+        formula_text <- paste0(flux_var, " ~ a * exp(b * ", temp_var, ")")
+        model <- nls(formula_text, data = df_year, start = list(a = 1, b = 0.1))
+        
+        # Calculate R² specifically for this year's data
+        RSS <- sum(residuals(model)^2)
+        TSS <- sum((df_year[[flux_var]] - mean(df_year[[flux_var]], na.rm = TRUE))^2, na.rm = TRUE)
+        
+        # Store results
+        result$r_squared[i] <- 1 - (RSS/TSS)
+        result$a_coef[i] <- coef(model)["a"]
+        result$b_coef[i] <- coef(model)["b"]
+        result$n_obs[i] <- nrow(df_year)
+        
+      }, error = function(e) {
+        cat("Error in year", yr, ":", conditionMessage(e), "\n")
+        result$r_squared[i] <<- NA
+        result$a_coef[i] <<- NA
+        result$b_coef[i] <<- NA
+      })
+    } else {
+      cat("Not enough data for year", yr, "\n")
+      result$r_squared[i] <- NA
+      result$a_coef[i] <- NA
+      result$b_coef[i] <- NA
+      result$n_obs[i] <- nrow(df_year)
+    }
+  }
+  
+  return(result)
+}
+
+# Use function
+yearly_r2_fc_night <- get_yearly_r2_fixed(df_avg_nowinter, "FC_night", "TS_3_1_1")
+print(yearly_r2_fc_night)
+
+# Also check methane
+yearly_r2_fch4 <- get_yearly_r2_fixed(df_avg_nowinter, "FCH4", "TS_3_1_1")
+print(yearly_r2_fch4)
+
+
+# sum(is.na(df_avg_nowinter$FCH4)) #475
+# sum(is.na(df_avg_nowinter$FC_night)) #490
+
+```
+
+
+#Yearly visualizations - no winter 
+
+```{r}
+# Improved function to create yearly plots with correct R² values
+create_yearly_plots_fixed <- function(flux_var, temp_var, data_list) {
+  plot_list <- list()
+  
+  for (i in seq_along(data_list)) {
+    year_name <- names(data_list)[i]
+    df_year <- data_list[[i]]
+    
+    if (nrow(df_year) > 0) {
+      p <- ggplot(df_year, aes_string(x = temp_var, y = flux_var)) +
+        geom_point(alpha = 0.7) +
+        theme_bw() +
+        ggtitle(paste("Year:", year_name)) +
+        labs(x = "Soil Temperature (°C)", 
+             y = if(flux_var == "FC_night") "CO2 Flux (μmol/m²/s)" else "CH4 Flux (nmol/m²/s)")
+      
+      # Try to add exponential model
+      tryCatch({
+        # Fit exponential model
+        exp_model <- nls(as.formula(paste(flux_var, "~ a * exp(b *", temp_var, ")")), 
+                        data = df_year, start = list(a = 1, b = 0.1))
+        
+        # Calculate R² manually - this is the key fix
+        RSS <- sum(residuals(exp_model)^2)
+        TSS <- sum((df_year[[flux_var]] - mean(df_year[[flux_var]], na.rm = TRUE))^2, na.rm = TRUE)
+        r_squared <- 1 - (RSS/TSS)
+        
+        # Create prediction data
+        new_data <- data.frame(x = seq(min(df_year[[temp_var]], na.rm = TRUE),
+                                     max(df_year[[temp_var]], na.rm = TRUE),
+                                     length.out = 100))
+        names(new_data)[1] <- temp_var
+        
+        new_data[[flux_var]] <- predict(exp_model, newdata = new_data)
+        
+        p <- p + geom_line(data = new_data, aes_string(x = temp_var, y = flux_var), 
+                          color = "red", size = 1)
+        
+        # Add manually calculated R² value
+        a_coef <- coef(exp_model)["a"]
+        b_coef <- coef(exp_model)["b"]
+        equation <- paste0("y = ", round(a_coef, 3), "e^(", round(b_coef, 3), 
+                         "x), R² = ", round(r_squared, 3))
+        
+        p <- p + annotate("text", x = min(df_year[[temp_var]], na.rm = TRUE) + 1, 
+                         y = max(df_year[[flux_var]], na.rm = TRUE) * 0.9,
+                         label = equation, hjust = 0)
+      }, error = function(e) {
+        # If exponential model fails, add linear
+        linear_model <- lm(as.formula(paste(flux_var, "~", temp_var)), data = df_year)
+        p <- p + geom_smooth(method = "lm", color = "blue", se = FALSE)
+        
+        r_squared_linear <- summary(linear_model)$r.squared
+        
+        p <- p + annotate("text", x = min(df_year[[temp_var]], na.rm = TRUE) + 1, 
+                         y = max(df_year[[flux_var]], na.rm = TRUE) * 0.9,
+                         label = paste0("R² = ", round(r_squared_linear, 3)),
+                         hjust = 0)
+      })
+      
+      plot_list[[i]] <- p
+    }
+  }
+  
+  return(plot_list)
+}
+
+# Create yearly dataframes list - all seasons
+yearly_dfs<- list(
+  "2017" = df_avg_2017,
+  "2018" = df_avg_2018,
+  "2019" = df_avg_2019,
+  "2020" = df_avg_2020,
+  "2021" = df_avg_2021,
+  "2022" = df_avg_2022
+)
+
+# Create yearly dataframes list - no winter 
+yearly_dfs_nw <- list(
+  "2017" = df_avg_nowinter_2017,
+  "2018" = df_avg_nowinter_2018,
+  "2019" = df_avg_nowinter_2019,
+  "2020" = df_avg_nowinter_2020,
+  "2021" = df_avg_nowinter_2021,
+  "2022" = df_avg_nowinter_2022
+)
+
+# Create plots for CO2 flux - all seasons 
+fc_night_plots <- create_yearly_plots_fixed("FC_night", "TS_3_1_1", yearly_dfs)
+
+# Display plots (requires gridExtra package)
+grid.arrange(grobs = fc_night_plots, ncol = 2)
+
+# Create plots for CH4 flux - all seasons 
+fch4_plots <- create_yearly_plots_fixed("FCH4", "TS_3_1_1", yearly_dfs)
+grid.arrange(grobs = fch4_plots, ncol = 2)
+
+#Winter removed 
+
+# Create plots for CO2 flux - no winter 
+fc_night_plots <- create_yearly_plots_fixed("FC_night", "TS_3_1_1", yearly_dfs_nw)
+grid.arrange(grobs = fc_night_plots, ncol = 2)
+
+# Create plots for CH4 flux - no winter 
+fch4_plots <- create_yearly_plots_fixed("FCH4", "TS_3_1_1", yearly_dfs_nw)
+grid.arrange(grobs = fch4_plots, ncol = 2)
+
+
+```
+#Unified relationship script for yearly trends for FC_night & soil temp - all seasons
+```{r}
+# Unified analysis script for FC_night
+analyze_FCnight_yearly <- function(data_list, temp_sensor = "TS_3_1_1") {
+  # Create results table
+  results <- data.frame(
+    year = names(data_list),
+    r_squared = numeric(length(data_list)),
+    a_coef = numeric(length(data_list)),
+    b_coef = numeric(length(data_list)),
+    Q10 = numeric(length(data_list)),
+    n_obs = numeric(length(data_list))
+  )
+  
+  # Create list for plots
+  plot_list <- list()
+  
+  # Process each year
+  for (i in seq_along(data_list)) {
+    year_name <- names(data_list)[i]
+    df_year <- data_list[[i]]
+    
+    if (nrow(df_year) >= 10) {
+      # Create formula
+      formula_text <- paste0("FC_night ~ a * exp(b * ", temp_sensor, ")")
+      
+      # Fit model
+      tryCatch({
+        model <- nls(as.formula(formula_text), data = df_year, 
+                    start = list(a = 1, b = 0.1))
+        
+        # Extract coefficients
+        a_val <- coef(model)["a"]
+        b_val <- coef(model)["b"]
+        
+        # Calculate R² manually
+        RSS <- sum(residuals(model)^2)
+        TSS <- sum((df_year$FC_night - mean(df_year$FC_night, na.rm = TRUE))^2, na.rm = TRUE)
+        r2_val <- 1 - (RSS/TSS)
+        
+        # Calculate Q10
+        q10_val <- exp(10 * b_val)
+        
+        # Store in results table
+        results$r_squared[i] <- r2_val
+        results$a_coef[i] <- a_val
+        results$b_coef[i] <- b_val
+        results$Q10[i] <- q10_val
+        results$n_obs[i] <- nrow(df_year)
+        
+        # Create plot
+        p <- ggplot(df_year, aes_string(x = temp_sensor, y = "FC_night")) +
+          geom_point(alpha = 0.7) +
+          theme_bw() +
+          ggtitle(paste("Year:", year_name)) +
+          labs(x = "Soil Temperature (°C)", 
+               y = "FC_night Flux (nmol/m²/s)")
+        
+        # Add model prediction line
+        new_data <- data.frame(x = seq(min(df_year[[temp_sensor]], na.rm = TRUE),
+                                     max(df_year[[temp_sensor]], na.rm = TRUE),
+                                     length.out = 100))
+        names(new_data)[1] <- temp_sensor
+        
+        new_data$FC_night <- predict(model, newdata = new_data)
+        
+        p <- p + geom_line(data = new_data, aes_string(x = temp_sensor, y = "FC_night"), 
+                          color = "red", size = 1)
+        
+        # Add equation and R²
+        equation <- paste0("y = ", round(a_val, 3), "e^(", 
+                         round(b_val, 3), "x), R² = ", round(r2_val, 3))
+        
+        p <- p + annotate("text", x = min(df_year[[temp_sensor]], na.rm = TRUE) + 1, 
+                         y = max(df_year$FC_night, na.rm = TRUE) * 0.9,
+                         label = equation, hjust = 0)
+        
+        plot_list[[i]] <- p
+        
+      }, error = function(e) {
+        # Handle errors
+        results$r_squared[i] <<- NA
+        results$a_coef[i] <<- NA
+        results$b_coef[i] <<- NA
+        results$Q10[i] <<- NA
+        
+        # Create plot with linear model instead
+        p <- ggplot(df_year, aes_string(x = temp_sensor, y = "FC_night")) +
+          geom_point(alpha = 0.7) +
+          geom_smooth(method = "lm", color = "blue", se = FALSE) +
+          theme_bw() +
+          ggtitle(paste("Year:", year_name)) +
+          labs(x = "Soil Temperature (°C)", 
+               y = "CH4 Flux (nmol/m²/s)")
+        
+        # Add R² for linear model
+        lm_model <- lm(as.formula(paste("FC_night ~", temp_sensor)), data = df_year)
+        r2_linear <- summary(lm_model)$r.squared
+        
+        p <- p + annotate("text", x = min(df_year[[temp_sensor]], na.rm = TRUE) + 1, 
+                         y = max(df_year$FC_night, na.rm = TRUE) * 0.9,
+                         label = paste0("Linear R² = ", round(r2_linear, 3)), 
+                         hjust = 0)
+        
+        plot_list[[i]] <- p
+      })
+    }
+  }
+  
+  return(list(results = results, plots = plot_list))
+}
+
+# Run unified analysis
+FCnight_analysis <- analyze_FCnight_yearly(yearly_dfs)
+
+# Print results table
+print(FCnight_analysis$results)
+
+# Display plots (requires gridExtra)
+ grid.arrange(grobs = FCnight_analysis$plots, ncol = 2)
+```
+
+#Unified yearly relationship analysis for FCH4 & soil temp - all seasons 
+
+```{r}
+# Unified analysis script for FCH4
+analyze_methane_yearly <- function(data_list, temp_sensor = "TS_3_1_1") {
+  # Create results table
+  results <- data.frame(
+    year = names(data_list),
+    r_squared = numeric(length(data_list)),
+    a_coef = numeric(length(data_list)),
+    b_coef = numeric(length(data_list)),
+    Q10 = numeric(length(data_list)),
+    n_obs = numeric(length(data_list))
+  )
+  
+  # Create list for plots
+  plot_list <- list()
+  
+  # Process each year
+  for (i in seq_along(data_list)) {
+    year_name <- names(data_list)[i]
+    df_year <- data_list[[i]]
+    
+    if (nrow(df_year) >= 10) {
+      # Create formula
+      formula_text <- paste0("FCH4 ~ a * exp(b * ", temp_sensor, ")")
+      
+      # Fit model
+      tryCatch({
+        model <- nls(as.formula(formula_text), data = df_year, 
+                    start = list(a = 1, b = 0.1))
+        
+        # Extract coefficients
+        a_val <- coef(model)["a"]
+        b_val <- coef(model)["b"]
+        
+        # Calculate R² manually
+        RSS <- sum(residuals(model)^2)
+        TSS <- sum((df_year$FCH4 - mean(df_year$FCH4, na.rm = TRUE))^2, na.rm = TRUE)
+        r2_val <- 1 - (RSS/TSS)
+        
+        # Calculate Q10
+        q10_val <- exp(10 * b_val)
+        
+        # Store in results table
+        results$r_squared[i] <- r2_val
+        results$a_coef[i] <- a_val
+        results$b_coef[i] <- b_val
+        results$Q10[i] <- q10_val
+        results$n_obs[i] <- nrow(df_year)
+        
+        # Create plot
+        p <- ggplot(df_year, aes_string(x = temp_sensor, y = "FCH4")) +
+          geom_point(alpha = 0.7) +
+          theme_bw() +
+          ggtitle(paste("Year:", year_name)) +
+          labs(x = "Soil Temperature (°C)", 
+               y = "CH4 Flux (nmol/m²/s)")
+        
+        # Add model prediction line
+        new_data <- data.frame(x = seq(min(df_year[[temp_sensor]], na.rm = TRUE),
+                                     max(df_year[[temp_sensor]], na.rm = TRUE),
+                                     length.out = 100))
+        names(new_data)[1] <- temp_sensor
+        
+        new_data$FCH4 <- predict(model, newdata = new_data)
+        
+        p <- p + geom_line(data = new_data, aes_string(x = temp_sensor, y = "FCH4"), 
+                          color = "red", size = 1)
+        
+        # Add equation and R²
+        equation <- paste0("y = ", round(a_val, 3), "e^(", 
+                         round(b_val, 3), "x), R² = ", round(r2_val, 3))
+        
+        p <- p + annotate("text", x = min(df_year[[temp_sensor]], na.rm = TRUE) + 1, 
+                         y = max(df_year$FCH4, na.rm = TRUE) * 0.9,
+                         label = equation, hjust = 0)
+        
+        plot_list[[i]] <- p
+        
+      }, error = function(e) {
+        # Handle errors
+        results$r_squared[i] <<- NA
+        results$a_coef[i] <<- NA
+        results$b_coef[i] <<- NA
+        results$Q10[i] <<- NA
+        
+        # Create plot with linear model instead
+        p <- ggplot(df_year, aes_string(x = temp_sensor, y = "FCH4")) +
+          geom_point(alpha = 0.7) +
+          geom_smooth(method = "lm", color = "blue", se = FALSE) +
+          theme_bw() +
+          ggtitle(paste("Year:", year_name)) +
+          labs(x = "Soil Temperature (°C)", 
+               y = "CH4 Flux (nmol/m²/s)")
+        
+        # Add R² for linear model
+        lm_model <- lm(as.formula(paste("FCH4 ~", temp_sensor)), data = df_year)
+        r2_linear <- summary(lm_model)$r.squared
+        
+        p <- p + annotate("text", x = min(df_year[[temp_sensor]], na.rm = TRUE) + 1, 
+                         y = max(df_year$FCH4, na.rm = TRUE) * 0.9,
+                         label = paste0("Linear R² = ", round(r2_linear, 3)), 
+                         hjust = 0)
+        
+        plot_list[[i]] <- p
+      })
+    }
+  }
+  
+  return(list(results = results, plots = plot_list))
+}
+
+# Run unified analysis
+fch4_analysis <- analyze_methane_yearly(yearly_dfs)
+
+# Print results table
+print(fch4_analysis$results)
+
+# Display plots (requires gridExtra)
+ grid.arrange(grobs = fch4_analysis$plots, ncol = 2)
+```
+
+
+
+#Unified relationship script for yearly trends for FC_night & soil temp - no winter 
+```{r}
+# Unified analysis script for FCH4
+analyze_FCnight_yearly_nw <- function(data_list, temp_sensor = "TS_3_1_1") {
+  # Create results table
+  results <- data.frame(
+    year = names(data_list),
+    r_squared = numeric(length(data_list)),
+    a_coef = numeric(length(data_list)),
+    b_coef = numeric(length(data_list)),
+    Q10 = numeric(length(data_list)),
+    n_obs = numeric(length(data_list))
+  )
+  
+  # Create list for plots
+  plot_list <- list()
+  
+  # Process each year
+  for (i in seq_along(data_list)) {
+    year_name <- names(data_list)[i]
+    df_year <- data_list[[i]]
+    
+    if (nrow(df_year) >= 10) {
+      # Create formula
+      formula_text <- paste0("FC_night ~ a * exp(b * ", temp_sensor, ")")
+      
+      # Fit model
+      tryCatch({
+        model <- nls(as.formula(formula_text), data = df_year, 
+                    start = list(a = 1, b = 0.1))
+        
+        # Extract coefficients
+        a_val <- coef(model)["a"]
+        b_val <- coef(model)["b"]
+        
+        # Calculate R² manually
+        RSS <- sum(residuals(model)^2)
+        TSS <- sum((df_year$FC_night - mean(df_year$FC_night, na.rm = TRUE))^2, na.rm = TRUE)
+        r2_val <- 1 - (RSS/TSS)
+        
+        # Calculate Q10
+        q10_val <- exp(10 * b_val)
+        
+        # Store in results table
+        results$r_squared[i] <- r2_val
+        results$a_coef[i] <- a_val
+        results$b_coef[i] <- b_val
+        results$Q10[i] <- q10_val
+        results$n_obs[i] <- nrow(df_year)
+        
+        # Create plot
+        p <- ggplot(df_year, aes_string(x = temp_sensor, y = "FC_night")) +
+          geom_point(alpha = 0.7) +
+          theme_bw() +
+          ggtitle(paste("No Winter, Year:", year_name)) +
+          labs(x = "Soil Temperature (°C)", 
+               y = "FC_night Flux (nmol/m²/s)")
+        
+        # Add model prediction line
+        new_data <- data.frame(x = seq(min(df_year[[temp_sensor]], na.rm = TRUE),
+                                     max(df_year[[temp_sensor]], na.rm = TRUE),
+                                     length.out = 100))
+        names(new_data)[1] <- temp_sensor
+        
+        new_data$FC_night <- predict(model, newdata = new_data)
+        
+        p <- p + geom_line(data = new_data, aes_string(x = temp_sensor, y = "FC_night"), 
+                          color = "red", size = 1)
+        
+        # Add equation and R²
+        equation <- paste0("y = ", round(a_val, 3), "e^(", 
+                         round(b_val, 3), "x), R² = ", round(r2_val, 3))
+        
+        p <- p + annotate("text", x = min(df_year[[temp_sensor]], na.rm = TRUE) + 1, 
+                         y = max(df_year$FC_night, na.rm = TRUE) * 0.9,
+                         label = equation, hjust = 0)
+        
+        plot_list[[i]] <- p
+        
+      }, error = function(e) {
+        # Handle errors
+        results$r_squared[i] <<- NA
+        results$a_coef[i] <<- NA
+        results$b_coef[i] <<- NA
+        results$Q10[i] <<- NA
+        
+        # Create plot with linear model instead
+        p <- ggplot(df_year, aes_string(x = temp_sensor, y = "FC_night")) +
+          geom_point(alpha = 0.7) +
+          geom_smooth(method = "lm", color = "blue", se = FALSE) +
+          theme_bw() +
+          ggtitle(paste("No Winter, Year:", year_name)) +
+          labs(x = "Soil Temperature (°C)", 
+               y = "CH4 Flux (nmol/m²/s)")
+        
+        # Add R² for linear model
+        lm_model <- lm(as.formula(paste("FC_night ~", temp_sensor)), data = df_year)
+        r2_linear <- summary(lm_model)$r.squared
+        
+        p <- p + annotate("text", x = min(df_year[[temp_sensor]], na.rm = TRUE) + 1, 
+                         y = max(df_year$FC_night, na.rm = TRUE) * 0.9,
+                         label = paste0("Linear R² = ", round(r2_linear, 3)), 
+                         hjust = 0)
+        
+        plot_list[[i]] <- p
+      })
+    }
+  }
+  
+  return(list(results = results, plots = plot_list))
+}
+
+# Run unified analysis
+FCnight_analysis_nw <- analyze_FCnight_yearly_nw(yearly_dfs_nw)
+
+# Print results table
+print(FCnight_analysis_nw$results)
+
+# Display plots (requires gridExtra)
+ grid.arrange(grobs = FCnight_analysis_nw$plots, ncol = 2)
+```
+
+#Unified yearly relationship analysis for FCH4 & soil temp - no winter 
+
+```{r}
+# Unified analysis script for FCH4
+analyze_methane_yearly_nw <- function(data_list, temp_sensor = "TS_3_1_1") {
+  # Create results table
+  results <- data.frame(
+    year = names(data_list),
+    r_squared = numeric(length(data_list)),
+    a_coef = numeric(length(data_list)),
+    b_coef = numeric(length(data_list)),
+    Q10 = numeric(length(data_list)),
+    n_obs = numeric(length(data_list))
+  )
+  
+  # Create list for plots
+  plot_list <- list()
+  
+  # Process each year
+  for (i in seq_along(data_list)) {
+    year_name <- names(data_list)[i]
+    df_year <- data_list[[i]]
+    
+    if (nrow(df_year) >= 10) {
+      # Create formula
+      formula_text <- paste0("FCH4 ~ a * exp(b * ", temp_sensor, ")")
+      
+      # Fit model
+      tryCatch({
+        model <- nls(as.formula(formula_text), data = df_year, 
+                    start = list(a = 1, b = 0.1))
+        
+        # Extract coefficients
+        a_val <- coef(model)["a"]
+        b_val <- coef(model)["b"]
+        
+        # Calculate R² manually
+        RSS <- sum(residuals(model)^2)
+        TSS <- sum((df_year$FCH4 - mean(df_year$FCH4, na.rm = TRUE))^2, na.rm = TRUE)
+        r2_val <- 1 - (RSS/TSS)
+        
+        # Calculate Q10
+        q10_val <- exp(10 * b_val)
+        
+        # Store in results table
+        results$r_squared[i] <- r2_val
+        results$a_coef[i] <- a_val
+        results$b_coef[i] <- b_val
+        results$Q10[i] <- q10_val
+        results$n_obs[i] <- nrow(df_year)
+        
+        # Create plot
+        p <- ggplot(df_year, aes_string(x = temp_sensor, y = "FCH4")) +
+          geom_point(alpha = 0.7) +
+          theme_bw() +
+          ggtitle(paste("No Winter, Year:", year_name)) +
+          labs(x = "Soil Temperature (°C)", 
+               y = "CH4 Flux (nmol/m²/s)")
+        
+        # Add model prediction line
+        new_data <- data.frame(x = seq(min(df_year[[temp_sensor]], na.rm = TRUE),
+                                     max(df_year[[temp_sensor]], na.rm = TRUE),
+                                     length.out = 100))
+        names(new_data)[1] <- temp_sensor
+        
+        new_data$FCH4 <- predict(model, newdata = new_data)
+        
+        p <- p + geom_line(data = new_data, aes_string(x = temp_sensor, y = "FCH4"), 
+                          color = "red", size = 1)
+        
+        # Add equation and R²
+        equation <- paste0("y = ", round(a_val, 3), "e^(", 
+                         round(b_val, 3), "x), R² = ", round(r2_val, 3))
+        
+        p <- p + annotate("text", x = min(df_year[[temp_sensor]], na.rm = TRUE) + 1, 
+                         y = max(df_year$FCH4, na.rm = TRUE) * 0.9,
+                         label = equation, hjust = 0)
+        
+        plot_list[[i]] <- p
+        
+      }, error = function(e) {
+        # Handle errors
+        results$r_squared[i] <<- NA
+        results$a_coef[i] <<- NA
+        results$b_coef[i] <<- NA
+        results$Q10[i] <<- NA
+        
+        # Create plot with linear model instead
+        p <- ggplot(df_year, aes_string(x = temp_sensor, y = "FCH4")) +
+          geom_point(alpha = 0.7) +
+          geom_smooth(method = "lm", color = "blue", se = FALSE) +
+          theme_bw() +
+          ggtitle(paste("No Winter, Year:", year_name)) +
+          labs(x = "Soil Temperature (°C)", 
+               y = "CH4 Flux (nmol/m²/s)")
+        
+        # Add R² for linear model
+        lm_model <- lm(as.formula(paste("FCH4 ~", temp_sensor)), data = df_year)
+        r2_linear <- summary(lm_model)$r.squared
+        
+        p <- p + annotate("text", x = min(df_year[[temp_sensor]], na.rm = TRUE) + 1, 
+                         y = max(df_year$FCH4, na.rm = TRUE) * 0.9,
+                         label = paste0("Linear R² = ", round(r2_linear, 3)), 
+                         hjust = 0)
+        
+        plot_list[[i]] <- p
+      })
+    }
+  }
+  
+  return(list(results = results, plots = plot_list))
+}
+
+# Run unified analysis
+fch4_analysis_nw <- analyze_methane_yearly_nw(yearly_dfs_nw)
+
+# Print results table
+print(fch4_analysis_nw$results)
+
+# Display plots (requires gridExtra)
+ grid.arrange(grobs = fch4_analysis_nw$plots, ncol = 2)
+```
+
+
+
+#Potential threshold effects 
+
+```{r}
+# Example: Threshold analysis for temperature
+df_avg_nowinter <- df_avg_nowinter %>%
+  mutate(temp_threshold = ifelse(TS_3_1_1 > median(TS_3_1_1, na.rm = TRUE), 
+                               "High", "Low"))
+
+ggplot(df_avg_nowinter, aes(x = TS_3_1_1, y = FC_night, color = temp_threshold)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  scale_color_manual(values = c("blue", "red")) +
+  labs(title = "Temperature-Flux Relationship with Threshold Effect",
+       x = "Soil Temperature (°C)",
+       y = "Nighttime CO2 Flux (μmol/m²/s)")
+
+
+
+ggplot(df_avg_nowinter, aes(x = TS_3_1_1, y = FCH4, color = temp_threshold)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  scale_color_manual(values = c("blue", "red")) +
+  labs(title = "Temperature-Flux Relationship with Threshold Effect",
+       x = "Soil Temperature (°C)",
+       y = "CH4 Flux (μmol/m²/s)")
+
+
+# Example: Threshold analysis for SWC
+df_avg_nowinter <- df_avg_nowinter %>%
+  mutate(SWC_threshold = ifelse(SWC_3_1_1 > median(SWC_3_1_1, na.rm = TRUE), 
+                               "High", "Low"))
+
+ggplot(df_avg_nowinter, aes(x = SWC_3_1_1, y = FC_night, color = SWC_threshold)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  scale_color_manual(values = c("blue", "red")) +
+  labs(title = "SWC-Flux Relationship with Threshold Effect",
+       x = "SWC ",
+       y = "FC_night Flux (μmol/m²/s)")
+
+ggplot(df_avg_nowinter, aes(x = SWC_3_1_1, y = FCH4, color = SWC_threshold)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw() +
+  scale_color_manual(values = c("blue", "red")) +
+  labs(title = "SWC-Flux Relationship with Threshold Effect",
+       x = "SWC ",
+       y = "CH4 Flux (μmol/m²/s)")
+
+
+
+
+
+```
+
+
+#Relationship by year - temp 
+```{r}
+# Function to fit yearly models and calculate R²
+fit_yearly_models <- function(flux_var, temp_var, yearly_dfs) {
+  # Store results
+  results <- data.frame(year = names(yearly_dfs),
+                       r_squared = numeric(length(yearly_dfs)),
+                       a_coef = numeric(length(yearly_dfs)),
+                       b_coef = numeric(length(yearly_dfs)))
+  
+  # Loop through each year's dataframe
+  for (i in seq_along(yearly_dfs)) {
+    df_year <- yearly_dfs[[i]]
+    year_name <- names(yearly_dfs)[i]
+    
+    # Create formula
+    formula <- as.formula(paste(flux_var, "~ a * exp(b *", temp_var, ")"))
+    
+    # Fit model
+    tryCatch({
+      model <- nls(formula, data = df_year, start = list(a = 1, b = 0.1))
+      
+      # Calculate R-squared
+      RSS <- sum(residuals(model)^2)
+      TSS <- sum((df_year[[flux_var]] - mean(df_year[[flux_var]], na.rm = TRUE))^2, na.rm = TRUE)
+      r2 <- 1 - (RSS/TSS)
+      
+      # Store results
+      results$r_squared[i] <- r2
+      results$a_coef[i] <- coef(model)["a"]
+      results$b_coef[i] <- coef(model)["b"]
+    }, error = function(e) {
+      # Handle errors
+      results$r_squared[i] <<- NA
+      results$a_coef[i] <<- NA
+      results$b_coef[i] <<- NA
+    })
+  }
+  
+  return(results)
+}
+
+# Create a list of yearly dataframes (no winter)
+yearly_dfs <- list(
+  "2017" = df_avg_nowinter_2017,
+  "2018" = df_avg_nowinter_2018,
+  "2019" = df_avg_nowinter_2019,
+  "2020" = df_avg_nowinter_2020,
+  "2021" = df_avg_nowinter_2021,
+  "2022" = df_avg_nowinter_2022,
+  "2023" = df_avg_nowinter_2023
+)
+
+# Analyze yearly patterns for FC_night
+yearly_FC_night_results <- fit_yearly_models("FC_night", "TS_3_1_1", yearly_dfs)
+print(yearly_FC_night_results)
+
+# Analyze yearly patterns for FCH4
+yearly_FCH4_results <- fit_yearly_models("FCH4", "TS_3_1_1", yearly_dfs)
+print(yearly_FCH4_results)
+```
+
+
+
+
+
+
+
+
+#Temp and SWC
+```{r}
+# Function to test models with SWC interaction
+test_swc_interaction <- function(flux_var, temp_var, swc_var, df) {
+  # Simple linear model with temperature only
+  formula_temp <- as.formula(paste(flux_var, "~", temp_var))
+  model_temp <- lm(formula_temp, data = df)
+  r2_temp <- summary(model_temp)$r.squared
+  
+  # Linear model with temperature and SWC
+  formula_temp_swc <- as.formula(paste(flux_var, "~", temp_var, "+", swc_var))
+  model_temp_swc <- lm(formula_temp_swc, data = df)
+  r2_temp_swc <- summary(model_temp_swc)$r.squared
+  
+  # Linear model with temperature, SWC, and their interaction
+  formula_interaction <- as.formula(paste(flux_var, "~", temp_var, "*", swc_var))
+  model_interaction <- lm(formula_interaction, data = df)
+  r2_interaction <- summary(model_interaction)$r.squared
+  
+  # Return results
+  results <- data.frame(
+    model = c("Temperature only", "Temperature + SWC", "Temperature * SWC"),
+    r_squared = c(r2_temp, r2_temp_swc, r2_interaction)
+  )
+  
+  return(results)
+}
+
+# Test SWC interaction for FC_night using different SWC sensors
+swc_cols <- c("SWC_1_1_1", "SWC_2_1_1", "SWC_3_1_1")
+
+for (swc_col in swc_cols) {
+  results <- test_swc_interaction("FC_night", "TS_3_1_1", swc_col, df_avg_nowinter)
+  cat("FC_night with", swc_col, "interaction:\n")
+  print(results)
+  cat("\n")
+}
+
+# Test SWC interaction for FCH4
+for (swc_col in swc_cols) {
+  results <- test_swc_interaction("FCH4", "TS_3_1_1", swc_col, df_avg_nowinter)
+  cat("FCH4 with", swc_col, "interaction:\n")
+  print(results)
+  cat("\n")
+}
+```
+
+#Visualizations 
+```{r}
+# Function to create temperature-flux scatter plots with model fits
+plot_temp_flux_relationship <- function(flux_var, temp_var, df, yearly_dfs = NULL) {
+  p <- ggplot(df, aes_string(x = temp_var, y = flux_var)) +
+    geom_point(alpha = 0.5) +
+    theme_bw() +
+    labs(
+      x = "Soil Temperature (°C)",
+      y = if(flux_var == "FC_night") "Nighttime CO2 Flux (μmol/m²/s)" else "CH4 Flux (nmol/m²/s)"
+    )
+  
+  # Add exponential model fit
+  tryCatch({
+    exp_model <- nls(as.formula(paste(flux_var, "~ a * exp(b *", temp_var, ")")), 
+                    data = df, start = list(a = 1, b = 0.1))
+    
+    # Generate prediction data
+    pred_data <- data.frame(x = seq(min(df[[temp_var]], na.rm = TRUE), 
+                                   max(df[[temp_var]], na.rm = TRUE), 
+                                   length.out = 100))
+    names(pred_data)[1] <- temp_var
+    
+    # Calculate predictions
+    pred_data[[flux_var]] <- predict(exp_model, newdata = pred_data)
+    
+    # Add to plot
+    p <- p + geom_line(data = pred_data, aes_string(x = temp_var, y = flux_var), 
+                       color = "red", size = 1)
+    
+    # Add R² annotation
+    RSS <- sum(residuals(exp_model)^2)
+    TSS <- sum((df[[flux_var]] - mean(df[[flux_var]], na.rm = TRUE))^2, na.rm = TRUE)
+    r2 <- 1 - (RSS/TSS)
+    
+    p <- p + annotate("text", x = max(df[[temp_var]], na.rm = TRUE) * 0.8, 
+                     y = max(df[[flux_var]], na.rm = TRUE) * 0.9,
+                     label = paste0("Exp. model R² = ", round(r2, 3)))
+  }, error = function(e) {
+    # If model fails, just show the scatter plot
+  })
+  
+  # Add linear model fit
+  linear_model <- lm(as.formula(paste(flux_var, "~", temp_var)), data = df)
+  r2_linear <- summary(linear_model)$r.squared
+  
+  p <- p + geom_smooth(method = "lm", color = "blue", se = FALSE, linetype = "dashed") +
+    annotate("text", x = max(df[[temp_var]], na.rm = TRUE) * 0.8, 
+             y = max(df[[flux_var]], na.rm = TRUE) * 0.8,
+             label = paste0("Linear R² = ", round(r2_linear, 3)))
+  
+  # If yearly data is provided, add yearly models
+  if (!is.null(yearly_dfs)) {
+    colors <- rainbow(length(yearly_dfs))
+    
+    for (i in seq_along(yearly_dfs)) {
+      df_year <- yearly_dfs[[i]]
+      year_name <- names(yearly_dfs)[i]
+      
+      # Add points for this year
+      p <- p + geom_point(data = df_year, aes_string(x = temp_var, y = flux_var), 
+                         color = colors[i], alpha = 0.7)
+      
+      # Try to add exponential model for this year
+      tryCatch({
+        year_model <- nls(as.formula(paste(flux_var, "~ a * exp(b *", temp_var, ")")), 
+                         data = df_year, start = list(a = 1, b = 0.1))
+        
+        # Generate prediction data for this year
+        year_pred <- data.frame(x = seq(min(df_year[[temp_var]], na.rm = TRUE), 
+                                      max(df_year[[temp_var]], na.rm = TRUE), 
+                                      length.out = 50))
+        names(year_pred)[1] <- temp_var
+        
+        # Calculate predictions
+        year_pred[[flux_var]] <- predict(year_model, newdata = year_pred)
+        
+        # Add to plot
+        p <- p + geom_line(data = year_pred, aes_string(x = temp_var, y = flux_var), 
+                          color = colors[i], size = 0.7)
+      }, error = function(e) {
+        # If model fails for this year, skip it
+      })
+    }
+    
+    # Add legend for years
+    p <- p + annotate("text", x = rep(min(df[[temp_var]], na.rm = TRUE) * 1.1, length(yearly_dfs)), 
+                     y = seq(from = max(df[[flux_var]], na.rm = TRUE) * 0.7, 
+                             to = max(df[[flux_var]], na.rm = TRUE) * 0.4, 
+                             length.out = length(yearly_dfs)),
+                     label = names(yearly_dfs), 
+                     color = colors)
+  }
+  
+  return(p)
+}
+
+# Create overall plots
+fc_night_plot <- plot_temp_flux_relationship("FC_night", "TS_3_1_1", df_avg_nowinter)
+print(fc_night_plot)
+
+fch4_plot <- plot_temp_flux_relationship("FCH4", "TS_3_1_1", df_avg_nowinter)
+print(fch4_plot)
+
+# Create plots with yearly data
+fc_night_yearly_plot <- plot_temp_flux_relationship("FC_night", "TS_3_1_1", df_avg_nowinter, yearly_dfs)
+print(fc_night_yearly_plot)
+
+fch4_yearly_plot <- plot_temp_flux_relationship("FCH4", "TS_3_1_1", df_avg_nowinter, yearly_dfs)
+print(fch4_yearly_plot)
+```
+
+
+
