@@ -98,7 +98,7 @@ ggplot(data = df,aes(TIMESTAMP_END,FC_F))+
 
 #for some reason this function isn't working anymore
 
-# df$TIMESTAMP = df$TIMESTAMP_END
+ df$TIMESTAMP = df$TIMESTAMP_END
 # 
 # year_df <- function(df, year) {
 #   df %>%
