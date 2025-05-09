@@ -440,8 +440,9 @@ print(shapiro_test)
 ```{r}
 # Environmental relationships
 # Create a correlation plot between fluxes and environmental variables
+#using WD modal because corr matrix can only use numeric variables, so can't use WD_cardinal 
 env_flux_daily_notGF <- df_avg %>%
-  select(FC, FCH4, GPP, RECO, TS_3_1_1, SWC_3_1_1, TA, WS, WD, TA_ERA5, TS_ERA5) %>%
+  select(FC, FCH4, GPP, RECO, TS_3_1_1, SWC_3_1_1, TA, WS, WD_modal, TA_ERA5, TS_ERA5) %>%
   rename(
     NEE = FC,
     CH4_flux = FCH4,
@@ -451,7 +452,8 @@ env_flux_daily_notGF <- df_avg %>%
     Soil_moisture = SWC_3_1_1,
     Air_temp = TA,
     Wind_speed = WS,
-    Wind_Direction = WD,
+    #Wind_Direction = WD, #this is just WD degrees avg'd, which is not a true rep of avg daily wind dir 
+    WindDir_Modal = WD_modal,
     Air_temp_ERA5 = TA_ERA5,
     Soil_temp_ERA5 = TS_ERA5
   )
@@ -710,9 +712,15 @@ cor_long$sigBH  <- cut(cor_long$p_adjBH,
                        breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
                        labels = c("***", "**", "*", ""))
 
-cor_long$sigBon <- cut(cor_long$p_adjBon,
-                       breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
-                       labels = c("***", "**", "*", ""))
+# cor_long$sigBon <- cut(cor_long$p_adjBon,
+#                        breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
+#                        labels = c("***", "**", "*", ""))
+
+# different way to add significance indicators - removes NAs by 1:1 corr 
+cor_long$sigBon <- ""
+cor_long$sigBon[cor_long$p_adjBon < 0.05] <- "*"    # p < 0.05
+cor_long$sigBon[cor_long$p_adjBon< 0.01] <- "**"   # p < 0.01
+cor_long$sigBon[cor_long$p_adjBon < 0.001] <- "***" # p < 0.001
 
 # Now cor_long has columns:
 #   Correlation   – the Spearman ρ
@@ -744,6 +752,61 @@ ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
     fill = "Spearman ρ"
   )
 
+
+#Adjusting tiles text color based on corr strength 
+
+#Benjamini-Hochberg  correction 
+ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile() +
+  # Add correlation values for EITHER strong correlations OR significant ones
+  geom_text(data = subset(cor_long, abs(Correlation) > 0.3 | p_adjBH < 0.05), #the | represents "OR" so this displays correlations above 0.3 OR significant correlations; also use "abs" to use absolute value of the corr so it's printed whether it's positive or negative*  
+            aes(label = paste0(sprintf("%.2f", Correlation), sigBH),
+                color = abs(Correlation) < 0.5), # Changes text color based on correlation strength
+            size = 4.5,
+            fontface = "bold") + #to make numbers in tiles bold
+  scale_fill_gradient2(low = "red", 
+                      mid = "white", 
+                      high = "blue", 
+                      midpoint = 0,
+                      limits = c(-1, 1),
+                      breaks = c(-1, -0.5, 0, 0.5, 1)) +
+    scale_color_manual(values = c("white", "black"), guide = "none") +  # For text visibility
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(size = 12, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +                 
+  labs(title = "Correlation Matrix of C Fluxes and Environmental Variables",
+       fill = "Spearman's \nCorrelation \n(ρ)")
+
+
+#Bonferroni correction 
+
+#Display corr text on tiles if it's >0.3 OR if it has a sig p 
+ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile() +
+  # Add correlation values for EITHER strong correlations OR significant ones
+  geom_text(data = subset(cor_long, abs(Correlation) > 0.3 | p_adjBon < 0.05), #the | represents "OR" so this displays correlations above 0.3 OR significant correlations; also use "abs" to use absolute value of the corr so it's printed whether it's positive or negative*  
+            aes(label = paste0(sprintf("%.2f", Correlation), sigBon),
+                color = abs(Correlation) < 0.5), # Changes text color based on correlation strength
+            size = 4.5,
+            fontface = "bold") + #to make numbers in tiles bold
+  scale_fill_gradient2(low = "red", 
+                      mid = "white", 
+                      high = "blue", 
+                      midpoint = 0,
+                      limits = c(-1, 1),
+                      breaks = c(-1, -0.5, 0, 0.5, 1)) +
+    scale_color_manual(values = c("white", "black"), guide = "none") +  # For text visibility
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text = element_text(size = 12, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +                 
+  labs(title = "Correlation Matrix of C Fluxes and Environmental Variables",
+       fill = "Spearman's \nCorrelation \n(ρ)")
+
+ #saves the figure directly above 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/flux_Spearmancorrelation_matrix_allyearsBONadj_notGF.png",
+       width = 11, height = 8, dpi = 600)
 
 ```
 
