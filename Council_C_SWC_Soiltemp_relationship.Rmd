@@ -288,12 +288,12 @@ compare_model_types <- function(flux_var, temp_var, df) {
 # Compare model types for FC_night
 model_comparison_FC_night <- compare_model_types("FC_night", "TS_3_1_1", df_avg)
 print(model_comparison_FC_night)
-#exponential is best when including winter seasons 
+#exponential is best when including winter seasons; R2 = 0.5178
 
 # Compare model types for FCH4
 model_comparison_FCH4 <- compare_model_types("FCH4", "TS_3_1_1", df_avg)
 print(model_comparison_FCH4)
-#suggests quadratic is best when including winter season 
+#suggests quadratic is best when including winter season; R2 = 0.1575 
 ```
 
 
@@ -306,14 +306,27 @@ print(model_comparison_FCH4)
 # Compare model types for FC_night
 model_comparison_FC_night <- compare_model_types("FC_night", "TS_3_1_1", df_avg_nowinter)
 print(model_comparison_FC_night)
-#suggests exponential is best when not including winter season 
+#suggests exponential is best when not including winter season, R2 = 0.394 
 
 # Compare model types for FCH4
 model_comparison_FCH4 <- compare_model_types("FCH4", "TS_3_1_1", df_avg_nowinter)
 print(model_comparison_FCH4)
-#suggests exponential is best when not including winter season 
+#suggests exponential is best when not including winter season; R2 = 0.127 
+
+
 
 ```
+
+#Comparing different models - FCH4 and only winter 
+```{r}
+#model with only winter 
+
+# Compare model types for FCH4
+model_comparison_FCH4_winter <- compare_model_types("FCH4", "TS_3_1_1", df_avg %>% filter(season== "Winter"))
+print(model_comparison_FCH4_winter)
+#suggests quadratic is best for winter only R2=0.50
+```
+
 
 
 #Comparing different models - SWC - df_avg
@@ -358,12 +371,12 @@ compare_model_types <- function(flux_var, SWC_var, df) {
 # Compare model types for FC_night
 model_comparison_FC_night <- compare_model_types("FC_night", "SWC_3_1_1", df_avg)
 print(model_comparison_FC_night)
-#exponential is best when including winter seasons 
+#exponential is best when including winter seasons; R2 = 0.237
 
 # Compare model types for FCH4
 model_comparison_FCH4 <- compare_model_types("FCH4", "SWC_3_1_1", df_avg)
 print(model_comparison_FCH4)
-#suggests quadratic is best when including winter season 
+#suggests quadratic is best when including winter season; R2 = 0.14
 ```
 
 #Different models - comparing the best fit - no winter 
@@ -373,12 +386,12 @@ print(model_comparison_FCH4)
 # Compare model types for FC_night
 model_comparison_FC_night <- compare_model_types("FC_night", "SWC_3_1_1", df_avg_nowinter)
 print(model_comparison_FC_night)
-#suggests exponential is best when not including winter season 
+#suggests exponential is best when not including winter season; R2 = 0.093
 
 # Compare model types for FCH4
 model_comparison_FCH4 <- compare_model_types("FCH4", "SWC_3_1_1", df_avg_nowinter)
 print(model_comparison_FCH4)
-#suggests exponential is best when not including winter season 
+#suggests exponential is best when not including winter season; R2 = 0.126
 
 ```
 
@@ -1251,6 +1264,18 @@ ggplot(df_avg, aes(x = TS_3_1_1, y = FCH4 * (1/1000), color = SWC_3_1_1)) +
   labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
        title = "Relationship between Soil Temperature and CH4 Flux by SWC")
 
+
+# FCH4 scatter plot with coloring by SWC, facetwrapped by season 
+ggplot(df_avg %>% drop_na(FCH4, TS_3_1_1, SWC_3_1_1, season), aes(x = TS_3_1_1, y = FCH4 * (1/1000), color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  facet_wrap(~season)+
+  geom_smooth(method = "auto", se = FALSE) +
+  geom_vline(xintercept=0)+
+  geom_hline(yintercept=0)+
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature, SWC, and CH4 Flux by Season")
+
 # FC_night scatter plot with coloring by SWC - all seasons 
 ggplot(df_avg, aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
   geom_point(alpha = 0.7) +
@@ -1268,6 +1293,7 @@ ggplot(df_avg_nowinter, aes(x = TS_3_1_1, y = FCH4 * (1/1000), color = SWC_3_1_1
   labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
        title = "Relationship between Soil Temperature and CH4 Flux by SWC - NW")
 
+
 # FC_night scatter plot with coloring by SWC - no winter
 ggplot(df_avg_nowinter, aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
   geom_point(alpha = 0.7) +
@@ -1277,6 +1303,24 @@ ggplot(df_avg_nowinter, aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
        title = "Relationship between Soil Temperature and FC_night Flux by SWC - NW")
 
 
+```
+```{r}
+# FCH4 scatter plot with coloring by SWC - no winter 
+ggplot(df_avg, aes(x = date, y = FCH4 * (1/1000), color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC - NW")
+
+# FCH4 scatter plot with coloring by SWC - no winter 
+ggplot(df_avg, aes(x = DOY, y = FCH4 * (1/1000), color = SWC_3_1_1)) +
+  geom_point(alpha = 0.7) +
+  facet_wrap(~year)+
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC - NW")
 ```
 
 
@@ -1293,15 +1337,87 @@ ggplot(df_avg %>%
   labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
        title = "Relationship between Soil Temperature and CH4 Flux by SWC")
 
+ggplot(df_avg %>%
+         drop_na(TS_3_1_1, FCH4, SWC_3_1_1) %>%
+         filter(year == "2019"), aes(x = DOY, y = FCH4, color = TS_3_1_1)) +
+  geom_point(aes(x=DOY, y =TS_3_1_1))+
+  geom_point(alpha = 0.7) +
+  scale_color_viridis_c()+
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "CH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature and CH4 Flux by SWC")
+
 # FC_night scatter plot with coloring by SWC - all seasons 
 ggplot(df_avg %>%
          filter(year == "2019"), aes(x = TS_3_1_1, y = FC_night, color = SWC_3_1_1)) +
+  
   geom_point(alpha = 0.7) +
   geom_smooth(method = "auto", se = TRUE) +
   theme_bw() +
   labs(x = "Soil Temperature (°C)", y = "FC_night Flux (μmol/m²/s)", 
        title = "Relationship between Soil Temperature and FC_night Flux by SWC")
+
+
+
 ```
+#checking out temp <0 fluxes
+```{r}
+
+# FCH4 fluxes when temp <0; 2019 only 
+ggplot(df_avg %>%
+         filter(year == "2019")
+       %>% filter(TS_3_1_1 < 0), aes(x = DOY, y = TS_3_1_1, color = SWC_3_1_1)) +
+  
+  geom_point(alpha = 0.7) +
+ # geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "DOY", y = "Soil temp (C)", 
+       title = "Relationship between Soil Temperature<0 and FCH4 Flux by SWC")
+
+
+
+# FCH4 fluxes when temp <0; 2019 only; DOY < 150
+ggplot(df_avg %>%
+         filter(year == "2019")
+       %>% filter(DOY < 150) 
+       %>% filter(TS_3_1_1 < 0), aes(x = DOY, y = TS_3_1_1, color = SWC_3_1_1)) +
+  
+  geom_point(alpha = 0.7) +
+ # geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "DOY", y = "Soil temp (C)", 
+       title = "Daily Avg - Soil Temperature <0 (color = SWC) ")
+
+
+# HH data - FCH4 fluxes when temp <0; 2019 only; DOY < 150
+ggplot(df %>%
+         filter(year == "2019")
+       %>% filter(DOY < 150) 
+       %>% filter(TS_3_1_1 < 0), aes(x = DOY, y = TS_3_1_1, color = SWC_3_1_1)) +
+  
+  geom_point(alpha = 0.7) +
+ # geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "DOY", y = "Soil temp (C)", 
+       title = "HH - Soil Temperature <0 (color = SWC)")
+
+
+
+# FCH4 fluxes when temp <0; 2019 only 
+ggplot(df_avg %>%
+         filter(year == "2019")
+       %>% filter(TS_3_1_1 < 0), aes(x = TS_3_1_1 , y = FCH4, color = SWC_3_1_1)) +
+  
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "auto", se = TRUE) +
+  theme_bw() +
+  labs(x = "Soil Temperature (°C)", y = "FCH4 Flux (μmol/m²/s)", 
+       title = "Relationship between Soil Temperature <0 and FCH4 Flux by SWC")
+```
+
+
+
 #all years 
 
 ```{r}
@@ -1477,11 +1593,11 @@ ggplot() +
 # Quadratic model with SWC
 quad_swc_model_ch4 <- lm(FCH4 ~ TS_3_1_1 + I(TS_3_1_1^2) + SWC_3_1_1, data = df_avg)
 
+
 # Interactive model (including interactions between temperature terms and SWC)
 interactive_model_ch4 <- lm(FCH4 ~ TS_3_1_1 + I(TS_3_1_1^2) + SWC_3_1_1 + 
                          TS_3_1_1:SWC_3_1_1 + I(TS_3_1_1^2):SWC_3_1_1, 
                          data = df_avg)
-
 # Compare models
 anova(quad_model_ch4, quad_swc_model_ch4, interactive_model_ch4)
 
@@ -1490,8 +1606,8 @@ BIC(quad_model_ch4, quad_swc_model_ch4, interactive_model_ch4)#interactive has l
 
 
 # Check model summaries
-summary(quad_swc_model_ch4)
-summary(interactive_model_ch4)
+summary(quad_swc_model_ch4)#R2 = 0.22
+summary(interactive_model_ch4)#R2 = 0.32
 ```
 #Visualize the interactive model 
 ```{r}
@@ -1524,16 +1640,6 @@ ggplot() +
        x = "Soil Temperature (°C)",
        y = "CH4 Flux (nmol/m²/s)")
 ```
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1733,7 +1839,7 @@ if (length(sign_changes) > 0) {
 #Results: [1] "SWC effect changes sign at temperature: -2.56512106930451"
 #means that at temp below -2, inc soil moisture would dec methane flux....but wouldn't it be frozen then anyhow? maybe it's trapping methane gas?
 ```
-#Visualize 
+#Visualize - help from Claude 
 ```{r}
 # 1. Create a clearer visualization of temperature thresholds at different SWC levels
 ggplot(data = swc_temp_thresholds, aes(x = SWC_value, y = Temperature_threshold)) +
@@ -1826,15 +1932,15 @@ ggplot(swc_profiles, aes(x = TS_3_1_1, y = FCH4_pred, color = SWC_level)) +
   geom_line(size = 1.5) +
   # Add vertical lines at threshold temperatures
   geom_vline(xintercept = thresholds_for_plot, linetype = "dashed",
-            color = c("blue", "purple", "red")) +
+            color = c("darkgreen", "blue", "red")) +
   # Add text labels for thresholds
   annotate("text", 
           x = thresholds_for_plot, 
           y = rep(max(swc_profiles$FCH4_pred) * 0.9, 3),
           label = paste("Threshold =", round(thresholds_for_plot, 1), "°C"),
-          color = c("blue", "purple", "red"),
+          color = c("darkgreen", "blue", "red"),
           hjust = c(1, 0.5, 0)) +
-  theme_bw() +
+    theme_bw() +
   labs(title = "Methane Flux Response to Temperature at Different Moisture Levels",
        subtitle = "Dashed lines show threshold temperatures where response changes direction",
        x = "Soil Temperature (°C)",
@@ -2004,13 +2110,13 @@ ggplot() +
        fill = "Temperature Effect")
 ```
 
-#Binned Temp 
+#Binned Temp - coding help from Claude
 ```{r}
 # Create temperature bins as requested
-temp_bins <- c(-10, -3, 0, 4, 11, 18)
-temp_labels <- c("Below Freezing (-10 to -3°C)",
-                "Around Freezing (-3 to 0°C)",
-                "Just Above Freezing (0 to 4°C)",
+temp_bins <- c(-10, -1, 1, 4, 11, 18)
+temp_labels <- c("Below Freezing (-10 to -1°C)",
+                "Around Freezing (-1 to 1°C)",
+                "Cold (1 to 4°C)",
                 "Cool (4 to 11°C)",
                 "Warm (11 to 18°C)")
 
@@ -2142,7 +2248,7 @@ bin_summary <- data.frame(
 ggplot(bin_summary, aes(x = Temp_bin, y = SWC_bin, fill = mean_FCH4)) +
   geom_tile() +
   geom_text(aes(label = paste0(round(mean_FCH4, 1), "\n(n=", n, ")")), 
-           color = "white", size = 3) +
+           color = "cyan", size = 3) +
   scale_fill_viridis_c(option = "plasma", name = "Mean CH4 Flux\n(nmol/m²/s)") +
   theme_bw(base_size = 12) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -2200,6 +2306,11 @@ ggplot(bin_combinations, aes(x = Temp_bin, y = FCH4_pred, group = SWC_bin, color
        color = "Soil Moisture Range")
 ```
 
+```{r}
+ggplot(df_avg %>% filter(season == "Winter"), aes(x=TS_3_1_1, y = FCH4, color = SWC_3_1_1))+
+  geom_point()+
+  geom_smooth(method = "auto", se = TRUE)
+```
 
 
 
