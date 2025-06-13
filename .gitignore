@@ -3,7 +3,7 @@
 *.txt
 *.png
 *.pptx
-
+*.tif
 
 # History files
 .Rhistory

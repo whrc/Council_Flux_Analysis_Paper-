@@ -1,0 +1,143 @@
+---
+title: "footprint models"
+output: html_document
+date: "2024-03-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,dev = 'svg')
+```
+
+This file is for making and comparing flux tower footprints for the YKD towers from moving measurement height from 2.5 to 3 meters in September of 2021
+
+```{r}
+library(FREddyPro)
+library(data.table)
+library(ggplot2)
+library(ggmap)
+library(cowplot)
+library(sp)
+library(terra)
+library(mapproj)
+library(raster)
+library(ggspatial)
+library(RStoolbox)
+library(ggnewscale)
+
+Sys.setenv(TZ = 'UTC')
+```
+
+Load Data
+```{r}
+#load in imagery
+image = rast(x = './seward_regional_vegetation_community_level1.tif')
+image = crop(x = image,y = c(-465000,-455000,1685000,1695000))
+
+#load in flux data
+df    = fread(file = './AMF_US-NGC_BASE_HH_2-5.csv',na.strings = c('-9999'))
+df$ts = as.POSIXct(as.character(df$TIMESTAMP_END),format = '%Y%m%d%H%M')
+
+ggplot(data = df)+
+  geom_point(aes(ts,FC))
+
+plot(image)
+```
+
+create tower spatial points
+```{r}
+latlon = CRS('+init=epsg:4326 +proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0')
+st     = crs(image)
+
+#make data frame of tower coordinates
+tower.cor = data.frame(x = -163.700379,y = 64.861761,site = "Council_Tower")
+
+#make it as a spatial file
+spatial.tower = SpatialPointsDataFrame(coords = tower.cor[,c(1,2)],data = tower.cor,proj4string = latlon) 
+
+#transform to match imagery
+spatial.tower = spTransform(x = spatial.tower,CRSobj = st)
+```
+
+Crop imagery to extent and plot tower to check
+```{r}
+xmin = spatial.tower@coords[1]-500
+xmax = spatial.tower@coords[1]+500
+
+ymin = spatial.tower@coords[2]-500
+ymax = spatial.tower@coords[2]+500
+
+plot(image);points(spatial.tower,col='red')
+tower.area = crop(x = image,y = c(xmin,xmax,ymin,ymax))
+
+plot(tower.area);points(spatial.tower,col='red',pch=16)
+```
+
+
+Create an average footprint
+```{r}
+#take a subset for average footprint to save computation time, 1-2 years is enough for a general sense of an annual footprint
+sub = subset(x = df,df$ts >= as.POSIXct("2019-01-01") & df$ts <= as.POSIXct("2019-12-31"))
+
+#could take a subset of data for the average to cut computation time
+fp = Average(#fetch = 250,         #can add a custom fetch or leave blank
+             height = 2.8,         #height of tower
+             grid = 100,           #size of grid cells in footprint (resolution)
+             speed = sub$WS,        #wind speed
+             direction = sub$WD,    #wind direction
+             uStar = sub$USTAR,     #ustar
+             zol = sub$ZL,          #monin okubov length
+             sigmaV = sub$V_SIGMA)  #standard deviation of V wind direction
+
+#calculate set percentage of footprint
+percent.fp = calculatePercentFootprint(ftp = fp,percent = 80)
+
+#create dataframes of footprint points
+fpdf       = exportFootprintPoints(ftp = fp,xcoord = spatial.tower@coords[1],ycoord = spatial.tower@coords[2])
+percent.df = exportFootprintPoints(ftp = percent.fp,xcoord = spatial.tower@coords[1],ycoord = spatial.tower@coords[2])
+
+ggplot(data = fpdf)+
+  geom_raster(aes(x,y,fill = z*100))+
+  scale_fill_viridis_c()+
+  theme(legend.position = "none")
+
+ggplot(data = percent.df)+
+  geom_raster(aes(x,y,fill = z),interpolate = T)+
+  scale_fill_viridis_c(na.value = "transparent",direction = -1)+
+  theme(legend.position = "bottom")
+```
+
+transform the coordinates to raster files
+```{r}
+r = rasterFromXYZ(xyz = percent.df,crs = st)
+r2 = projectRaster(from = r,crs = st)
+df2 = as.data.frame(r2,xy=T)
+```
+
+
+
+get satellite imagery for plotting using ggmap
+```{r}
+register_google(key = "") #note, I removed my API key so others cannot download imagery with my account, BE SURE TO DO SO BEFORE PUSHING!!
+council = get_map(location = tower.cor[,c(1,2)],zoom = 16,maptype = 'satellite')
+
+rll = projectRaster(from = r,crs = latlon)
+
+ggmap(council)+
+  layer_spatial(rll)+
+  scale_fill_viridis_c(na.value = 'transparent')
+
+ggplot()+
+  layer_spatial(tower.area)+
+  new_scale_fill()+
+  geom_raster(data = percent.df,aes(x,y,fill=z))+
+  scale_fill_viridis_c(na.value = 'transparent')
+
+ggplot()+
+  layer_spatial(tower.area)+
+  new_scale_fill()+
+  geom_contour(data = percent.df,aes(x,y,z=z,col=after_stat(level)),binwidth=10)+
+  scale_color_viridis_c(na.value = 'transparent')
+```
+
+
+
