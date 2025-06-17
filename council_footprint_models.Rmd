@@ -1,5 +1,5 @@
 ---
-title: "footprint models"
+title: "footprint models" #notes from meeting with Kyle 6/13/2025
 output: html_document
 date: "2024-03-14"
 ---
