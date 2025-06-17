@@ -1,7 +1,7 @@
 ---
 title: "footprint models" #notes from meeting with Kyle 6/13/2025
 output: html_document
-date: "2024-03-14"
+date: "2025-06-13"
 ---
 
 ```{r setup, include=FALSE}
@@ -79,9 +79,9 @@ Create an average footprint
 sub = subset(x = df,df$ts >= as.POSIXct("2019-01-01") & df$ts <= as.POSIXct("2019-12-31"))
 
 #could take a subset of data for the average to cut computation time
-fp = Average(#fetch = 250,         #can add a custom fetch or leave blank
+fp = Average(#fetch = 280,         #can add a custom fetch or leave blank
              height = 2.8,         #height of tower
-             grid = 100,           #size of grid cells in footprint (resolution)
+             grid = 200,           #size of grid cells in footprint (resolution)
              speed = sub$WS,        #wind speed
              direction = sub$WD,    #wind direction
              uStar = sub$USTAR,     #ustar
@@ -114,17 +114,16 @@ df2 = as.data.frame(r2,xy=T)
 ```
 
 
-
 get satellite imagery for plotting using ggmap
 ```{r}
 register_google(key = "") #note, I removed my API key so others cannot download imagery with my account, BE SURE TO DO SO BEFORE PUSHING!!
-council = get_map(location = tower.cor[,c(1,2)],zoom = 16,maptype = 'satellite')
+council = get_map(location = tower.cor[,c(1,2)],zoom = 15,maptype = 'satellite')
 
 rll = projectRaster(from = r,crs = latlon)
 
 ggmap(council)+
   layer_spatial(rll)+
-  scale_fill_viridis_c(na.value = 'transparent')
+  scale_fill_viridis_c(na.value = 'transparent',alpha=0.5)
 
 ggplot()+
   layer_spatial(tower.area)+
@@ -139,5 +138,15 @@ ggplot()+
   scale_color_viridis_c(na.value = 'transparent')
 ```
 
+```{r}
+r.image = projectRaster(from = r,to = tower.area)
+r.image = rast(r.image)
+
+stacked = c(r.image,tower.area)
+
+final.df = as.data.frame(stacked,xy=T)
+ggplot(data = final.df)+
+  geom_bar(aes(combined_prediction_maps_0938_1538_2039_3458_5932_reproj_recoded_5classes,z))
+```
 
 
