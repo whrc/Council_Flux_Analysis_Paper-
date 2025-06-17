@@ -1,0 +1,157 @@
+---
+title: "Korean Tower Comparison" #File sent from Sangjong personally, has daily avg flyx data from June 5, 2017 - Sept 9, 2017
+output: html_document
+date: "2025-06-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+
+```{r}
+#using the ".2" version to reflect the updated SWC used in RF 
+
+#daily avg 
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#extract matching dates:
+
+#map out the timestamp of the daily avg dataset
+df_avg$date <- as.POSIXct(df_avg$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
+
+df_avg_2017 <- df_avg %>% filter(year == "2017") 
+
+
+df_avg_JunetoSept_2017 <- df_avg_2017 %>% filter(date > as.POSIXct('2017-06-04', tz="UTC"))
+df_avg_JunetoSept_2017 <- df_avg_JunetoSept_2017  %>% filter(date < as.POSIXct('2017-09-14', tz="UTC"))
+
+# Save to Excel
+library(writexl)
+write_xlsx(df_avg_2017, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/df_avg_2017.xlsx")
+
+
+#bind to korean tower data 
+
+#emailed by Sangjong - units in g/m2/day 
+korean_tower <- read_xlsx(path = "C:/Users/kkent/Documents/Github Flux Network/Korean_tower_COUNCIL_2017_ec_L2_day_MAD.xlsx", sheet = "R_template" )
+
+
+#map out the timestamp of the daily avg dataset
+korean_tower$date <- as.POSIXct(korean_tower$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
+
+```
+
+```{r}
+#Merge the two df by matching on plot_ID, measurement date, and landscape position
+df_combined <- df_avg_JunetoSept_2017  %>%
+  left_join(korean_tower %>% select(date, NEE_uStar_f),
+            by = c("date"))
+
+
+df_combined$NEE <- df_combined$FC_F*60*60*24*(1/1000000)*12
+
+```
+
+
+```{r}
+ggplot(data = df_combined, aes(x = date))+
+        geom_point(aes(y = NEE_uStar_f, color = "Korean Tower NEE"))+
+         geom_point(aes(y = NEE, color = "Ameriflux NEE")) +
+           scale_y_continuous(
+    name = expression('CO'[2]*' Flux (g C'~m^-2~d^-1*')'))+
+        
+      labs(title = "Korean Tower vs Ameriflux NEE g/m2/day June 5 - Sept 9 2017", x = "Date") +
+  
+     theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+  theme_bw()
+      
+```
+#calc monthly budgets 
+```{r}
+
+# Extract the month to create a grouping column
+df_combined$month <- format(df_combined$date, "%m")
+
+# Calculate the sum of carbon emissions (g C/m²/month) for each month - this is not working now...
+monthly_CO2sum_2017_AMF <- aggregate(NEE ~ month, data = df_combined, sum, na.rm = TRUE)
+monthly_CO2sum_2017_K <- aggregate(NEE_uStar_f ~ month, data = df_combined, sum, na.rm = TRUE)
+
+
+monthly_CO2sum_2017_AMF
+monthly_CO2sum_2017_K 
+
+monthly_combined <- monthly_CO2sum_2017_AMF %>%
+ left_join(monthly_CO2sum_2017_K  %>% select(month, NEE_uStar_f),
+            by = c("month"))
+
+
+# Reshape the data to a long format
+monthly_combined_long <- monthly_combined %>%
+  pivot_longer(cols = c(NEE, NEE_uStar_f), 
+               names_to = "Flux_Type", 
+               values_to = "Flux_Sum")
+
+# Create the bar graph with a scaled FCH4_F_N_no_NAs
+monthly_combined_barplot<- ggplot(monthly_combined_long, aes(x = factor(month), y = Flux_Sum, fill = Flux_Type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(
+    values = c("NEE" = "turquoise", "NEE_uStar_f" = "salmon"),
+    labels = c("NEE" = "NEE_AMF",
+               "NEE_uStar_f" = "NEE_Korean_Tower"))+
+    # Primary y-axis for CO2 and scaled methane on the secondary axis
+  scale_y_continuous(
+    #name = "CO2 Flux (g C/m²/month)", 
+    name = expression(CO[2]~Flux~(gC~m^-2~month^-1)))+
+       #y = expression(CH[4]~Flux~(nmolCH[4]~m^-2~y^-1)),
+  labs(x = "Month", y = "NEE (g/m²/month)", 
+       title = "Korean Tower vs AMF tower NEE Budget for 2017",
+       #title = "Monthly CO2 and CH4 Flux Sums for 2019",
+       fill = "C flux") +
+  theme_bw() +
+  theme(
+        axis.text = element_text(size = 10, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+monthly_combined_barplot
+
+monthly_CO2sum_2017_AMF
+monthly_CO2sum_2017_K 
+   
+
+```
+#Cumulative budgets by month
+
+```{r}
+
+```
+
