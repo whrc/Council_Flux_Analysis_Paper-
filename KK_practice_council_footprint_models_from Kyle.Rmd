@@ -1,0 +1,156 @@
+---
+title: "footprint models" #notes from meeting with Kyle 6/13/2025 -- need to load the cran package from kyle ** 
+output: html_document
+date: "2024-03-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,dev = 'svg')
+```
+
+This file is for making and comparing flux tower footprints for the YKD towers from moving measurement height from 2.5 to 3 meters in September of 2021
+
+```{r}
+library(FREddyPro)
+library(data.table)
+library(ggplot2)
+library(ggmap)
+library(cowplot)
+library(sp)
+library(terra)
+library(mapproj)
+library(raster)
+library(ggspatial)
+library(RStoolbox)
+library(ggnewscale)
+
+Sys.setenv(TZ = 'UTC')
+```
+
+Load Data
+```{r}
+#load in imagery
+image = rast(x = './seward_regional_vegetation_community_level1.tif')
+image = crop(x = image,y = c(-465000,-455000,1685000,1695000))
+
+#load in flux data
+df    = fread(file = './AMF_US-NGC_BASE_HH_2-5.csv',na.strings = c('-9999')) #used base data but can use the fixed up data 
+df$ts = as.POSIXct(as.character(df$TIMESTAMP_END),format = '%Y%m%d%H%M')
+
+ggplot(data = df)+
+  geom_point(aes(ts,FC))
+
+plot(image)
+```
+
+create tower spatial points
+```{r}
+#basic coord system for lat/long so it uses reg tower coords so it lines up with UTM & pulls coords of veg map - coord sys in meters
+
+latlon = CRS('+init=epsg:4326 +proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0') 
+st     = crs(image)
+
+#make data frame of tower coordinates
+tower.cor = data.frame(x = -163.700379,y = 64.861761,site = "Council_Tower")
+
+#make it as a spatial file
+spatial.tower = SpatialPointsDataFrame(coords = tower.cor[,c(1,2)],data = tower.cor,proj4string = latlon) 
+
+#transform to match imagery
+spatial.tower = spTransform(x = spatial.tower,CRSobj = st)
+```
+
+Crop imagery to extent and plot tower to check
+```{r}
+#500m buffer around the tower 
+xmin = spatial.tower@coords[1]-500
+xmax = spatial.tower@coords[1]+500
+
+ymin = spatial.tower@coords[2]-500
+ymax = spatial.tower@coords[2]+500
+
+plot(image);points(spatial.tower,col='red')
+tower.area = crop(x = image,y = c(xmin,xmax,ymin,ymax))
+
+plot(tower.area);points(spatial.tower,col='red',pch=16)
+```
+
+
+Create an average footprint
+```{r}
+#take a subset for average footprint to save computation time, 1-2 years is enough for a general sense of an annual footprint
+sub = subset(x = df,df$ts >= as.POSIXct("2019-01-01") & df$ts <= as.POSIXct("2019-12-31"))  #choose 2019 to make it run better, can take a long time if running multiple yrs 
+
+#could take a subset of data for the average to cut computation time
+fp = Average(#fetch = 250,         #can add a custom fetch or leave blank  - takes avg of entire dataset, can take footprint to hour or an avg you determine 
+             height = 2.8,         #height of tower
+             grid = 100,           #size of grid cells in footprint (resolution) (100 x 100)
+             speed = sub$WS,        #wind speed
+             direction = sub$WD,    #wind direction
+             uStar = sub$USTAR,     #ustar
+             zol = sub$ZL,          #monin okubov length  (air upward movement with temp )
+             sigmaV = sub$V_SIGMA)  #standard deviation of V wind direction
+
+#see materials on diff models kyle sent - flat sfc without big landscape differences used here but there are other model types 
+
+#calculate set percentage of footprint
+percent.fp = calculatePercentFootprint(ftp = fp,percent = 80)  #these codes are in freddypro package i need to download before running this code ** 
+
+#prob flux came from any spot in that grid - meters - fig below shows where most fluxes come from, mot within the 280 m range around the tower 
+
+#create dataframes of footprint points - export from list to x and y points (matrices of exact locations and probability values)  -- the x and y are the conical coords the veg map is in to allow for plotting over the veg map 
+fpdf       = exportFootprintPoints(ftp = fp,xcoord = spatial.tower@coords[1],ycoord = spatial.tower@coords[2])
+percent.df = exportFootprintPoints(ftp = percent.fp,xcoord = spatial.tower@coords[1],ycoord = spatial.tower@coords[2])
+
+ggplot(data = fpdf)+
+  geom_raster(aes(x,y,fill = z*100))+
+  scale_fill_viridis_c()+
+  theme(legend.position = "none")
+
+ggplot(data = percent.df)+
+  geom_raster(aes(x,y,fill = z),interpolate = T)+
+  scale_fill_viridis_c(na.value = "transparent",direction = -1)+
+  theme(legend.position = "bottom")
+```
+
+transform the coordinates to raster files
+```{r}
+r = rasterFromXYZ(xyz = percent.df,crs = st)
+r2 = projectRaster(from = r,crs = st)
+df2 = as.data.frame(r2,xy=T)
+```
+
+
+
+get satellite imagery for plotting using ggmap
+```{r}
+#ggmpa can pull sat imagery 
+-#go to google cloud, edit API key, can pull google sources remotely (but remove this from the R code you post to git***) - use gitmap to pull sat imagery 
+register_google(key = "") #note, I removed my API key so others cannot download imagery with my account, BE SURE TO DO SO BEFORE PUSHING!!
+council = get_map(location = tower.cor[,c(1,2)],zoom = 16,maptype = 'satellite')
+
+rll = projectRaster(from = r,crs = latlon) #change % to lat/long so you can see the majority of the footprint over sat imagery
+
+ggmap(council)+
+  layer_spatial(rll)+
+  scale_fill_viridis_c(na.value = 'transparent')
+
+ggplot()+
+  layer_spatial(tower.area)+
+  new_scale_fill()+
+  geom_raster(data = percent.df,aes(x,y,fill=z))+
+  scale_fill_viridis_c(na.value = 'transparent')
+
+ggplot()+
+  layer_spatial(tower.area)+
+  new_scale_fill()+
+  geom_contour(data = percent.df,aes(x,y,z=z,col=after_stat(level)),binwidth=10)+
+  scale_color_viridis_c(na.value = 'transparent')
+```
+
+#TO DO: need Avris veg class codes to be able to determine the colors on the veg maps from Council -- look up** 
+#in following code, kyle stacked sat image of council and tower footprint images, trying to stack veg map and tower footprint 
+#need google API key to be able to pull sat images to plot over ** check this out at google cloud - google api key * 
+
+#try running for avg footprint to show as a fig (if using for actual analysis may need finer scale, but prob not necessary for this paper*) --> maybe break it up by season within a yr just to look, see if there's anything interesting esp since spikes CH4 when wind comes from S during some seasons but not others 
+
