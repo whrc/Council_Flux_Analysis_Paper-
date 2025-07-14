@@ -38,7 +38,7 @@ Sys.setenv(TZ='UTC')
 
 
 ```{r}
-#changed to "council_gapfilled_clean_2017_2023_for analysis.2.csv" --> .2 indicates updated dataset with SWC_3 tussock 
+#changed to "council_gapfilled_clean_2017_2023_for analysis.2.csv" --> .2 indicates updated dataset with SWC_3 tussock; ".3" indicates columns for ERA5.mod-gapfilled air and soil temp  
 
 #half-hourly dataframe --> gapfilled 
 df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
@@ -47,141 +47,488 @@ df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/counci
 #daily avg dataframe --> gapfilled 
 df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-#names(df_avg)
-#str(df_avg)
 
-#make sure timestamp is correct and in POSIXct (it should be)
-summary(df_avg$date)
+#with gapfilled soil and air temp columns 
 
-#make sure date is in POSIXct --> should return "POSIXct"
-class(df$date)
-class(df_avg$date) #these were in class "date", not POSIXct
-
-#formatting into POSIXct
-df$date <- as.POSIXct(df$date, format = "%Y-%m-%d", tz = "UTC")
-df_avg$date <- as.POSIXct(df_avg$date, format = "%Y-%m-%d", tz = "UTC")
+#half-hourly dataframe --> gapfilled 
+df2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.3.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 
-df$TIMESTAMP = df$TIMESTAMP_END
-df_avg$TIMESTAMP = df_avg$TIMESTAMP_END
+#daily avg dataframe --> gapfilled 
+df_avg2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.3.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+# #make sure timestamp is correct and in POSIXct (it should be already)
+# summary(df_avg$date)
+# 
+# #make sure date is in POSIXct --> should return "POSIXct"
+# class(df$date)
+# class(df_avg$date) #these were in class "date", not POSIXct
+# 
+# #formatting into POSIXct
+# df$date <- as.POSIXct(df$date, format = "%Y-%m-%d", tz = "UTC")
+# df_avg$date <- as.POSIXct(df_avg$date, format = "%Y-%m-%d", tz = "UTC")
+# 
+# 
+# df$TIMESTAMP = df$TIMESTAMP_END
+# df_avg$TIMESTAMP = df_avg$TIMESTAMP_END
 
 
 ```
 
 
-#Adding seasonal delineations 
-
-#### HH dataframe
+#Annual Avg air temp (based on all years, 2017 - 2022, excluding the incomplete 2023*)
 ```{r}
-# First create DOY from date
-df$DOY <- as.numeric(format(df$date, "%j"))
 
-# add year column if not already present
-df <- df %>%
-  mutate(year = format(date, "%Y"))
+library(dplyr)
+library(lubridate)
 
-
-# Create seasonal assignments using both year and DOY
-df<- df %>%
-  mutate(
-    season = case_when(
-      # 2017 seasons
-      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
-      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
-      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
-      
-      
-      # 2018 seasons
-      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
-      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
-      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
-      
-      # 2019 seasons
-      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
-      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
-      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
-      
-      # 2020 seasons
-      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
-      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
-      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
-      
-      # 2021 seasons
-      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
-      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
-      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
-      
-      # 2022 seasons
-      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
-      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
-      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
-      
-      # not doing one for 2023 ** incomplete year 
-      TRUE ~ NA_character_
+annual_temps <- df_avg %>%
+  mutate(year = year(date)) %>%      # extract the calendar year
+  filter(year >= 2017, year <= 2022) %>%  
+  group_by(year) %>%                 
+  summarise(
+    obs_airtemp    = mean(TA, na.rm = TRUE),  # observed
+    obs_airtemp_se   = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),   # annual standard deviation
+    era5_airtemp   = mean(TA_ERA5,   na.rm = TRUE),   # modeled air temp 
+    era5_airtemp_se   = sd(TA_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TA_ERA5))),
+    obs_soiltemp = mean(TS_3_1_1, na.rm = TRUE), #observed soil temp at TS3
+    obs_soiltemp_se = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+    era5_soiltemp = mean(TS_ERA5, na.rm = TRUE), #modeled soil temp 
+    era5_soiltemp_se = sd(TS_ERA5, na.rm = TRUE /sqrt(sum(!is.na(TS_ERA5))))
     )
-  )
-
-df$date <- as.POSIXct(df$date, format = "%Y-%m-%d", tz = "UTC")
-
-# Method 1: Use class()
-class(df$date)
-# Should return "POSIXct" "POSIXt"
-```
+#sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC)))
+print(annual_temps)
 
 
+#Make nicer plot with all together 
 
-####Seasons to daily avg df 
-```{r}
-# First create DOY from date
-df_avg$DOY <- as.numeric(format(df_avg$date, "%j"))
+library(dplyr)
+library(knitr)
 
-# add year column if not already present
-df_avg <- df_avg %>%
-  mutate(year = format(date, "%Y"))
-
-
-# Create seasonal assignments using both year and DOY
-df_avg <- df_avg %>%
+annual_temps_formatted <- annual_temps %>%
+  # 1) Create new character columns combining mean ± sd, rounded to 2 dp
   mutate(
-    season = case_when(
-      # 2017 seasons
-      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
-      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
-      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
-      
-      
-      # 2018 seasons
-      year == "2018" &  (DOY >= 257 & DOY <= 300) ~ 'Fall Senescence',
-      year == "2018" & (DOY >= 152 & DOY <= 256) ~ 'Growing Season',
-      year == "2018" & (DOY >= 301 | DOY <= 151) ~ 'Winter',
-      
-      # 2019 seasons
-      year == "2019" & (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
-      year == "2019" & (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
-      year == "2019" & (DOY >= 285 | DOY <= 144) ~ 'Winter',
-      
-      # 2020 seasons
-      year == "2020" & (DOY >= 252 & DOY <= 299) ~ 'Fall Senescence',
-      year == "2020" & (DOY >= 136 & DOY <= 251) ~ 'Growing Season',
-      year == "2020" & (DOY >= 300 | DOY <= 135) ~ 'Winter',
-      
-      # 2021 seasons
-      year == "2021" & (DOY >= 260 & DOY <= 283) ~ 'Fall Senescence',
-      year == "2021" &(DOY >= 142 & DOY <= 259) ~ 'Growing Season',
-      year == "2021" &(DOY >= 284 | DOY <= 141) ~ 'Winter',
-      
-      # 2022 seasons
-      year == "2022" & (DOY >= 245 & DOY <= 281) ~ 'Fall Senescence',
-      year == "2022" & (DOY >= 144 & DOY <= 244) ~ 'Growing Season',
-      year == "2022" & (DOY >= 282 | DOY <= 143) ~ 'Winter',
-      
-      # not doing one for 2023 ** incomplete year 
-      TRUE ~ NA_character_
-    )
+    Obs_TA   = sprintf("%.2f ± %.2f", obs_airtemp, obs_airtemp_se),
+    ERA5_TA  = sprintf("%.2f ± %.2f", era5_airtemp, era5_airtemp_se),
+    Obs_TS3 = sprintf("%.2f ± %.2f", obs_soiltemp, obs_airtemp_se),
+    ERA5_TS  = sprintf("%.2f ± %.2f", era5_soiltemp, era5_soiltemp_se),
+  ) %>%
+  # 2) Select only the columns you want in the final table
+  select(year, Obs_TA, ERA5_TA, Obs_TS3, ERA5_TS)
+
+# 3) Print it neatly with knitr::kable()
+annual_temps_formatted %>%
+  kable(
+    col.names = c("Year", "Obs. Air Temp (°C)", "ERA5 Air Temp (°C)", "Obs. Soil Temp at Tuss (°C)", "ERA5 Soil Temp (°C)" ),
+    caption   = "Mean Annual Air & Soil Temperature ± SE (2017–2022)"
   )
 
 
+#Big differences here in the obs temp and ERA5 temp due to large gaps in data for many years...need to try to gapfill?
 ```
+
+#Era5.mod-gapfilled Annual Avg air & soil (TS_3) temp (based on all years, 2017 - 2022, excluding the incomplete 2023*)
+```{r}
+library(dplyr)
+library(lubridate)
+
+annual_temps2 <- df_avg2 %>%
+  mutate(year = year(date)) %>%      
+  filter(year >= 2017, year <= 2022) %>%  
+  group_by(year) %>%                 
+  summarise(
+    TA_gapfilled_avg   = mean(TA_gapfilled, na.rm = TRUE),  
+   TA_gapfilled_se   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+    TS_3_gapfilled_avg = mean(TS_3_gapfilled, na.rm = TRUE), 
+    TS_3_gapfilled_se = sd(TS_3_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_gapfilled)))
+    )
+
+
+#sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC)))
+print(annual_temps2)
+
+
+#Make nicer plot with all together 
+
+library(dplyr)
+library(knitr)
+
+annual_temps_formatted2 <- annual_temps2 %>%
+  # 1) Create new character columns combining mean ± sd, rounded to 2 dp
+  mutate(
+    TA_GF   = sprintf("%.2f ± %.2f", TA_gapfilled, TA_gapfilled_se),
+    TS3_GF  = sprintf("%.2f ± %.2f", TS_3_gapfilled, TS_3_gapfilled_se)
+  ) %>%
+  # 2) Select only the columns you want in the final table
+  select(year, TA_GF, TS3_GF)
+
+# 3) Print it neatly with knitr::kable()
+annual_temps_formatted2 %>%
+  kable(
+    col.names = c("Year", "Gapfilled Air Temp (°C)", "Gapfilled Soil Temp at Tuss (°C)"), 
+    caption   = "Gapfilled Mean Annual Air & Soil Temperature ± SE (2017–2022)"
+  )
+
+
+
+
+```
+
+
+
+# % gapfilled vs observed for TS3 and TA
+
+```{r}
+# Calculate percentages for Air Temperature (TA)
+#HH - year, season 
+TA_summaryHH <- df2 %>%
+   filter( year != 2023) %>%
+  group_by(year, season) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TA_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TA_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TA_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Air_Temperature")
+
+#daily avg - year, season
+TA_summary <- df_avg2 %>%
+   filter( year != 2023) %>%
+  group_by(year, season) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TA_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TA_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TA_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Air_Temperature")
+
+
+#HH - year only 
+TA_summaryHH_annual <- df2 %>%
+   filter( year != 2023) %>%
+  group_by(year) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TA_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TA_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TA_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Air_Temperature")
+
+#daily avg - year only
+TA_summary_annual <- df_avg2 %>%
+   filter( year != 2023) %>%
+  group_by(year) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TA_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TA_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TA_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Air_Temperature")
+
+
+# Calculate percentages for Soil Temperature (TS_3_1_1)
+
+#HH - year, season 
+TS_summaryHH <- df2 %>%
+  filter( year != 2023) %>%
+  group_by(year, season) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TS_3_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TS_3_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TS_3_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Soil_Temperature")
+
+
+#daily avg - year, season 
+TS_summary <- df_avg2 %>%
+   filter( year != 2023) %>%
+  group_by(year, season ) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TS_3_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TS_3_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TS_3_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Soil_Temperature")
+
+#HH - year only 
+TS_summaryHH_annual <- df2 %>%
+  filter( year != 2023) %>%
+  group_by(year) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TS_3_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TS_3_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TS_3_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Soil_Temperature")
+
+
+#daily avg - year only 
+TS_summary_annual <- df_avg2 %>%
+   filter( year != 2023) %>%
+  group_by(year, season ) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TS_3_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TS_3_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TS_3_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Soil_Temperature")
+
+```
+
+#Table: seasonal and annual total C budget & met variable tables 
+```{r}
+# Load necessary packages
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+#Annual and seasonal summaries with SE 
+
+#no SE for CO2 and CH4 fluxes as these are sums **** then we calc averages with SE for the met variables 
+
+# Annual summaries with standard errors
+# Annual summaries with total C budget
+annual_budgets <- df_avg2 %>%
+  group_by(year = year(date)) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+    mean_TS_ERA5 = mean(TS_ERA5, na.rm = TRUE),
+    se_TS_ERA5 = sd(TS_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TS_ERA5))),
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+    mean_TA_ERA5 = mean(TA_ERA5, na.rm = TRUE),
+    se_TA_ERA5 = sd(TA_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TA_ERA5))),
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+   se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled))))
+      )
+
+# Seasonal summaries with total C budget
+seasonal_budgets <- df_avg2 %>%
+  group_by(year = year(date), season) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+    mean_TS_ERA5 = mean(TS_ERA5, na.rm = TRUE),
+    se_TS_ERA5 = sd(TS_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TS_ERA5))),
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+    mean_TA_ERA5 = mean(TA_ERA5, na.rm = TRUE),
+    se_TA_ERA5 = sd(TA_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TA_ERA5))),
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+    se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled)))),
+    days = n()
+  )
+
+print(annual_budgets)
+print(seasonal_budgets)
+```
+
+
+
+#Save table of annual and/or seasonal budgets 
+```{r}
+# Save as a nicely formatted table using kableExtra from knitr package 
+# good for a publication or report --> creates HTML table, but not as customize-able as if you were to make it in Excel 
+
+install.packages("kableExtra") 
+
+library(kableExtra)
+
+#Seasonal budgets 
+
+seasonal_budgets %>%
+  kable(digits = 2) %>%  # rounds numbers to 2 decimal places
+  kable_styling(bootstrap_options = c("striped", "hover")) %>%
+  save_kable("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_formatted.html")
+
+#Write table to Excel file:
+# First install if needed:
+install.packages("writexl")
+
+library(writexl)
+write_xlsx(seasonal_budgets, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets.xlsx")
+
+#Write table to CSV
+# base R, no additional packages needed)
+write.csv(seasonal_budgets, "seasonal_budgets.csv", row.names = FALSE)
+
+
+# Create a new table with combined mean ± SE format
+seasonal_budgets_formatted <- seasonal_budgets %>%
+  mutate(
+    soil_temp = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    soil_moisture = sprintf("%.2f ± %.2f", mean_soil_moisture, se_soil_moisture),
+    air_temp = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    TS_ERA5 = sprintf("%.2f ± %.2f", mean_TS_ERA5, se_TS_ERA5),
+    TA_ERA5 = sprintf("%.2f ± %.2f", mean_TA_ERA5, se_TA_ERA5),
+    TA_GF = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    TS3_GF = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+  ) %>%
+  select(year, season, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5, TA_GF, TS3_GF, days)
+
+# Save to Excel
+write_xlsx(seasonal_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_formatted3.xlsx")
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Annual budgets 
+# Create a new table with combined mean ± SE format
+annual_budgets_formatted <- annual_budgets %>%
+  mutate(
+    soil_temp = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    soil_moisture = sprintf("%.2f ± %.2f", mean_soil_moisture, se_soil_moisture),
+    air_temp = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    TS_ERA5 = sprintf("%.2f ± %.2f", mean_TS_ERA5, se_TS_ERA5),
+    TA_ERA5 = sprintf("%.2f ± %.2f", mean_TA_ERA5, se_TA_ERA5),
+    TA_GF = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    TS3_GF = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+  ) %>%
+  select(year, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5, TA_GF, TS3_GF)
+
+# Save to Excel
+write_xlsx(annual_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_budgets_formatted2.xlsx")
+
+```
+
+#Add % gapfilled to seasonal and annual table 
+
+```{r}
+
+# Join the season, year datasets, adding only the gapfilled_percent column
+seasonal_budgets_with_gapfill <- seasonal_budgets %>%
+  left_join(TA_summaryHH %>% select(year, season, TA_gapfill_percent = gapfilled_percent), 
+            by = c("year", "season")) %>%
+   left_join(TS_summaryHH %>% select(year, season, TS3_gapfill_percent = gapfilled_percent), 
+            by = c("year", "season"))
+
+# Check the result
+print(seasonal_budgets_with_gapfill)
+
+
+# Join the annual datasets, adding only the gapfilled_percent column
+annual_budgets_with_gapfill <- seasonal_budgets %>%
+  left_join(TA_summaryHH_annual %>% select(year, TA_gapfill_percent = gapfilled_percent), 
+            by = c("year")) %>%
+   left_join(TS_summaryHH_annual %>% select(year, TS3_gapfill_percent = gapfilled_percent), 
+            by = c("year"))
+
+# Check the result
+print(annual_budgets_with_gapfill)
+
+
+# ~~~~~~~~~~~~~Add to formatted tables ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Annual 
+# Join the annual datasets, adding only the gapfilled_percent column
+annual_budgets_formatted2 <- annual_budgets_formatted %>%
+  left_join(TA_summaryHH_annual %>% select(year, TA_gapfill_percent = gapfilled_percent), 
+            by = c("year")) %>%
+   left_join(TS_summaryHH_annual %>% select(year, TS3_gapfill_percent = gapfilled_percent), 
+             by = c("year"))
+
+# Check the result
+print(annual_budgets_formatted2)
+
+
+#Seasonal 
+
+# Join the seasonal datasets, adding only the gapfilled_percent column
+seasonal_budgets_formatted2 <- seasonal_budgets_formatted %>%
+  left_join(TA_summaryHH %>% select(year, season, TA_gapfill_percent = gapfilled_percent), 
+            by = c("year", "season")) %>%
+   left_join(TS_summaryHH %>% select(year, season, TS3_gapfill_percent = gapfilled_percent), 
+            by = c("year", "season"))
+
+# Check the result
+print(seasonal_budgets_formatted2)
+
+
+# Save to Excel
+
+#annual 
+write_xlsx(annual_budgets_formatted2, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_budgets_formatted2.xlsx")
+
+#seasonal 
+write_xlsx(seasonal_budgets_formatted2, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_formatted3.xlsx")
+
+```
+
+
+#plot annual means 
+```{r}
+
+#pivot to plot 
+annual_temps_long <- annual_temps %>%
+  pivot_longer(-year, names_to = "source", values_to = "annual_mean_temp")
+
+
+library(ggplot2)
+
+ggplot(annual_temps_long, aes(x = year, y = annual_mean_temp, color = source)) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks = 2017:2022) +
+  labs(
+    x = "Year",
+    y = expression("Mean Annual Temp ("*degree*"C)"),
+    color = "Data Source"
+  ) +
+  theme_minimal()
+
+
+```
+
 
 #Yearly summaries of key variables 
 ```{r}
