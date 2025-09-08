@@ -150,9 +150,15 @@ rf.fch4_full <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil +
                              importance = TRUE)
 
 
-# vif_model <- lm(fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le + TS_SWC_interact, data = df_era2)
+ vif_model <- lm(fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le + TS_SWC_interact, data = df_era2)
 # 
-# vif(vif_model) 
+ vif(vif_model) 
+#   tair              rh              rg              ws              wd 
+#       10.936677        3.853300       12.763997        1.225279        1.082375 
+#           tsoil             vpd             swc               h              le 
+#       31.678038       14.060301        2.151849        6.997102        6.254210 
+# TS_SWC_interact 
+#       20.928256 
 
 # Extract variable importance
 importance_values <- importance(rf.fch4_full, type = 1)  # type = 1 for %IncMSE
