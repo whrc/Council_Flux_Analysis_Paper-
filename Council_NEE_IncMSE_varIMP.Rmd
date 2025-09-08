@@ -106,9 +106,21 @@ ggplot(data = val,aes(swc.rf,swc.x))+theme_bw()+geom_abline(slope = 1,intercept 
   scale_x_continuous(limits = c(0,70),"RF SWC (%)")+
   scale_y_continuous(limits = c(0,70),"Measured SWC (%)")
 
-#summary stats on gap filling
-summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.97, slope = 1.02
 
+#summary stats on gap filling
+summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.98, slope = 1.02
+
+#Fig for council paper supp material 
+SWC_RF <- ggplot(data = val,aes(swc.rf,swc.x))+theme_bw()+geom_abline(slope = 1,intercept = 0,col='red')+
+  geom_point(alpha=0.1)+
+  scale_x_continuous(limits = c(0,70),"RF SWC (%)")+
+  scale_y_continuous(limits = c(0,70),"Measured SWC (%)")+
+    annotate(geom = 'text',x = 10, y = 70,label=expression(R^2~"= 0.98"),size = 5)+
+  annotate(geom = 'text',x = 10,y = 65,label=expression(Slope~"= 1.02"), size = 5)
+SWC_RF
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/SWC_RF_Validation.png", SWC_RF, 
+       width = 10, height = 7, dpi = 600)
 
 #create final gap free soil moisture
 df_era2$swc = ifelse(is.na(df_era2$swc),df_era2$swc.rf,df_era2$swc)
