@@ -177,7 +177,7 @@ plot(boruta,las = 2)
 ```
 
 
-#Checking collinearity 
+#Checking collinearity among continuous predictor variables 
 ```{r}
 library(corrplot)
 library(car)
