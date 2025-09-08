@@ -1,0 +1,597 @@
+---
+title: "Council_IncMSE_NEE" #script for exploring deconstructed incMSE models for correlated variables 
+#Note: optimal OOB determined in BASE data prepping proj, script 1.5 "Optimizing RF ntree OOB"
+output: html_document
+date: "2025-09-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+
+#ERA dataset 
+####Prepping the era dataset to use to train RF too -- calc vpd and RF for SWC gapfilling, just like in the processing steps 
+```{r}
+#ERA-5 dataset for RF training - just like in step 2 of the processing code -- uses the same dataset used in the beginning of step 2 
+df_era = fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2016_2023_era.csv") #using the re-cleaned df from Dani 
+
+#subset out by which has complete air t data 
+df_era = df_era[complete.cases(df_era$airt.eramod),]
+
+#create subset of the variables wanted for training RF 
+df_era2 = data.frame(df_era$date,df_era$FC.c,df_era$FCH4.c,
+                 df_era$airt.eramod, df_era$wd, df_era$cardinal_direction, df_era$rh.eramod,df_era$rad.eramod,
+                 df_era$ws.eramod,df_era$tsoil.eramod,#df_era$SWC_1_1_1.c,df_era$SWC_2_1_1.c, 
+                 df_era$SWC_3_1_1.c, #SWC 3 = the tussock location 
+                 df_era$h.eramod,df_era$le.eramod)
+
+#rename for easier names
+names(df_era2) = c('date','nee',"fch4",'tair', 'wd', 'cardDir','rh','rg','ws','tsoil','swc','h','le')
+
+#make card dir as factor - 8 levels 
+df_era2$cardDir <- as.factor(df_era2$cardDir)
+
+#calculate VPD from air t and RH
+svp = 610.7*10^((7.5*df_era2$tair)/(237.3+df_era2$tair))
+df_era2$vpd = ((100 - df_era2$rh)/100)*svp  
+```
+
+
+#RF for SWC - Train RF to fill in SWC (using SWC3, tussocklocation*)
+```{r}
+
+#Subset dataset into training and testing dataset 
+
+set.seed(123)#sets the start point of models, good for repeatability
+cc = df_era2[complete.cases(df_era2$swc),]#create a gap free data set of the target variable
+
+#use 80% of data set as training set and 20% as test set
+sample = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+train  = cc[sample, ]
+test   = cc[!sample, ]
+#compare to ensure all data sets are representative of total data
+hist(cc$swc)
+hist(train$swc)
+hist(test$swc)
+
+#run random forest to predict missing SWC values 
+library(randomForest)
+
+rf.swc = randomForest(formula = swc ~ tair + rh + rg + ws + wd + tsoil + vpd + le + h,data = train,ntree = 800) #optimum ntree determined by OOB error (script in Council Base data prepping, #1.5)
+
+#predict it on the full data set
+swc.rf = predict(object = rf.swc,newdata = df_era2)
+df_era2$swc.rf = swc.rf 
+
+#time series plot of gap filled vs real
+ggplot(data = df_era2)+
+  geom_point(aes(date,swc.rf*100,col='RF'))+
+  geom_point(aes(date,swc*100,col='Measured'))+
+  scale_y_continuous("SWC (%)")
+
+
+#validation dataset from only test data
+val = merge(test,df_era2,by = "date",all.x = T)
+
+ggplot(data = val,aes(swc.rf,swc.x))+theme_bw()+geom_abline(slope = 1,intercept = 0,col='red')+
+  geom_point(alpha=0.1)+
+  scale_x_continuous(limits = c(0,70),"RF SWC (%)")+
+  scale_y_continuous(limits = c(0,70),"Measured SWC (%)")
+
+#summary stats on gap filling
+summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.97, slope = 1.02
+
+
+#create final gap free soil moisture
+df_era2$swc = ifelse(is.na(df_era2$swc),df_era2$swc.rf,df_era2$swc)
+
+```
+
+#SWC-soil temp interaction term 
+```{r}
+# Create interaction term --> explicit interaction term while keeping original terms 
+df_era2$TS_SWC_interact <- df_era2$tsoil * df_era2$swc
+```
+
+
+# VarImp for NEE
+
+#testing for correlated variables 
+#Non-parametric tests of correlations - spearman's correlation 
+
+##### Full model with all variables & interaction term 
+```{r}
+#interaction term in ERA5 dataset, for reference: TS_SWC_interact
+
+#Create training and testing datasets 
+cc_nee = df_era2[complete.cases(df_era2$nee),]
+cc = subset(cc,cc$nee < 12 & cc$nee > -14) #removing some spread 
+
+#create training dataset - 80% to train, 20% to test
+sample.nee = sample(c(TRUE, FALSE), nrow(cc_nee), replace=TRUE, prob=c(0.8,0.2))
+train.nee  = cc_nee[sample.nee, ]
+test.nee   = cc_nee[!sample.nee, ]
+
+
+rf.nee_full <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + 
+                             vpd + swc + h + le + TS_SWC_interact ,
+                             data = train.nee,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(nee ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le + TS_SWC_interact, data = df_era2)
+
+vif(vif_model) 
+      #      tair              rh              rg              ws              wd           tsoil 
+      # 10.876716        4.230284       14.027880        1.241240        1.056183       33.772944 
+      #       vpd             swc               h              le TS_SWC_interact 
+      # 13.803276        1.842613        6.545965        6.066574       22.582958 
+
+# Extract variable importance
+importance_values <- importance(rf.nee_full, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.nee_full, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#                   %IncMSE
+# tair             43.83793
+# rh               83.60214
+# rg               50.46131
+# ws               92.66371 *
+# wd              113.24795 *
+# tsoil            52.33887
+# vpd              44.72077
+# swc             117.01935 * 
+# h                81.75600
+# le               62.76682
+# TS_SWC_interact  48.44485
+
+```
+#full model but using the categorical CarDir instead of wd (degrees)
+```{r}
+rf.nee_full2 <- randomForest(nee ~ tair + rh + rg + ws + cardDir + tsoil + 
+                             vpd + swc + h + le + TS_SWC_interact ,
+                             data = train.nee,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(nee ~ tair + rh + rg + ws + cardDir + tsoil + vpd + swc + h + le + TS_SWC_interact, data = df_era2)
+
+vif(vif_model) 
+#                      GVIF Df GVIF^(1/(2*Df))
+# tair            11.115906  1        3.334052
+# rh               4.349437  1        2.085530
+# rg              14.265122  1        3.776920
+# ws               1.326549  1        1.151759
+# cardDir          1.554770  7        1.032026
+# tsoil           34.096096  1        5.839186
+# vpd             13.877429  1        3.725242
+# swc              1.913614  1        1.383334
+# h                6.921858  1        2.630942
+# le               6.156193  1        2.481168
+# TS_SWC_interact 22.802175  1        4.775162
+
+# Extract variable importance
+importance_values <- importance(rf.nee_full2, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.nee_full2, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#                   %IncMSE
+# tair             39.62552
+# rh               83.62718
+# rg               50.22527
+# ws               90.84175 *
+# cardDir         120.99655 *
+# tsoil            53.93861
+# vpd              43.29743
+# swc             114.13806 *
+# h                77.15994
+# le               59.64057
+# TS_SWC_interact  48.14305
+
+```
+
+
+#Boruta variable importance
+```{r}
+#added wd (degrees)
+library(Boruta)
+
+boruta = Boruta(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h + TS_SWC_interact, data = train.nee ,doTrace = 2,maxRuns = 100)
+boruta$finalDecision #indicates all above are confirmed important variables via a list 
+plot(boruta,las = 2) 
+
+#using carDir instead of wd 
+boruta2 = Boruta(nee ~ tair + rh + rg + ws + cardDir + tsoil + swc + vpd + le + h + TS_SWC_interact, data = train.nee ,doTrace = 2,maxRuns = 100)
+boruta2$finalDecision #indicates all above are confirmed important variables via a list 
+plot(boruta2,las = 2) 
+```
+
+
+#Checking collinearity among continuous predictor variables 
+```{r}
+library(corrplot)
+library(car)
+library(dplyr)
+# CORRELATION MATRIX - Visual inspection
+# Predictor variables
+predictors <- df_era2 %>%
+  select(tair, rh, rg, ws, wd, tsoil, vpd, swc, h, le, TS_SWC_interact) %>%
+  na.omit()  # Remove rows with any missing values
+
+# Calculate correlation matrix
+cor_matrix <- cor(predictors, use = "complete.obs")
+print("Correlation Matrix:")
+print(round(cor_matrix, 3))
+
+# Visualize correlation matrix
+corrplot(cor_matrix, method = "color", type = "upper", 
+         order = "hclust", tl.cex = 0.8, tl.col = "black",
+         addCoef.col = "black", number.cex = 0.7)
+title("Collinearity Check: Correlation Matrix")
+
+# Identify highly correlated pairs (|r| > 0.7) - code from claude
+high_cor_pairs <- which(abs(cor_matrix) > 0.7 & abs(cor_matrix) < 1, arr.ind = TRUE)
+if(nrow(high_cor_pairs) > 0) {
+  print("Variable pairs with |correlation| > 0.7:")
+  for(i in 1:nrow(high_cor_pairs)) {
+    var1 <- rownames(cor_matrix)[high_cor_pairs[i,1]]
+    var2 <- colnames(cor_matrix)[high_cor_pairs[i,2]]
+    cor_val <- cor_matrix[high_cor_pairs[i,1], high_cor_pairs[i,2]]
+    cat(paste(var1, "vs", var2, ": r =", round(cor_val, 3), "\n"))
+  }
+} else {
+  print("No variable pairs with |correlation| > 0.7 found")
+}
+#Results: most of them have collinearity / correlation 
+# strongest correlations: 
+#swc - tsoil, TS interact, tair, vpd
+#tsoil - TS interact, tair, vpd, le
+#TS interact - tair, vpd, le 
+#tair - vpd, le, rg, h
+#vpd - le, rg, h, rh
+#wd - ok
+#le - rg, h, rh
+#rg - h, rh
+#h - rh
+#ws - ok 
+```
+
+
+#Now we start removing / swapping out variables that appear to be collinear (see VIF, corr matrix). My approach is to remove the variables with the highest VIF after each model run
+
+
+#reduced model 1: removing soil temp - soil moisture interaction 
+```{r}
+
+rf.nee_1 <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + 
+                             vpd + swc + h + le,
+                             data = train.nee,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(nee ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le, data = df_era2)
+
+ vif(vif_model)
+#      tair        rh        rg        ws        wd     tsoil       vpd       swc         h        le 
+# 10.096590  4.111273 13.963473  1.216231  1.050951  7.784172 13.640742  1.820875  6.513567  6.064830 
+
+# Extract variable importance
+importance_values <- importance(rf.nee_1, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.nee_1, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#         %IncMSE
+# tair   40.75993
+# rh     80.72256
+# rg     46.56342
+# ws     94.67850 *
+# wd    115.11853 *
+# tsoil  73.70873
+# vpd    41.20033
+# swc   119.08408 *
+# h      73.92875
+# le     61.35482
+```
+#Reducing the model by removing the variable with the highest VIF from previous model run 
+
+#reduced model 2: removing soil moist-temp interaction & rg 
+```{r}
+
+rf.nee_2 <- randomForest(nee ~ tair + rh + vpd + ws + wd + tsoil + swc + h + le,
+                             data = train.nee,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(nee ~ tair + rh + vpd + ws + wd + tsoil + swc + h + le, data = df_era2)
+
+ vif(vif_model) 
+ #    tair        rh       vpd        ws        wd     tsoil       swc         h        le 
+ # 8.512882  3.960500 13.583562  1.198464  1.050291  6.231644  1.715788  2.844975  4.574293 
+
+# Extract variable importance
+importance_values <- importance(rf.nee_2, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.nee_2, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#         %IncMSE
+# tair   39.40103
+# rh     83.33405
+# vpd    43.06318
+# ws     99.84045
+# wd    121.36225 *
+# tsoil  77.76151
+# swc   137.31217 *
+# h     126.56098 *
+# le     85.68831
+```
+
+#reduced model 3: removing soil moist-temp interaction, rg, & vpd  
+```{r}
+
+rf.nee_3 <- randomForest(nee ~ tair + rh + ws + wd + tsoil + swc + h + le,
+                             data = train.nee,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(nee ~ tair + rh + ws + wd + tsoil + swc + h + le, data = df_era2)
+
+ vif(vif_model) 
+#     tair       rh       ws       wd    tsoil      swc        h       le 
+# 5.598534 1.736650 1.122805 1.047441 5.394139 1.550527 2.812684 3.861942 
+
+# Extract variable importance
+importance_values <- importance(rf.nee_3, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.nee_3, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#         %IncMSE
+# tair   53.41029
+# rh     85.05921
+# ws    103.74377
+# wd    109.41255 *
+# tsoil 101.23579
+# swc   134.00447 *
+# h     118.52890 *
+# le     86.67041
+```
+
+
+#reduced model 4: removing soil moist-temp interaction, rg, vpd, tsoil   
+```{r}
+
+rf.nee_4 <- randomForest(nee ~ tair + rh + ws + wd + swc + h + le,
+                             data = train.nee,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(nee ~ tair + rh + ws + wd + swc + h + le, data = df_era2)
+
+ vif(vif_model) 
+#     tair       rh       ws       wd      swc        h       le 
+# 2.135658 1.736571 1.109577 1.030410 1.366824 2.801886 3.861494 
+
+# Extract variable importance
+importance_values <- importance(rf.nee_4, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.nee_4, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#        %IncMSE
+# tair 140.96502 *
+# rh    97.27419
+# ws   112.57898
+# wd   109.35117
+# swc  158.35607 *
+# h    120.91545 *
+# le    98.25168
+```
+
+#reduced model 5: removing soil moist-temp interaction, rg, vpd, *Swapping out tair and adding tsoil back in   
+```{r}
+
+rf.nee_5 <- randomForest(nee ~ tsoil + rh + ws + wd + swc + h + le,
+                             data = train.nee,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(nee ~ tsoil + rh + ws + wd + swc + h + le, data = df_era2)
+
+ vif(vif_model) 
+#    tsoil       rh       ws       wd      swc        h       le 
+# 2.057688 1.716520 1.121317 1.040646 1.549723 2.789873 3.606582 
+
+# Extract variable importance
+importance_values <- importance(rf.nee_5, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.nee_5, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#         %IncMSE
+# tsoil 151.03479 *
+# rh     89.97427
+# ws    103.01713
+# wd    119.76066
+# swc   146.04809 *
+# h     120.44287 *
+# le     92.34000
+
+#tsoil has higher incMSE compared to tair when the other is excluded 
+#for both versions, le has the highest VIF so removing that next 
+```
+
+
+
+#reduced model 6: removing soil moist-temp interaction, rg, *tsoil, and le    
+```{r}
+
+rf.nee_6 <- randomForest(nee ~ tair + rh + ws + wd + swc + h,
+                             data = train.nee,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(nee ~ tair + rh + ws + wd + swc + h, data = df_era2)
+
+ vif(vif_model) 
+#     tair       rh       ws       wd      swc        h 
+# 1.740642 1.490084 1.062713 1.029823 1.364722 1.809694 
+
+# Extract variable importance
+importance_values <- importance(rf.nee_6, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.nee_6, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#        %IncMSE
+# tair 177.55333
+# rh    95.45722
+# ws   150.43097
+# wd   128.82545
+# swc  188.60975
+# h    313.21372
+
+
+```
+
+#reduced model 7: removing soil moist-temp interaction, vpd, rg, *tair, and le  (swapping tair and tsoil)  
+```{r}
+
+rf.nee_7 <- randomForest(nee ~ tsoil + rh + ws + wd + swc + h,
+                             data = train.nee,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(nee ~ tsoil + rh + ws + wd + swc + h, data = df_era2)
+
+ vif(vif_model) 
+#    tsoil       rh       ws       wd      swc        h 
+# 1.795630 1.489880 1.075084 1.038298 1.548490 1.640614 
+
+# Extract variable importance
+importance_values <- importance(rf.nee_7, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.nee_7, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#        %IncMSE
+# tsoil 199.8100 *
+# rh    106.4712
+# ws    155.6312 *
+# wd    128.4710
+# swc   145.2717
+# h     368.0150 *
+
+
+```
+
+#reduced model 7: removing VPD, rg, tsoil, tair, and le -- *adding in soil temp-moist interaction
+```{r}
+
+rf.nee_8 <- randomForest(nee ~ TS_SWC_interact + rh + ws + wd + swc + h,
+                             data = train.nee,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(nee ~ TS_SWC_interact + rh + ws + wd + swc + h, data = df_era2)
+
+ vif(vif_model) 
+# TS_SWC_interact              rh              ws              wd             swc               h 
+#        1.718131        1.492326        1.062432        1.034974        1.539461        1.601862 
+
+# Extract variable importance
+importance_values <- importance(rf.nee_8, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.nee_8, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#                  %IncMSE
+# TS_SWC_interact 175.5376 *
+# rh              107.1026
+# ws              147.1569
+# wd              131.7755
+# swc             147.7557 *
+# h               357.1714 *
+
+
+#Notes: 
+#*tsoil has higher incMSE compared to interaction term; tair inMSE also slightly higher 
+
+```
+
+
+
+
+
+
