@@ -33,6 +33,7 @@ library(RColorBrewer)
 library(pracma)
 library(dplyr)
 library(car) 
+library(randomForest)
 
 Sys.setenv(TZ='UTC')
 ```
@@ -614,11 +615,13 @@ varImpPlot(rf.nee_8, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 ```{r}
 #Complete cases of nee 
 cc_nee = df_era2[complete.cases(df_era2$nee),]
-cc = subset(cc,cc$nee < 12 & cc$nee > -14) #removes some outliers / spread
+cc = subset(cc_nee,cc_nee$nee < 12 & cc_nee$nee > -14) #removes some outliers / spread
 
 
 #subset out cc
 cc_all = cc[complete.cases(cc$tair, cc$wd, cc$cardDir, cc$rh, cc$rg, cc$ws, cc$tsoil, cc$swc, cc$h, cc$le, cc$vpd),]
+
+sum(is.na(cc_all$tair))
 ```
 
 
@@ -649,11 +652,11 @@ rf.nee_full.cc <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil +
 
 vif(vif_model) 
 #            tair              rh              rg              ws              wd 
-#       10.746877        4.001402       13.568506        1.236861        1.082739 
+#       10.876306        4.230133       14.025554        1.241197        1.056193 
 #           tsoil             vpd             swc               h              le 
-#       29.509590       13.986425        2.022967        7.176011        6.385860 
+#       33.772879       13.803904        1.842530        6.544763        6.066360 
 # TS_SWC_interact 
-#       19.082907 
+#       22.582830 
 
 # Extract variable importance
 importance_values <- importance(rf.nee_full.cc, type = 1)  # type = 1 for %IncMSE
@@ -665,17 +668,17 @@ print(importance_values)
 varImpPlot(rf.nee_full.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #                   %IncMSE
-# tair             35.52427
-# rh               80.67945
-# rg               45.34761
-# ws               87.72781 *
-# wd              124.92105 *
-# tsoil            70.36174
-# vpd              42.19614
-# swc             103.79417 *
-# h                66.07705
-# le               50.26218
-# TS_SWC_interact  71.21866
+# tair             44.04506
+# rh               87.83592
+# rg               50.09184
+# ws              106.12816
+# wd              141.06816
+# tsoil            61.94372
+# vpd              50.11790
+# swc             127.16900
+# h                82.96411
+# le               62.92248
+# TS_SWC_interact  61.33962
 
 ```
 #Now we start removing / swapping out variables that appear to be collinear (see VIF, corr matrix). My approach is to remove the variables with the highest VIF after each model run
@@ -694,10 +697,10 @@ rf.nee_1.cc <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil +
  vif_model <- lm(nee ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le, data = cc_all)
 
  vif(vif_model)
- #     tair        rh        rg        ws        wd     tsoil       vpd       swc         h 
- # 9.814506  3.858254 13.513712  1.218658  1.078970  8.204134 13.656342  1.976365  7.159718 
- #       le 
- # 6.379694 
+#       tair        rh        rg        ws        wd     tsoil       vpd       swc         h 
+# 10.096192  4.111179 13.961169  1.216213  1.050961  7.784100 13.641347  1.820802  6.512390 
+#        le 
+#  6.064610 
 
 # Extract variable importance
 importance_values <- importance(rf.nee_1.cc, type = 1)  # type = 1 for %IncMSE
@@ -709,16 +712,16 @@ print(importance_values)
 varImpPlot(rf.nee_1.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #         %IncMSE
-# tair   42.12507
-# rh     82.01873
-# rg     42.70822
-# ws     96.03229 *
-# wd    118.81967 *
-# tsoil  90.44566
-# vpd    45.62667
-# swc   124.07490 *
-# h      62.53791
-# le     49.76220
+# tair   43.47467
+# rh     90.13754
+# rg     45.32025
+# ws    112.47298 *
+# wd    131.55486 *
+# tsoil  76.82326
+# vpd    46.70014
+# swc   140.57965 *
+# h      86.72934
+# le     62.10891
 ```
 #removing variable with highest VIF from previous model 
 
@@ -735,7 +738,7 @@ rf.nee_2.cc <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + h + l
 
  vif(vif_model) 
  #     tair        rh        rg        ws        wd     tsoil       swc         h        le 
- # 7.503837  2.014857 13.430518  1.164004  1.075777  6.954049  1.790062  6.972090  5.644709 
+ # 7.465335  1.971089 13.902665  1.145542  1.047940  6.796080  1.672813  6.420426  5.481915 
 
 # Extract variable importance
 importance_values <- importance(rf.nee_2.cc, type = 1)  # type = 1 for %IncMSE
@@ -747,15 +750,15 @@ print(importance_values)
 varImpPlot(rf.nee_2.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #         %IncMSE
-# tair   60.70451
-# rh     87.35141
-# rg     43.08088
-# ws     91.93951
-# wd    128.93834 *
-# tsoil 101.46825 *
-# swc   121.04909 *
-# h      63.41955
-# le     52.26742
+# tair   44.05508
+# rh     98.98468
+# rg     48.72340
+# ws    107.87091
+# wd    146.52951
+# tsoil  90.45768
+# swc   142.86412
+# h      83.62852
+# le     64.32201
 ```
 #reduced model 3: removing soil moist-temp interaction, vpd, & rg
 ```{r}
@@ -770,7 +773,7 @@ rf.nee_3.cc <- randomForest(nee ~ tair + rh + ws + wd + tsoil + swc + h + le,
 
  vif(vif_model) 
 #     tair       rh       ws       wd    tsoil      swc        h       le 
-# 5.321477 1.805231 1.133102 1.075776 5.383748 1.673126 3.053299 4.472283 
+# 5.598571 1.736815 1.122798 1.047448 5.394029 1.550447 2.812292 3.861786 
 
 # Extract variable importance
 importance_values <- importance(rf.nee_3.cc, type = 1)  # type = 1 for %IncMSE
@@ -782,14 +785,14 @@ print(importance_values)
 varImpPlot(rf.nee_3.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #         %IncMSE
-# tair   66.34371
-# rh     80.67984
-# ws    111.08161 *
-# wd    110.36258 *
-# tsoil  97.48625
-# swc   134.21077 *
-# h     104.94091
-# le     74.35098
+# tair   56.54131
+# rh     91.57067
+# ws    118.09106
+# wd    123.46611 *
+# tsoil 107.01640
+# swc   147.59590 *
+# h     131.88021 *
+# le     83.55430
 ```
 #reduced model 4: removing soil moist-temp interaction, rg, vpd, tsoil   
 ```{r}
@@ -804,7 +807,7 @@ rf.nee_4.cc <- randomForest(nee ~ tair + rh + ws + wd + swc + h + le,
 
  vif(vif_model) 
 #     tair       rh       ws       wd      swc        h       le 
-# 2.287025 1.804623 1.110735 1.066251 1.395880 3.051308 4.470915 
+# 2.135656 1.736737 1.109567 1.030415 1.366761 2.801496 3.861341 
 
 # Extract variable importance
 importance_values <- importance(rf.nee_4.cc, type = 1)  # type = 1 for %IncMSE
@@ -816,13 +819,13 @@ print(importance_values)
 varImpPlot(rf.nee_4.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #        %IncMSE
-# tair 111.89664
-# rh   101.45981
-# ws   114.52206 *
-# wd   114.33082 *
-# swc  182.57753 *
-# h    105.61302
-# le    88.11088
+# tair 142.61403 *
+# rh    98.42112
+# ws   119.32521
+# wd   130.03058 *
+# swc  186.98190 *
+# h    120.00928
+# le   100.43484
 
 ```
 
@@ -841,7 +844,7 @@ rf.nee_5.cc <- randomForest(nee ~ tsoil + rh + ws + wd + swc + h + le,
 
  vif(vif_model) 
 #    tsoil       rh       ws       wd      swc        h       le 
-# 2.313788 1.794010 1.130489 1.075243 1.669824 3.044341 4.183500 
+# 2.057631 1.716666 1.121311 1.040650 1.549643 2.789477 3.606361 
 
 # Extract variable importance
 importance_values <- importance(rf.nee_5.cc, type = 1)  # type = 1 for %IncMSE
@@ -853,13 +856,13 @@ print(importance_values)
 varImpPlot(rf.nee_5.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #         %IncMSE
-# tsoil 115.87215 *
-# rh     98.65017
-# ws    106.82040
-# wd    113.63500 *
-# swc   143.30746 *
-# h     112.28845
-# le     85.58012
+# tsoil 155.24056
+# rh     95.72478
+# ws    117.09667
+# wd    126.92049
+# swc   160.64890
+# h     129.41520
+# le     95.42372
 
 #tsoil has higher incMSE compared to tair when the other is excluded 
 #for both models, le has the highest VIF so removing that next 
@@ -879,7 +882,7 @@ rf.nee_6.cc <- randomForest(nee ~ tair + rh + ws + wd + swc + h,
 
  vif(vif_model) 
 #     tair       rh       ws       wd      swc        h 
-# 1.906641 1.474734 1.100270 1.065513 1.392197 1.799002 
+# 1.740603 1.490105 1.062742 1.029830 1.364663 1.809669 
 
 # Extract variable importance
 importance_values <- importance(rf.nee_6.cc, type = 1)  # type = 1 for %IncMSE
@@ -891,12 +894,12 @@ print(importance_values)
 varImpPlot(rf.nee_6.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #       %IncMSE
-# tair 143.2239 *
-# rh   101.6508
-# ws   128.5292
-# wd   120.9855
-# swc  215.6550 *
-# h    284.3507 *
+# tair 187.8308 *
+# rh   100.1157
+# ws   173.3438
+# wd   141.8155
+# swc  203.8333 *
+# h    349.2868 *
 
 
 ```
@@ -913,7 +916,7 @@ rf.nee_7.cc <- randomForest(nee ~ tsoil + rh + ws + wd + swc + h,
 
  vif(vif_model) 
 #    tsoil       rh       ws       wd      swc        h 
-# 2.061475 1.473227 1.121458 1.073954 1.668372 1.645937 
+# 1.795580 1.489901 1.075118 1.038305 1.548411 1.640588 
 
 # Extract variable importance
 importance_values <- importance(rf.nee_7.cc, type = 1)  # type = 1 for %IncMSE
@@ -924,13 +927,13 @@ print(importance_values)
 # Plot the importance values
 varImpPlot(rf.nee_7.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
-#        %IncMSE
-# tsoil 153.8955
-# rh    102.5658
-# ws    134.5362
-# wd    115.4700
-# swc   153.6187
-# h     337.4732
+#       %IncMSE
+# tsoil 209.8793 *
+# rh    111.7399
+# ws    169.7729
+# wd    147.0569
+# swc   172.8441 *
+# h     387.5091 *
 
 
 ```
@@ -947,8 +950,10 @@ rf.nee_8.cc <- randomForest(nee ~ TS_SWC_interact + rh + ws + wd + swc + h,
  vif_model <- lm(nee ~ TS_SWC_interact + rh + ws + wd + swc + h, data = cc_all)
 
  vif(vif_model) 
-# TS_SWC_interact              rh              ws              wd             swc               h 
-#        1.718131        1.492326        1.062432        1.034974        1.539461        1.601862 
+# TS_SWC_interact              rh              ws              wd             swc 
+#        1.718074        1.492343        1.062468        1.034981        1.539371 
+#               h 
+#        1.601840 
 
 # Extract variable importance
 importance_values <- importance(rf.nee_8.cc, type = 1)  # type = 1 for %IncMSE
@@ -960,12 +965,12 @@ print(importance_values)
 varImpPlot(rf.nee_8.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #                  %IncMSE
-# TS_SWC_interact 175.5376 *
-# rh              107.1026
-# ws              147.1569
-# wd              131.7755
-# swc             147.7557 *
-# h               357.1714 *
+# TS_SWC_interact 189.7590 *
+# rh              110.9547
+# ws              176.0384 *
+# wd              143.0567
+# swc             163.0466
+# h               386.0758 *
 
 
 #Notes: 
@@ -991,8 +996,8 @@ data.frame(model = c("airT", "soilT"),
            OOB_R2  = c(oob_r2_6,  oob_r2_7))
 
 # # model      OOB MSE               OOB R2
-# airT	      1.123764	          0.7817901		
-# soilT	      1.059777	          0.7942150	
+# airT      	2.235797	           0.6386396		
+# soilT	      2.173410	           0.6487229	
 
 #tsoil has slightly lower error, and slightly higher R2, indicates it may be the better model 
 
@@ -1004,8 +1009,12 @@ oob_r2_8  <- tail(rf.nee_8.cc$rsq, 1)
 data.frame(model = c("airT", "soilT", "interaction"),
            OOB_MSE = c(oob_mse_6, oob_mse_7, oob_mse_8),
            OOB_R2  = c(oob_r2_6,  oob_r2_7, oob_r2_8))
-#tsoil still has slightly better performance 
+#interaction has slightly better performance, very close to tsoil 
 
+# # model      OOB MSE               OOB R2
+# airT      	2.235797	           0.6386396		
+# soilT	      2.173410	           0.6487229		
+# interaction	2.167859	           0.6496200	
 
 ```
 #comparing lm models of reduced RF models 
@@ -1015,174 +1024,8 @@ lm_rf.nee_6<- lm(nee ~ tair + rh + ws + wd + swc + h, data = cc_all)
 lm_rf.nee_7 <- lm(nee ~ tsoil + rh + ws + wd + swc + h, data = cc_all)
 
 anova(lm_rf.nee_7,lm_rf.nee_6 )
-AIC(lm_rf.nee_7,lm_rf.nee_6) #AIC for 6 = 81775, AIC for 7 = 81665 so 7 has slightly lower AIC
-BIC(lm_rf.nee_7,lm_rf.nee_6) #BIC for 6 = 81839, BIC for 7 = 81729 so 7 has slightly lower BIC
+AIC(lm_rf.nee_7,lm_rf.nee_6) #AIC for 6 = 144611.8, AIC for 7 = 144584.1 so 7 has slightly lower AIC
+BIC(lm_rf.nee_7,lm_rf.nee_6) #BIC for 6 = 144679.4, BIC for 7 = 144651.7 so 7 has slightly lower BIC
 
-```
-
-```{r}
-# Load required libraries
-install.packages("Metrics")
-library(caret)
-library(Metrics)
-library(dplyr)
-
-
-# Method 1: Out-of-Bag (OOB) Error Comparison
-print("=== OOB Error Comparison ===")
-print(paste("Model 6 (tair) OOB MSE:", round(rf.nee_6.cc$mse[length(rf.nee_6.cc$mse)], 4)))
-print(paste("Model 7 (tsoil) OOB MSE:", round(rf.nee_7.cc$mse[length(rf.nee_7.cc$mse)], 4)))
-print(paste("Model 6 (tair) % Var Explained:", round(rf.nee_6.cc$rsq[length(rf.nee_6.cc$rsq)] * 100, 2)))
-print(paste("Model 7 (tsoil) % Var Explained:", round(rf.nee_7.cc$rsq[length(rf.nee_7.cc$rsq)] * 100, 2)))
-
-# Method 2: Cross-Validation Comparison
-set.seed(123)  # For reproducibility
-n_folds <- 10
-
-# Create folds
-folds <- createFolds(cc_all$nee, k = n_folds)
-
-# Function to perform CV for a model formula
-cv_rf <- function(formula, data, folds, ntree = 850) {
-  cv_results <- sapply(folds, function(fold) {
-    train_data <- data[-fold, ]
-    test_data <- data[fold, ]
-    
-    # Train model
-    model <- randomForest(formula, data = train_data, ntree = ntree)
-    
-    # Predict on test set
-    predictions <- predict(model, test_data)
-    actual <- test_data$nee
-    
-    # Calculate metrics
-    rmse <- sqrt(mean((predictions - actual)^2, na.rm = TRUE))
-    mae <- mean(abs(predictions - actual), na.rm = TRUE)
-    r2 <- cor(predictions, actual, use = "complete.obs")^2
-    
-    return(c(RMSE = rmse, MAE = mae, R2 = r2))
-  })
-  
-  return(rowMeans(cv_results))
-}
-
-# Perform cross-validation
-print("=== Cross-Validation Results ===")
-cv_model6 <- cv_rf(nee ~ tair + rh + ws + wd + swc + h, cc_all, folds)
-cv_model7 <- cv_rf(nee ~ tsoil + rh + ws + wd + swc + h, cc_all, folds)
-
-print("Model 6 (tair):")
-print(round(cv_model6, 4))
-print("Model 7 (tsoil):")
-print(round(cv_model7, 4))
-
-# Method 3: Train/Test Split Comparison
-set.seed(456)
-train_index <- createDataPartition(cc_all$nee, p = 0.8, list = FALSE)
-train_data <- cc_all[train_index, ]
-test_data <- cc_all[-train_index, ]
-
-# Train models on training set
-rf_train_6 <- randomForest(nee ~ tair + rh + ws + wd + swc + h, 
-                           data = train_data, ntree = 850, importance = TRUE)
-rf_train_7 <- randomForest(nee ~ tsoil + rh + ws + wd + swc + h, 
-                           data = train_data, ntree = 850, importance = TRUE)
-
-# Predict on test set
-pred_6 <- predict(rf_train_6, test_data)
-pred_7 <- predict(rf_train_7, test_data)
-
-# Calculate test set metrics
-test_metrics_6 <- c(
-  RMSE = rmse(test_data$nee, pred_6),
-  MAE = mae(test_data$nee, pred_6),
-  R2 = cor(test_data$nee, pred_6)^2
-)
-
-test_metrics_7 <- c(
-  RMSE = rmse(test_data$nee, pred_7),
-  MAE = mae(test_data$nee, pred_7),
-  R2 = cor(test_data$nee, pred_7)^2
-)
-
-print("=== Test Set Performance ===")
-print("Model 6 (tair):")
-print(round(test_metrics_6, 4))
-print("Model 7 (tsoil):")
-print(round(test_metrics_7, 4))
-
-# Method 4: Variable Importance Comparison
-print("=== Variable Importance Comparison ===")
-importance_6 <- importance(rf.nee_6.cc)
-importance_7 <- importance(rf.nee_7.cc)
-
-print("Model 6 Variable Importance:")
-print(round(importance_6, 2))
-print("Model 7 Variable Importance:")
-print(round(importance_7, 2))
-
-# Method 5: Statistical Comparison using Predictions
-# McNemar's test equivalent for regression (paired t-test of residuals)
-pred_full_6 <- predict(rf.nee_6.cc)
-pred_full_7 <- predict(rf.nee_7.cc)
-
-residuals_6 <- cc_all$nee - pred_full_6
-residuals_7 <- cc_all$nee - pred_full_7
-
-# Paired t-test of absolute residuals
-abs_res_test <- t.test(abs(residuals_6), abs(residuals_7), paired = TRUE)
-print("=== Statistical Comparison of Absolute Residuals ===")
-print(abs_res_test)
-
-# Method 6: Comprehensive Comparison Table
-comparison_table <- data.frame(
-  Metric = c("OOB_MSE", "OOB_R2", "CV_RMSE", "CV_MAE", "CV_R2", "Test_RMSE", "Test_MAE", "Test_R2"),
-  Model_6_tair = c(
-    rf.nee_6.cc$mse[length(rf.nee_6.cc$mse)],
-    rf.nee_6.cc$rsq[length(rf.nee_6.cc$rsq)],
-    cv_model6[1], cv_model6[2], cv_model6[3],
-    test_metrics_6[1], test_metrics_6[2], test_metrics_6[3]
-  ),
-  Model_7_tsoil = c(
-    rf.nee_7.cc$mse[length(rf.nee_7.cc$mse)],
-    rf.nee_7.cc$rsq[length(rf.nee_7.cc$rsq)],
-    cv_model7[1], cv_model7[2], cv_model7[3],
-    test_metrics_7[1], test_metrics_7[2], test_metrics_7[3]
-  )
-)
-
-comparison_table$Better_Model <- ifelse(
-  comparison_table$Metric %in% c("OOB_R2", "CV_R2", "Test_R2"),
-  ifelse(comparison_table$Model_6_tair > comparison_table$Model_7_tsoil, "Model_6", "Model_7"),
-  ifelse(comparison_table$Model_6_tair < comparison_table$Model_7_tsoil, "Model_6", "Model_7")
-)
-
-print("=== Comprehensive Model Comparison ===")
-print(round(comparison_table[,1:3], 4))
-print("Better performing model by metric:")
-print(comparison_table[,c(1,4)])
-
-# Method 7: Visualization
-par(mfrow = c(2, 2))
-
-# Plot 1: Predicted vs Actual
-plot(cc_all$nee, pred_full_6, main = "Model 6 (tair): Predicted vs Actual", 
-     xlab = "Actual NEE", ylab = "Predicted NEE")
-abline(0, 1, col = "red")
-
-plot(cc_all$nee, pred_full_7, main = "Model 7 (tsoil): Predicted vs Actual", 
-     xlab = "Actual NEE", ylab = "Predicted NEE")
-abline(0, 1, col = "red")
-
-# Plot 2: Residuals
-plot(pred_full_6, residuals_6, main = "Model 6 Residuals", 
-     xlab = "Predicted", ylab = "Residuals")
-abline(h = 0, col = "red")
-
-plot(pred_full_7, residuals_7, main = "Model 7 Residuals", 
-     xlab = "Predicted", ylab = "Residuals")
-abline(h = 0, col = "red")
-
-par(mfrow = c(1, 1))
 ```
 
