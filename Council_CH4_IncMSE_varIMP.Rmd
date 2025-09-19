@@ -489,7 +489,7 @@ varImpPlot(rf.fch4_7, type = 1, main = "CH4: Variable Importance (%IncMSE)")
 
 ```
 
-#reduced model 7: removing VPD, rg, tsoil, tair, and le -- *adding in soil temp-moist interaction
+#reduced model 8: removing VPD, rg, tsoil, tair, and le -- *adding in soil temp-moist interaction
 ```{r}
 
 rf.fch4_8 <- randomForest(fch4 ~ TS_SWC_interact + rh + ws + wd + swc + h,
@@ -524,9 +524,367 @@ varImpPlot(rf.fch4_8, type = 1, main = "CH4: Variable Importance (%IncMSE)")
 # h               152.0178
 
 ```
+# ***********************
+
+
+#Re-running with cc of ALL variables being testsed, and using the whole dataset (not training vs esting) - this uses the finalized dataset used in analyses 
 
 
 
+#complete cases of all predictor variables being used and complete cases of obs nee (not gapfilled)
+
+```{r}
+#Complete cases of fch4
+cc_fch4 = df_era2[complete.cases(df_era2$fch4),]
+
+
+#subset out cc of all variables within the model 
+cc_all = cc_fch4[complete.cases(cc_fch4$tair, cc_fch4$wd, cc_fch4$cardDir, cc_fch4$rh, cc_fch4$rg, cc_fch4$ws, cc_fch4$tsoil, cc_fch4$swc, cc_fch4$h, cc_fch4$le, cc_fch4$vpd),]
+
+#double check no 0 or NA values 
+sum(is.na(cc_all$fch4))
+```
 
 
 
+#SWC-soil temp interaction term 
+```{r}
+# Create interaction term --> explicit interaction term while keeping original terms 
+cc_all$TS_SWC_interact <- cc_all$tsoil * cc_all$swc
+```
+
+
+##### Full model with all variables & interaction term 
+```{r}
+#interaction term in ERA5 dataset, for reference: TS_SWC_interact
+
+#Create training and testing datasets 
+
+#Here we tried constraining to remove outliers, but the constrained version performed slightly worse so we left it unconstrained 
+# cc = subset(cc,cc$fch4 < 60)
+# cc = subset(cc,cc$fch4 > -25)
+
+
+rf.fch4_full.cc <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
+                             vpd + swc + h + le + TS_SWC_interact ,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le + TS_SWC_interact, data = cc_all)
+# 
+ vif(vif_model) 
+#   tair              rh              rg              ws              wd 
+#       10.936677        3.853300       12.763997        1.225279        1.082375 
+#           tsoil             vpd             swc               h              le 
+#       31.678038       14.060301        2.151849        6.997102        6.254210 
+# TS_SWC_interact 
+#       20.928256 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_full.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_full.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#                  %IncMSE
+# tair             58.53514
+# rh               86.13987
+# rg               70.56241
+# ws              123.86354 *
+# wd              162.89566 *
+# tsoil            79.94184
+# vpd              45.93634
+# swc             142.91566 *
+# h               102.54686
+# le               78.40838
+# TS_SWC_interact  56.01636
+
+```
+#reduced model 1: removing soil temp - soil moisture interaction 
+```{r}
+
+rf.fch4_1.cc <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
+                             vpd + swc + h + le,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le, data = cc_all)
+
+ vif(vif_model)
+#      tair        rh        rg        ws        wd     tsoil       vpd       swc         h 
+# 10.093012  3.729245 12.720959  1.204906  1.078491  8.321247 13.782132  2.114541  6.981805 
+#        le 
+#  6.249209 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_1.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_1.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#         %IncMSE
+# tair   73.97577
+# rh    103.92990
+# rg     64.80313
+# ws    131.48767 *
+# wd    176.10341 *
+# tsoil 101.86235
+# vpd    60.47862
+# swc   180.30506 *
+# h     103.48422
+# le     79.66828
+```
+#reduced model 2: removing VPD & soil moist-temp interaction 
+```{r}
+
+rf.fch4_2.cc <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + swc + h + le,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ tair + rh + rg + ws + wd + tsoil + swc + h + le, data = cc_all)
+
+ vif(vif_model) 
+ #     tair        rh        rg        ws        wd     tsoil       swc         h        le 
+ # 7.560959  1.982846 12.687023  1.149830  1.074716  7.040197  1.901910  6.858562  5.467961 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_2.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_2.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#         %IncMSE
+# tair   80.85422
+# rh    107.42584
+# rg     67.30278
+# ws    137.93487 *
+# wd    174.16710 *
+# tsoil 112.65633
+# swc   183.18100 *
+# h     100.07992
+# le     82.13178
+```
+#reduced model 3: removing VPD, soil moist-temp interaction, rg 
+```{r}
+
+rf.fch4_3.cc <- randomForest(fch4 ~ tair + rh + ws + wd + tsoil + swc + h + le,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ tair + rh + ws + wd + tsoil + swc + h + le, data = cc_all)
+
+ vif(vif_model) 
+#     tair       rh       ws       wd    tsoil      swc        h       le 
+# 5.338311 1.765234 1.120391 1.074628 5.508347 1.767473 3.028133 4.452994 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_3.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_3.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#         %IncMSE
+# tair   85.77758
+# rh    108.42241
+# ws    131.63980 *
+# wd    161.68607 *
+# tsoil 108.90487
+# swc   172.16055 *
+# h     112.93053
+# le     76.50481
+```
+#reduced model 4: removing VPD, soil moist-temp interaction, rg, tsoil   
+```{r}
+
+rf.fch4_4.cc <- randomForest(fch4 ~ tair + rh + ws + wd + swc + h + le,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ tair + rh + ws + wd + swc + h + le, data = cc_all)
+
+ vif(vif_model) 
+#     tair       rh       ws       wd      swc        h       le 
+# 2.355277 1.765049 1.091466 1.063787 1.489104 3.025116 4.448587 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_4.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_4.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#        %IncMSE
+# tair 144.42222
+# rh   116.75788
+# ws   146.20746 *
+# wd   166.14833 *
+# swc  222.81562 *
+# h    114.36530
+# le    89.04512
+
+```
+#reduced model 5: removing VPD, soil moist-temp interaction, rg, *Swapping out tair and adding tsoil back in   
+```{r}
+
+rf.fch4_5.cc <- randomForest(fch4 ~ tsoil + rh + ws + wd + swc + h + le,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ tsoil + rh + ws + wd + swc + h + le, data = cc_all)
+
+ vif(vif_model) 
+#    tsoil       rh       ws       wd      swc        h       le 
+# 2.430297 1.751345 1.120095 1.073763 1.767440 3.019948 4.187085 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_5.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_5.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#        %IncMSE
+# tsoil 130.7253
+# rh    123.5868
+# ws    149.4021 *
+# wd    178.1276 *
+# swc   168.3581 *
+# h     121.0988
+# le    101.8783
+
+#tair has higher incMSE compared to tsoil when the other is excluded 
+#for both versions, le has the highest VIF so removing that next 
+```
+#reduced model 6: removing VPD, soil moist-temp interaction, rg, tsoil, and le    
+```{r}
+
+rf.fch4_6.cc <- randomForest(fch4 ~ tair + rh + ws + wd + swc + h,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ tair + rh + ws + wd + swc + h, data = cc_all)
+
+ vif(vif_model) 
+#    tair       rh       ws       wd      swc        h 
+# 1.971821 1.446072 1.078981 1.063236 1.485848 1.767071 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_6.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_6.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#       %IncMSE
+# tair 171.5401 *
+# rh   131.6919
+# ws   164.5995
+# wd   192.9932 *
+# swc  260.8216 *
+# h    159.1251
+
+
+```
+#reduced model 7: removing VPD, soil moist-temp interaction, rg, *tair, and le    
+```{r}
+
+rf.fch4_7.cc <- randomForest(fch4 ~ tsoil + rh + ws + wd + swc + h,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ tsoil + rh + ws + wd + swc + h, data = cc_all)
+
+ vif(vif_model) 
+#    tsoil       rh       ws       wd      swc        h 
+# 2.161699 1.445655 1.106557 1.072538 1.765819 1.625891 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_7.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_7.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#        %IncMSE
+# tsoil 141.8323
+# rh    130.4559
+# ws    166.2389
+# wd    202.5881
+# swc   177.8814
+# h     168.2691
+
+
+#tair has greater incMSE, suggesting it's more important to model accuracy than tsoil 
+#in both the tsoil and tair model, wd and swc are most important
+```
+#reduced model 8: removing VPD, rg, tsoil, tair, and le -- *adding in soil temp-moist interaction
+```{r}
+
+rf.fch4_8.cc <- randomForest(fch4 ~ TS_SWC_interact + rh + ws + wd + swc + h,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ TS_SWC_interact + rh + ws + wd + swc + h, data = cc_all)
+
+ vif(vif_model) 
+# TS_SWC_interact              rh              ws              wd             swc 
+#        2.034987        1.444602        1.085805        1.066965        1.742839 
+#               h 
+#        1.586864 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_8.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_8.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#                  %IncMSE
+# TS_SWC_interact 169.6829
+# rh              139.8206
+# ws              150.1531
+# wd              201.2506 *
+# swc             190.3431 *
+# h               176.8031 *
+
+```
