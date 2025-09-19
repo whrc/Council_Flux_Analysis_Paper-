@@ -136,15 +136,15 @@ predictors <- df_era2 %>%
   na.omit()  # Remove rows with any missing values
 
 # Calculate correlation matrix using complete observations 
-cor_matrix <- cor(predictors, use = "complete.obs")
-print("Correlation Matrix:")
+cor_matrix <- cor(predictors, use = "complete.obs", method = "spearman")
+print("Spearman Correlation Matrix:")
 print(round(cor_matrix, 3))
 
 # Visualize correlation matrix
 corrplot(cor_matrix, method = "color", type = "upper", 
          order = "hclust", tl.cex = 0.8, tl.col = "black",
          addCoef.col = "black", number.cex = 0.7)
-title("Collinearity Check: Correlation Matrix")
+title("Collinearity Check: Spearman Correlation Matrix")
 
 # Identify highly correlated pairs (|r| > 0.7) - code from claude
 high_cor_pairs <- which(abs(cor_matrix) > 0.7 & abs(cor_matrix) < 1, arr.ind = TRUE)
