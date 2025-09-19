@@ -888,3 +888,45 @@ varImpPlot(rf.fch4_8.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
 # h               176.8031 *
 
 ```
+#Testing which model may be better, comparing the reduced models using tair and tsoil 
+#### *anova doesn't work on randomforest products, so tried on simple lm 
+#### AIC/BIC also don't work for RF models, so tried on simple lm 
+
+```{r}
+
+#using OOB and RMSE to compare the reduced models 6 and 7 
+
+oob_mse_6 <- tail(rf.fch4_6.cc$mse, 1)
+oob_r2_6  <- tail(rf.fch4_6.cc$rsq, 1)
+
+oob_mse_7 <- tail(rf.fch4_7.cc$mse, 1)
+oob_r2_7  <- tail(rf.fch4_7.cc$rsq, 1)
+
+data.frame(model = c("airT", "soilT"),
+           OOB_MSE = c(oob_mse_6, oob_mse_7),
+           OOB_R2  = c(oob_r2_6,  oob_r2_7))
+
+# # model      OOB MSE               OOB R2
+# airT	       47.90983	            0.4804274		
+# soilT	      46.91144            	0.4912548	
+
+#tsoil has slightly lower error, and slightly higher R2, indicates it may be the better model 
+
+
+#looking at model 8 with interaction term added back in 
+oob_mse_8 <- tail(rf.fch4_8.cc$mse, 1)
+oob_r2_8  <- tail(rf.fch4_8.cc$rsq, 1)
+
+data.frame(model = c("airT", "soilT", "interaction"),
+           OOB_MSE = c(oob_mse_6, oob_mse_7, oob_mse_8),
+           OOB_R2  = c(oob_r2_6,  oob_r2_7, oob_r2_8))
+
+
+#tsoil model still slightly best
+
+# # model      OOB MSE               OOB R2
+# airT	       47.90983	            0.4804274		
+# soilT	      46.91144            	0.4912548		
+# interaction	47.02965	            0.4899728		
+
+```
