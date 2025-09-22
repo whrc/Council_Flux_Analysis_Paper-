@@ -33,6 +33,7 @@ library(plotly)
 library(RColorBrewer)
 library(pracma)
 library(dplyr)
+library(car)
 
 
 Sys.setenv(TZ='UTC')
@@ -161,8 +162,8 @@ if(nrow(high_cor_pairs) > 0) {
 }
 #Results: most of them have collinearity / correlation 
 # strongest correlations: 
-#swc - tsoil, TS interact, tair, vpd
-#tsoil - TS interact, tair, vpd, le
+#swc - tsoil, TS interact, tair, vpd, le 
+#tsoil - swc, TS interact, tair, vpd, le
 #TS interact - tair, vpd, le 
 #tair - vpd, le, rg, h
 #vpd - le, rg, h, rh
@@ -260,7 +261,7 @@ varImpPlot(rf.fch4_full.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)
 # TS_SWC_interact  56.01636
 
 ```
-#reduced model 1: removing soil temp - soil moisture interaction 
+#reduced model 1: removing soil temp - soil moisture interaction first since it was a newly introduced variable 
 ```{r}
 
 rf.fch4_1.cc <- randomForest(fch4 ~ tair + rh + rg + ws + wd + tsoil + 
@@ -470,6 +471,7 @@ varImpPlot(rf.fch4_6.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
 # swc  260.8216 *
 # h    159.1251
 
+#swc then wd then tair most important when tsoil removed 
 
 ```
 #reduced model 7: removing VPD, soil moist-temp interaction, rg, *tair, and le    
@@ -497,16 +499,19 @@ print(importance_values)
 varImpPlot(rf.fch4_7.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
 
 #        %IncMSE
-# tsoil 141.8323
-# rh    130.4559
-# ws    166.2389
-# wd    202.5881
-# swc   177.8814
-# h     168.2691
+# tsoil 154.6973
+# rh    134.8141
+# ws    166.2500
+# wd    206.2783 *
+# swc   177.1358 *
+# h     170.5901 *
 
+#wd then swc then h most important when tsoil is included and tair is removed 
 
 #tair has greater incMSE, suggesting it's more important to model accuracy than tsoil 
-#in both the tsoil and tair model, wd and swc are most important
+
+
+
 ```
 #reduced model 8: removing VPD, rg, tsoil, tair, and le -- *adding in soil temp-moist interaction
 ```{r}
@@ -543,13 +548,85 @@ varImpPlot(rf.fch4_8.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
 # h               176.8031 *
 
 ```
+#VIF all ok, but h & rh are collinear per the spearman corr matrix, so removing and swapping to see how this changes model 
+
+
+#reduced model 9: removing interaction, VPD, rg, tair, le, rh 
+```{r}
+
+rf.fch4_9.cc <- randomForest(fch4 ~ tsoil + ws + wd + swc + h,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ tsoil + ws + wd + swc + h, data = cc_all)
+
+ vif(vif_model) 
+#    tsoil       ws       wd      swc        h 
+# 2.160115 1.064964 1.041696 1.749001 1.232779 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_9.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_9.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#        %IncMSE
+# tsoil 132.7951
+# ws    155.6349
+# wd    197.2607 *
+# swc   158.5033 *
+# h     190.3384 *
+
+```
+
+
+#reduced model 10: removing VPD, rg, tair, le, swapping out *h and rh 
+```{r}
+
+rf.fch4_10.cc <- randomForest(fch4 ~ tsoil + ws + wd + swc + rh,
+                             data = cc_all,
+                             ntree = 950,
+                             importance = TRUE)
+
+
+ vif_model <- lm(fch4 ~ tsoil + ws + wd + swc + rh, data = cc_all)
+
+ vif(vif_model) 
+#    tsoil       ws       wd      swc       rh 
+# 1.908408 1.104641 1.057841 1.744207 1.096122 
+
+# Extract variable importance
+importance_values <- importance(rf.fch4_10.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf.fch4_10.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
+
+#        %IncMSE
+# tsoil 130.4735
+# ws    175.5044 *
+# wd    209.6973 *
+# swc   165.9469
+# rh    177.4547 *
+
+```
+
+
+
 #Testing which model may be better, comparing the reduced models using tair and tsoil 
 #### *anova doesn't work on randomforest products, so tried on simple lm 
 #### AIC/BIC also don't work for RF models, so tried on simple lm 
 
 ```{r}
 
-#using OOB and RMSE to compare the reduced models 6 and 7 
+#using OOB and RMSE to compare the reduced models 6 and 7 which swaps tsoil and tair
 
 oob_mse_6 <- tail(rf.fch4_6.cc$mse, 1)
 oob_r2_6  <- tail(rf.fch4_6.cc$rsq, 1)
@@ -584,4 +661,64 @@ data.frame(model = c("airT", "soilT", "interaction"),
 # soilT	      46.91144            	0.4912548		
 # interaction	47.02965	            0.4899728		
 
+
+#looking at models 6 - 10 
+oob_mse_9 <- tail(rf.fch4_9.cc$mse, 1)
+oob_r2_9  <- tail(rf.fch4_9.cc$rsq, 1)
+
+oob_mse_10 <- tail(rf.fch4_10.cc$mse, 1)
+oob_r2_10  <- tail(rf.fch4_10.cc$rsq, 1)
+
+data.frame(model = c("airT", "soilT", "interaction", "w/o h", "w/o rh"),
+           OOB_MSE = c(oob_mse_6, oob_mse_7, oob_mse_8, oob_mse_9, oob_mse_10),
+           OOB_R2  = c(oob_r2_6,  oob_r2_7, oob_r2_8, oob_r2_9, oob_r2_10))
+
+#model 7, with soil T, still performs best with lowest OOB MSE, highest OOB R2
 ```
+
+
+#comparing lm models of reduced RF models - can't use anova since the two models have the same number of parameters and have a different parameter (they're not nested model comparisons) - so need a different test to see if the models are distinguishable & otherwise use AIC/BIC
+```{r}
+#lm to allow anova comparison 
+lm_rf.fch4_6<- lm(fch4 ~ tair + rh + ws + wd + swc + h, data = cc_all)
+lm_rf.fch4_7 <- lm(fch4 ~ tsoil + rh + ws + wd + swc + h, data = cc_all)
+
+#anova(lm_rf.fch4_7,lm_rf.fch4_6 ) #doesn't generate a p value bc the models are not nested, so need a diff test 
+AIC(lm_rf.fch4_7,lm_rf.fch4_6) #AIC for 6 = 187043.1, AIC for 7 = 186953.0 so 7 has slightly lower AIC
+BIC(lm_rf.fch4_7,lm_rf.fch4_6) #BIC for 6 = 187108.3, BIC for 7 = 187018.2 so 7 has slightly lower BIC
+
+vif(lm_rf.fch4_6) # all <2 - ok
+vif(lm_rf.fch4_7) #tsoil at 2.2, rest < 2 -ok 
+
+#Vuong test can test two different, non-nested models with different parameters - but not sure this is appropriate as the models don't adhere to lm assumptions.... 
+library(nonnest2)
+
+# Vuong test for non-nested model comparison
+vuong_test <- vuongtest(lm_rf.fch4_6, lm_rf.fch4_7)
+print("Vuong Test Results:")
+print(vuong_test)
+
+#shows models do perform sig diff from one another, and that model 2, the one with tsoil, performs better than the model with tair 
+
+
+#now compare model 7 to models 9 and 10 
+
+lm_rf.fch4_9 <- lm(fch4 ~ tsoil  + ws + wd + swc + h, data = cc_all)
+lm_rf.fch4_10 <- lm(fch4 ~ tsoil  + ws + wd + swc + rh, data = cc_all)
+
+AIC(lm_rf.fch4_7,lm_rf.fch4_9, lm_rf.fch4_10) #model 7 has lowest AIC
+BIC(lm_rf.fch4_7,lm_rf.fch4_9, lm_rf.fch4_10) #model 7 has lowest AIC
+
+
+#now, because models 9 and 10 are reduced compared to model 7, we can use the anova to compare the lm models 
+anova(lm_rf.fch4_7, lm_rf.fch4_9) #sig diff, p<0.001
+anova(lm_rf.fch4_7, lm_rf.fch4_10) #sig diff, p<0.001
+
+```
+
+
+
+
+
+
+
