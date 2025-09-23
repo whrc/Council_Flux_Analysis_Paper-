@@ -1,0 +1,419 @@
+---
+title: "Council_WD_DailyAvg_Calc"
+output: html_document
+date: "2025-09-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Notes on site: Wind direction primarily blows from NW, except for Dec - Mar, when it primarily blows from SE direction. The site is largely tussock tundra but to the south there is thermokarst 
+
+#**TO DO: now redo all the stats with the WD_modal **
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+# Set working directory and then Load data
+
+```{r}
+#using the ".2" version to reflect the updated SWC used in RF 
+
+#original half-hourly dataframe 
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#needs continuous day variable - daily avg, calculated in processing steps
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+```
+
+```{r}
+#checking timestamp 
+ggplot(data = df,aes(TIMESTAMP_END,FC_F))+
+  geom_point()+
+  scale_x_datetime(limits = as.POSIXct(c('2021-09-28','2021-10-05')))+
+  scale_y_continuous(limits = c(-12,5))
+```
+
+
+#Old way - seems this is a bit offset because it didn't use the 22.5 degree offset around the cardinal direction, so it didn't center properly around the cardinal direction and was a bit off from the windrose check 
+
+#Coding help from Claude
+
+
+#calc prevailing WD for that day usng modal/frequency approach (similar to what wind roses use), then do a daily avg for data threshold of 50% across all variables --> create a df_avg for FC and FCH4 individually so lack to FCH4 doesn't affect potential days that could be used for FC --> to use these for stats 
+ #####actually separating out FC and FCH4 is not necessary - can just join wind data to df_avg which already used timeAverage to get variable averages
+ 
+#### Modal / frequency approach to determining prevailing wind direction for each day 
+```{r}
+#function for getting modal wind
+get_modal_wind <- function(degrees) {
+  # Create bins for cardinal/intercardinal directions
+  bins <- cut(degrees,
+             breaks = seq(0, 360, by = 45),
+             labels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
+             include.lowest = TRUE)
+
+  # Find most frequent direction
+  modal_dir <- names(sort(table(bins), decreasing = TRUE)[1])
+
+  # Return the center of that directional bin
+  dir_to_deg <- c("N" = 0, "NE" = 45, "E" = 90, "SE" = 135,
+                  "S" = 180, "SW" = 225, "W" = 270, "NW" = 315)
+
+  return(dir_to_deg[modal_dir])
+}
+
+
+
+# First calculate modal-based wind direction for each day
+daily_wind <- df %>%
+  group_by(date = as.Date(date)) %>%
+  filter(n() >= 24) %>%  # At least 50% of daily observations
+  summarise(
+    # Use get_modal_wind function we developed earlier
+    WD_modalfreq = get_modal_wind(WD), #modal wind approach, freq-approach 
+    n_wind_obs = sum(!is.na(WD)),
+  ) %>%
+  filter(n_wind_obs >= 24)  # Ensure we have enough valid wind measurements
+```
+
+
+#double checking modal approach using HH wind histograms / windroses to validate that the binning worked 
+```{r}
+#Make plots of HH raw data and compare the highest frequency of wind direction counts from a certain direction to the daily_wind calculation / classification 
+library(dplyr)
+library(ggplot2)
+
+# Filter to one day (change date as needed)
+df_day <- df %>%
+  filter(as.Date(date) == as.Date("2017-07-17"))
+
+# Polar wind rose for that day
+ggplot(df_day, aes(x = WD)) +
+  geom_histogram(binwidth = 10, fill = "skyblue", color = "black") +
+  scale_x_continuous(breaks = seq(0, 360, 45), limits = c(0, 360)) +
+  coord_polar(start = -pi/16) +
+  labs(x = "Wind direction (degrees)", y = "Count",
+       title = "Wind Direction Frequency (2023-07-15)") +
+  theme_bw()
+
+#histogram for that day 
+ggplot(df_day, aes(x = WD)) +
+  geom_histogram(binwidth = 10, fill = "skyblue", color = "black") +
+  scale_x_continuous(breaks = seq(0, 360, 30), limits = c(0, 360)) +
+  labs(x = "Wind direction (degrees)", y = "Count",
+       title = "Distribution of Wind Directions") +
+  theme_bw()
+
+```
+# *** CORRECTED WAY ***
+#New way, help from Claude 
+
+
+```{r}
+# Function to get modal wind direction binned into 8 cardinal directions
+get_modal_wind_cardinal <- function(degrees) {
+  # Remove NA values
+  degrees <- degrees[!is.na(degrees)]
+  
+  if(length(degrees) == 0) return(NA)
+  
+  # Define the 8 cardinal directions with their degree ranges
+  # Each direction covers a 45-degree sector centered on the cardinal direction
+  # N: 337.5-22.5°, NE: 22.5-67.5°, E: 67.5-112.5°, etc.
+  
+  # Function to assign each degree to a cardinal direction
+  assign_cardinal <- function(deg) {
+    # Normalize to 0-360
+    deg <- deg %% 360
+    
+    if (deg >= 337.5 || deg < 22.5) return("N")
+    else if (deg >= 22.5 && deg < 67.5) return("NE")
+    else if (deg >= 67.5 && deg < 112.5) return("E")
+    else if (deg >= 112.5 && deg < 157.5) return("SE")
+    else if (deg >= 157.5 && deg < 202.5) return("S")
+    else if (deg >= 202.5 && deg < 247.5) return("SW")
+    else if (deg >= 247.5 && deg < 292.5) return("W")
+    else if (deg >= 292.5 && deg < 337.5) return("NW")
+  }
+  
+  # Assign each degree measurement to a cardinal direction
+  cardinal_dirs <- sapply(degrees, assign_cardinal)
+  
+  # Find the most frequent cardinal direction
+  dir_counts <- table(cardinal_dirs)
+  modal_dir <- names(dir_counts)[which.max(dir_counts)]
+  
+  # Return the center degree of that cardinal direction
+  dir_to_deg <- c("N" = 0, "NE" = 45, "E" = 90, "SE" = 135,
+                  "S" = 180, "SW" = 225, "W" = 270, "NW" = 315)
+  
+  return(as.numeric(dir_to_deg[modal_dir]))
+}
+
+# Alternative version that also returns the cardinal direction name
+get_modal_wind_cardinal_detailed <- function(degrees) {
+  # Remove NA values
+  degrees <- degrees[!is.na(degrees)]
+  
+  if(length(degrees) == 0) return(list(degrees = NA, direction = NA, count = 0))
+  
+  # Function to assign each degree to a cardinal direction
+  assign_cardinal <- function(deg) {
+    # Normalize to 0-360
+    deg <- deg %% 360
+    
+    if (deg >= 337.5 || deg < 22.5) return("N")
+    else if (deg >= 22.5 && deg < 67.5) return("NE")
+    else if (deg >= 67.5 && deg < 112.5) return("E")
+    else if (deg >= 112.5 && deg < 157.5) return("SE")
+    else if (deg >= 157.5 && deg < 202.5) return("S")
+    else if (deg >= 202.5 && deg < 247.5) return("SW")
+    else if (deg >= 247.5 && deg < 292.5) return("W")
+    else if (deg >= 292.5 && deg < 337.5) return("NW")
+  }
+  
+  # Assign each degree measurement to a cardinal direction
+  cardinal_dirs <- sapply(degrees, assign_cardinal)
+  
+  # Find the most frequent cardinal direction
+  dir_counts <- table(cardinal_dirs)
+  modal_dir <- names(dir_counts)[which.max(dir_counts)]
+  modal_count <- max(dir_counts)
+  
+  # Return the center degree of that cardinal direction
+  dir_to_deg <- c("N" = 0, "NE" = 45, "E" = 90, "SE" = 135,
+                  "S" = 180, "SW" = 225, "W" = 270, "NW" = 315)
+  
+  return(list(
+    degrees = as.numeric(dir_to_deg[modal_dir]),
+    direction = modal_dir,
+    count = modal_count,
+    total_obs = length(degrees)
+  ))
+}
+
+# Updated daily wind calculation using cardinal directions
+library(dplyr)
+
+daily_wind_cardinal <- df %>%
+  group_by(date = as.Date(date)) %>%
+  filter(n() >= 24) %>%  # At least 50% of daily observations
+  summarise(
+    WD_modalfreq = get_modal_wind_cardinal(WD),
+    n_wind_obs = sum(!is.na(WD)),
+    .groups = 'drop'
+  ) %>%
+  filter(n_wind_obs >= 24)
+
+
+#save this new prevailing wind dataset for reference later 
+write.csv(x=daily_wind_cardinal, file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/corrected_daily_wind_modalCardDir_9.23.2025.csv', quote = F, row.names = F)
+
+
+```
+
+
+
+#Test function on date 
+```{r}
+# Test function on your example date
+test_date <- "2017-07-21"
+df_test <- df %>% filter(as.Date(date) == as.Date(test_date))
+
+# Test the function
+result <- get_modal_wind_cardinal_detailed(df_test$WD)
+cat("Date:", test_date, "\n")
+cat("Modal wind direction:", result$direction, "(", result$degrees, "degrees)\n")
+cat("Count:", result$count, "out of", result$total_obs, "observations\n")
+
+# You can also check the distribution across all cardinal directions for that day
+assign_cardinal <- function(deg) {
+  deg <- deg %% 360
+  if (deg >= 337.5 || deg < 22.5) return("N")
+  else if (deg >= 22.5 && deg < 67.5) return("NE")
+  else if (deg >= 67.5 && deg < 112.5) return("E")
+  else if (deg >= 112.5 && deg < 157.5) return("SE")
+  else if (deg >= 157.5 && deg < 202.5) return("S")
+  else if (deg >= 202.5 && deg < 247.5) return("SW")
+  else if (deg >= 247.5 && deg < 292.5) return("W")
+  else if (deg >= 292.5 && deg < 337.5) return("NW")
+}
+
+cardinal_distribution <- table(sapply(df_test$WD[!is.na(df_test$WD)], assign_cardinal))
+print("Cardinal direction distribution for test date:")
+print(cardinal_distribution)
+
+
+#Figs
+library(dplyr)
+library(ggplot2)
+
+# Filter to one day (change date as needed)
+df_day <- df %>%
+  filter(as.Date(date) == as.Date("2017-07-21"))
+
+# Polar wind rose for that day
+ggplot(df_day, aes(x = WD)) +
+  geom_histogram(binwidth = 10, fill = "skyblue", color = "black") +
+  scale_x_continuous(breaks = seq(0, 360, 45), limits = c(0, 360)) +
+  coord_polar(start = -pi/16) +
+  labs(x = "Wind direction (degrees)", y = "Count",
+       title = "Wind Direction Frequency (2023-07-15)") +
+  theme_bw()
+
+#histogram for that day 
+ggplot(df_day, aes(x = WD)) +
+  geom_histogram(binwidth = 10, fill = "skyblue", color = "black") +
+  scale_x_continuous(breaks = seq(0, 360, 30), limits = c(0, 360)) +
+  labs(x = "Wind direction (degrees)", y = "Count",
+       title = "Distribution of Wind Directions") +
+  theme_bw()
+
+
+
+
+```
+
+#windrose check agreement 
+```{r}
+#Windrose to check using openair 
+
+# First, install and load required package if you haven't already
+#install.packages("openair")
+#install.packages("Rtools")
+library(openair)
+
+#Filter by date, if applicable 
+wind_data_hh <- df %>%
+            filter(as.Date(date) == as.Date("2017-07-21"))
+
+
+wind_data_hh <- wind_data_hh %>%
+  select(WS, WD) %>%
+   rename(ws = WS,
+         wd = WD)
+
+
+
+ # Basic wind rose
+ windRose(wind_data_hh,
+                  main = "Wind Direction HH by date")
+```
+
+#Once you've checked agreement, add to full dataset to use for analysis 
+
+```{r}
+# Step 1: Add cardinal direction labels to your daily_wind_cardinal dataset
+daily_wind_cardinal <- daily_wind_cardinal %>%
+  mutate(
+    WD_cardinal = case_when(
+      WD_modalfreq == 0 ~ "N",
+      WD_modalfreq == 45 ~ "NE", 
+      WD_modalfreq == 90 ~ "E",
+      WD_modalfreq == 135 ~ "SE",
+      WD_modalfreq == 180 ~ "S",
+      WD_modalfreq == 225 ~ "SW",
+      WD_modalfreq == 270 ~ "W",
+      WD_modalfreq == 315 ~ "NW",
+      TRUE ~ as.character(NA)  # Handle any unexpected values
+    )
+  )
+
+# Step 2: Rename columns for merging (to avoid conflicts with existing columns)
+daily_wind_cardinal <- daily_wind_cardinal %>%
+  rename(
+    WD_modal2 = WD_modalfreq,
+    WD_cardinal2 = WD_cardinal
+  )
+
+# Step 3: Merge with your df_avg dataset
+# Using left_join to keep all rows from df_avg and add wind data where available
+df_avg_updated <- df_avg %>%
+  left_join(daily_wind_cardinal %>% select(date, WD_modal2, WD_cardinal2), 
+            by = "date")
+
+# Alternative: If your date columns have different formats, you might need:
+df_avg$date <- as.Date(df_avg$date) 
+
+df_avg_updated <- df_avg %>%
+  left_join(daily_wind_cardinal %>%
+            select(date, WD_modal2, WD_cardinal2) %>%
+            mutate(date = as.Date(date)),
+            by = "date")
+
+# # Step 4: Check the results
+# print("Sample of merged dataset:")
+# print(head(df_avg_updated))
+# 
+# print("\nSummary of new wind columns:")
+# print(table(df_avg_updated$WD_cardinal2, useNA = "ifany"))
+# 
+# print("\nNumber of days with wind data:")
+# print(sum(!is.na(df_avg_updated$WD_modal2)))
+# 
+# print("\nNumber of total days in df_avg:")
+# print(nrow(df_avg_updated))
+# 
+# # Step 5: Optional - Create a summary to compare old vs new wind data
+# if("WD_modalfreq" %in% colnames(df_avg) && "WD_cardinal" %in% colnames(df_avg)) {
+#   print("\nComparison of old vs new wind classifications:")
+#   comparison <- df_avg_updated %>%
+#     filter(!is.na(WD_modalfreq) & !is.na(WD_modal2)) %>%
+#     select(date, WD_modalfreq, WD_cardinal, WD_modal2, WD_cardinal2) %>%
+#     mutate(
+#       degrees_changed = WD_modalfreq != WD_modal2,
+#       cardinal_changed = WD_cardinal != WD_cardinal2
+#     )
+#   
+#   print(paste("Days where degree classification changed:", sum(comparison$degrees_changed)))
+#   print(paste("Days where cardinal classification changed:", sum(comparison$cardinal_changed)))
+#   
+#   # Show a few examples of changes
+#   print("\nSample of changes:")
+#   print(head(comparison %>% filter(degrees_changed), 10))
+# }
+```
+
+
+
+#Save dataset 
+```{r}
+write.csv(x = df_avg_updated,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',quote = F,row.names = F)
+```
+
+
+
+
+
+
+
+
+
+
+
