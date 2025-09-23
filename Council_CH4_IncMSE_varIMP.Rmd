@@ -2,6 +2,7 @@
 title: "Council_IncMSE_CH4" #script for exploring deconstructed incMSE models for correlated variables 
 #Note: optimal OOB determined in BASE data prepping proj, script 1.5 "Optimizing RF ntree OOB"
 
+#Settled on using model 7 as final reduced model 
 
 output: html_document
 date: "2025-09-04"
