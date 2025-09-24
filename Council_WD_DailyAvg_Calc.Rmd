@@ -1,5 +1,7 @@
 ---
-title: "Council_WD_DailyAvg_Calc"
+title: "Council_WD_DailyAvg_Calc" #Adding in prevailing winds of the day based on WD frequency count so it can be added to the df_avg (daily averaged dataset)
+#Included the first method for reference, scroll down to new method which uses the 22.5 degree offset to better cover the binned cardinal directions 
+#In df_avg dataset, this will have a columns for the original way and WD_modal2 & WD_cardinal2 are from the new, adjusted way 
 output: html_document
 date: "2025-09-23"
 ---
@@ -10,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 #Notes on site: Wind direction primarily blows from NW, except for Dec - Mar, when it primarily blows from SE direction. The site is largely tussock tundra but to the south there is thermokarst 
 
-#**TO DO: now redo all the stats with the WD_modal **
+
 
 ```{r, include=FALSE}
 rm(list = ls())
@@ -131,8 +133,8 @@ ggplot(df_day, aes(x = WD)) +
   theme_bw()
 
 ```
-# *** CORRECTED WAY ***
-#New way, help from Claude, slightly offset binning to capture the cardinal directions better 
+# *** ADJUSTED METHOD ***
+#New way, help from Claude, slightly offset cardinal binning by 22.5 degrees to better capture the cardinal directions
 
 
 ```{r}
@@ -420,15 +422,5 @@ df_avg_updated <- df_avg %>%
 ```{r}
 write.csv(x = df_avg_updated,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',quote = F,row.names = F)
 ```
-
-
-
-
-
-
-
-
-
-
 
 
