@@ -71,7 +71,11 @@ ggplot(data = df,aes(TIMESTAMP_END,FC_F))+
  #####actually separating out FC and FCH4 is not necessary - can just join wind data to df_avg which already used timeAverage to get variable averages
  
 #### Modal / frequency approach to determining prevailing wind direction for each day 
+
+####Important to note that the below method will skew results. For example, it would set N as 0 - 45, but 45 is NE, and it would set NE as 45 - 90, but 90 is E, and so on. See below "Adjusted Method" for using the 22.5 degree offset to better capture binned cardinal directions* 
 ```{r}
+#coding help from ChatGPT
+
 #function for getting modal wind
 get_modal_wind <- function(degrees) {
   # Create bins for cardinal/intercardinal directions
@@ -396,7 +400,7 @@ df_avg_updated <- df_avg %>%
 # print("\nNumber of total days in df_avg:")
 # print(nrow(df_avg_updated))
 # 
-# #  Optional - Create a summary to compare old vs new wind data
+#  Optional - Create a summary to compare old vs new wind data
 # if("WD_modalfreq" %in% colnames(df_avg) && "WD_cardinal" %in% colnames(df_avg)) {
 #   print("\nComparison of old vs new wind classifications:")
 #   comparison <- df_avg_updated %>%
@@ -406,10 +410,10 @@ df_avg_updated <- df_avg %>%
 #       degrees_changed = WD_modalfreq != WD_modal2,
 #       cardinal_changed = WD_cardinal != WD_cardinal2
 #     )
-#   
+# 
 #   print(paste("Days where degree classification changed:", sum(comparison$degrees_changed)))
 #   print(paste("Days where cardinal classification changed:", sum(comparison$cardinal_changed)))
-#   
+# #   
 #   # Show a few examples of changes
 #   print("\nSample of changes:")
 #   print(head(comparison %>% filter(degrees_changed), 10))
