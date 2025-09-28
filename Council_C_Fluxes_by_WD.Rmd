@@ -819,8 +819,11 @@ CH4_by_WD <- ggplot(df_avg_FCH4, aes(x = WD_cardinal2, y = FCH4 * 1/1000, fill =
 
 CH4_by_WD
 
-ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjCH4_by_WD_seasons.png", CH4_by_WD, 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjCH4_by_WD_seasons.png", CH4_by_WD,
        width = 10, height = 7, dpi = 600)
+
+
+
 ```
 
 #CO2 flux by WD
@@ -1117,14 +1120,59 @@ ggplot(df_avg_FC %>% filter(complete.cases(LE)), aes(x = WD_cardinal2, y = LE, f
     x = expression("Wind Direction"),
     y = expression("LE Latent Heat Flux"),
     title = expression("Daily Average LE latentHeatFlux" ~ "by Wind Direction "))
+
+
+#SWC3 - tussock soil moisture 
+ggplot(df_avg_FC %>% filter(complete.cases(SWC_3_1_1)), aes(x = WD_cardinal2, y = SWC_3_1_1, fill = season)) +
+  geom_boxplot()+
+     stat_summary(fun=mean, geom="point", shape=23, size=4)+
+  geom_hline(yintercept = 0)+
+  facet_wrap(~season)+
+  theme_bw() +
+    scale_x_discrete(
+    limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))+
+  theme(
+        # bold the axis titles
+    axis.title   = element_text(face = "bold"),
+    # bold the axis tick labels
+    axis.text    = element_text(face = "bold"),
+    plot.title = element_text(face="bold")) +
+    labs(
+    x = expression("Wind Direction"),
+    y = expression("SWC%"),
+    title = expression("Daily Average SWC3 tussock" ~ "by Wind Direction "))
+
+
+#TS3 - tussock soil temp 
+ggplot(df_avg_FC %>% filter(complete.cases(TS_3_1_1)), aes(x = WD_cardinal2, y = TS_3_1_1, fill = season)) +
+  geom_boxplot()+
+     stat_summary(fun=mean, geom="point", shape=23, size=4)+
+  geom_hline(yintercept = 0)+
+  facet_wrap(~season)+
+  theme_bw() +
+    scale_x_discrete(
+    limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))+
+  theme(
+        # bold the axis titles
+    axis.title   = element_text(face = "bold"),
+    # bold the axis tick labels
+    axis.text    = element_text(face = "bold"),
+    plot.title = element_text(face="bold")) +
+    labs(
+    x = expression("Wind Direction"),
+    y = expression("Soil temp"),
+    title = expression("Daily Average soil temp tussock" ~ "by Wind Direction "))
 ```
 
+# *****************************************************************************
 
+#***STATS - looking at FC and FCH4 by wind direction within each season 
 
-# STATS - looking at FC and FCH4 by wind direction within each season 
+####streamlines stats assumptions tests from Claude - helps test normality, homogeneity of variance, and whether to use parametric or non-parametric statistical analyses 
 
 ```{r}
-#install.packages(c("car", "nortest", "MASS", "quantreg"))
+install.packages(c("car", "nortest", "MASS", "quantreg", "Rtools"))
+
 # Systematic analysis of flux differences by wind direction
 library(dplyr)
 library(ggplot2)
@@ -1132,13 +1180,9 @@ library(car)        # For Levene's test
 library(nortest)    # For normality tests
 library(MASS)       # For robust regression
 library(quantreg)   # For quantile regression
-#library(kruskal.test) # Built-in, but loading for clarity
 
-# Prepare data for analysis - using corrected wind directions
-df_analysis <- df_avg2 %>%
-  filter(!is.na(WD_cardinal2) & !is.na(FCH4) & !is.na(FC)) %>%
-  # Remove extreme outliers that might skew results
-  filter(!is.na(season)) %>%
+# Use the user's pre-cleaned datasets
+df_analysis_FCH4 <- df_avg_FCH4 %>%
   mutate(
     # Convert to more manageable units
     FCH4_umol = FCH4 / 1000,  # nmol to umol
@@ -1147,10 +1191,20 @@ df_analysis <- df_avg2 %>%
     season = factor(season)
   )
 
+df_analysis_FC <- df_avg_FC %>%
+  mutate(
+    # Create factors for analysis
+    WD_cardinal2 = factor(WD_cardinal2, levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")),
+    season = factor(season)
+  )
+
 print("=== DATA SUMMARY ===")
-print(paste("Total observations:", nrow(df_analysis)))
-print("Observations by season and wind direction:")
-print(table(df_analysis$season, df_analysis$WD_cardinal2))
+print(paste("FCH4 observations:", nrow(df_analysis_FCH4)))
+print(paste("FC observations:", nrow(df_analysis_FC)))
+print("\nFCH4 observations by season and wind direction:")
+print(table(df_analysis_FCH4$season, df_analysis_FCH4$WD_cardinal2))
+print("\nFC observations by season and wind direction:")
+print(table(df_analysis_FC$season, df_analysis_FC$WD_cardinal2))
 
 # Function to test assumptions for linear models
 test_assumptions <- function(data, response_var, predictor, season_name) {
@@ -1167,7 +1221,7 @@ test_assumptions <- function(data, response_var, predictor, season_name) {
   
   if(length(y) < 20) {
     cat("WARNING: Very few observations (", length(y), ") for reliable testing\n")
-    return(list(normality = FALSE, homogeneity = FALSE, independence = TRUE))
+    return(list(normality = FALSE, homogeneity = FALSE, independence = TRUE, suitable_for_parametric = FALSE))
   }
   
   # 1. NORMALITY TESTS
@@ -1188,21 +1242,38 @@ test_assumptions <- function(data, response_var, predictor, season_name) {
   cat("Anderson-Darling test p-value:", format.pval(ad_result$p.value), "\n")
   normality_ad <- ad_result$p.value > 0.05
   
-  # Visual check with Q-Q plot
-  cat("Creating Q-Q plot for visual inspection...\n")
-  
   # 2. HOMOGENEITY OF VARIANCE
   cat("\n2. HOMOGENEITY OF VARIANCE TESTS:\n")
   
-  # Levene's test
-  levene_result <- car::leveneTest(y ~ x)
-  cat("Levene's test p-value:", format.pval(levene_result$`Pr(>F)`[1]), "\n")
-  homogeneity_levene <- levene_result$`Pr(>F)`[1] > 0.05
+  # Check if we have enough groups with sufficient observations
+  group_sizes <- table(x)
+  groups_with_enough_data <- sum(group_sizes >= 2)
   
-  # Bartlett's test (sensitive to non-normality)
-  bartlett_result <- bartlett.test(y ~ x)
-  cat("Bartlett's test p-value:", format.pval(bartlett_result$p.value), "\n")
-  homogeneity_bartlett <- bartlett_result$p.value > 0.05
+  if(groups_with_enough_data < 2) {
+    cat("Insufficient groups with ≥2 observations for variance testing\n")
+    homogeneity_levene <- FALSE
+    homogeneity_bartlett <- FALSE
+  } else {
+    # Levene's test (more robust to non-normality)
+    levene_result <- car::leveneTest(y ~ x)
+    cat("Levene's test p-value:", format.pval(levene_result$`Pr(>F)`[1]), "\n")
+    homogeneity_levene <- levene_result$`Pr(>F)`[1] > 0.05
+    
+    # Only run Bartlett's test if we have enough groups
+    if(groups_with_enough_data >= 3 && all(group_sizes[group_sizes > 0] >= 2)) {
+      tryCatch({
+        bartlett_result <- bartlett.test(y ~ x)
+        cat("Bartlett's test p-value:", format.pval(bartlett_result$p.value), "\n")
+        homogeneity_bartlett <- bartlett_result$p.value > 0.05
+      }, error = function(e) {
+        cat("Bartlett's test failed:", e$message, "\n")
+        homogeneity_bartlett <<- FALSE
+      })
+    } else {
+      cat("Bartlett's test: Insufficient groups with ≥2 observations\n")
+      homogeneity_bartlett <- FALSE
+    }
+  }
   
   # 3. INDEPENDENCE (assume temporal independence for now)
   independence <- TRUE
@@ -1276,45 +1347,98 @@ run_statistical_tests <- function(data, response_var, predictor, season_name, as
   # ROBUST REGRESSION (always run as alternative)
   cat("\nRunning ROBUST REGRESSION:\n")
   
-  # Convert categorical predictor to dummy variables for robust regression
+  # Check if we have enough wind direction levels with sufficient data
+  wind_counts <- table(clean_data[[predictor]])
+  usable_levels <- names(wind_counts[wind_counts >= 2])
+  
+  if(length(usable_levels) < 2) {
+    cat("Insufficient wind direction levels for robust regression\n")
+    return(results)
+  }
+  
+  # Filter to only usable wind direction levels
   model_data <- clean_data %>%
-    mutate(!!sym(predictor) := relevel(!!sym(predictor), ref = "N")) # Use N as reference
+    filter(!!sym(predictor) %in% usable_levels) %>%
+    mutate(!!sym(predictor) := factor(!!sym(predictor), levels = usable_levels))
+  
+  # Choose reference level (prefer N if available, otherwise first level)
+  if("N" %in% usable_levels) {
+    model_data <- model_data %>%
+      mutate(!!sym(predictor) := relevel(!!sym(predictor), ref = "N"))
+  }
+  
+  cat("Using wind directions:", paste(usable_levels, collapse = ", "), "\n")
   
   # Robust regression using rlm (M-estimator)
   robust_formula <- as.formula(paste(response_var, "~", predictor))
-  robust_model <- MASS::rlm(robust_formula, data = model_data, method = "MM")
-  results$robust_summary <- summary(robust_model)
   
-  cat("Robust regression completed - coefficients:\n")
-  print(coef(robust_model))
+  tryCatch({
+    robust_model <- MASS::rlm(robust_formula, data = model_data, method = "MM")
+    results$robust_summary <- summary(robust_model)
+    cat("Robust regression completed - coefficients:\n")
+    print(coef(robust_model))
+  }, error = function(e) {
+    cat("Robust regression failed:", e$message, "\n")
+    cat("This may be due to insufficient data or collinearity\n")
+  })
   
   # Quantile regression (median regression) as additional robust method
-  median_model <- quantreg::rq(robust_formula, data = model_data, tau = 0.5)
-  results$quantile_summary <- summary(median_model)
-  cat("Median regression completed\n")
+  tryCatch({
+    median_model <- quantreg::rq(robust_formula, data = model_data, tau = 0.5)
+    results$quantile_summary <- summary(median_model)
+    cat("Median regression completed\n")
+  }, error = function(e) {
+    cat("Quantile regression failed:", e$message, "\n")
+  })
   
   return(results)
 }
 
 # Main analysis loop
-print("\n" %+% "=" %+% rep("=", 50) %+% "=")
+print("\n=====================================")
 print("STARTING COMPREHENSIVE FLUX ANALYSIS")
-print("=" %+% rep("=", 50) %+% "=")
+print("=====================================")
 
-# Test each season and response variable combination
-seasons <- unique(df_analysis$season)
-response_vars <- c("FCH4_umol", "FC")
+# Create analysis plan - separate datasets for each response variable
+analysis_plan <- list(
+  FCH4 = list(data = df_analysis_FCH4, response = "FCH4_umol"),
+  FC = list(data = df_analysis_FC, response = "FC")
+)
+
 all_results <- list()
 
-for(season_name in seasons) {
-  season_data <- df_analysis %>% filter(season == season_name)
+for(flux_type in names(analysis_plan)) {
+  current_data <- analysis_plan[[flux_type]]$data
+  response_var <- analysis_plan[[flux_type]]$response
   
-  cat("\n" %+% rep("=", 60) %+% "\n")
-  cat("ANALYZING SEASON:", toupper(season_name), "\n")
-  cat("Sample size:", nrow(season_data), "\n")
-  cat(rep("=", 60) %+% "\n")
+  cat("\n#######################################\n")
+  cat("ANALYZING", flux_type, "FLUXES\n")
+  cat("#######################################\n")
   
-  for(response_var in response_vars) {
+  seasons <- unique(current_data$season)
+  
+  for(season_name in seasons) {
+    season_data <- current_data %>% filter(season == season_name)
+    
+    cat("\n------------------------------------\n")
+    cat("SEASON:", toupper(season_name), "- FLUX:", flux_type, "\n")
+    cat("Sample size:", nrow(season_data), "\n")
+    cat("------------------------------------\n")
+    
+    # Check if we have enough data for analysis
+    wind_counts <- table(season_data$WD_cardinal2)
+    usable_directions <- sum(wind_counts > 0)
+    
+    if(usable_directions < 2) {
+      cat("SKIPPING: Insufficient wind directions with data\n")
+      next
+    }
+    
+    if(nrow(season_data) < 10) {
+      cat("SKIPPING: Insufficient total observations\n")
+      next
+    }
+    
     # Test assumptions
     assumptions <- test_assumptions(season_data, response_var, "WD_cardinal2", season_name)
     
@@ -1322,116 +1446,1306 @@ for(season_name in seasons) {
     test_results <- run_statistical_tests(season_data, response_var, "WD_cardinal2", season_name, assumptions)
     
     # Store results
-    all_results[[paste(season_name, response_var, sep = "_")]] <- list(
+    result_key <- paste(flux_type, season_name, sep = "_")
+    all_results[[result_key]] <- list(
+      flux_type = flux_type,
+      season = season_name,
       assumptions = assumptions,
-      tests = test_results
+      tests = test_results,
+      sample_size = nrow(season_data),
+      wind_directions = usable_directions
     )
   }
 }
 
 # Summary of recommendations
-cat("\n" %+% rep("=", 60) %+% "\n")
+cat("\n=====================================\n")
 cat("FINAL RECOMMENDATIONS:\n")
-cat(rep("=", 60) %+% "\n")
+cat("=====================================\n")
 
 for(result_name in names(all_results)) {
   result <- all_results[[result_name]]
   cat("\n", result_name, ":\n")
+  cat("  Sample size:", result$sample_size, "\n")
+  cat("  Wind directions with data:", result$wind_directions, "\n")
   
   if(!is.null(result$assumptions)) {
     if(result$assumptions$suitable_for_parametric) {
       cat("  Recommended approach: ANOVA + Tukey HSD\n")
     } else {
       cat("  Recommended approach: Kruskal-Wallis + robust regression\n")
+      if(!result$assumptions$normality) cat("    - Failed normality assumption\n")
+      if(!result$assumptions$homogeneity) cat("    - Failed homogeneity assumption\n")
     }
+  }
+  
+  # Add significance results if available
+  if(!is.null(result$tests)) {
+    if(!is.null(result$tests$anova_p)) {
+      significance <- ifelse(result$tests$anova_p < 0.05, "SIGNIFICANT", "NOT SIGNIFICANT")
+      cat("  ANOVA result:", significance, "(p =", format.pval(result$tests$anova_p), ")\n")
+    }
+    if(!is.null(result$tests$kruskal_p)) {
+      significance <- ifelse(result$tests$kruskal_p < 0.05, "SIGNIFICANT", "NOT SIGNIFICANT")
+      cat("  Kruskal-Wallis result:", significance, "(p =", format.pval(result$tests$kruskal_p), ")\n")
+    }
+  }
+}
+
+#summary of WD by season for each C flux
+# [1] "\nFCH4 observations by season and wind direction:"
+#                  
+#                     N  NE   E  SE   S  SW   W  NW
+#   Fall Senescence  15   3   1   4   2   4   0  50
+#   Growing Season   58  12   0  29  74  16   1 149
+#   Winter           30  14   0  15   2   2   2  96
+# [1] "\nFC observations by season and wind direction:"
+#                  
+#                     N  NE   E  SE   S  SW   W  NW
+#   Fall Senescence  24   3   6  15   7   4   2  91
+#   Growing Season   69  13   3  47 116  21   1 176
+#   Winter           26  15   1  12   6   2   3 112
+
+```
+####Dunn test to show which WD are diff
+
+#####since we are doing multiple comparisons, an adjustment might be warranted (like bonferroni) that adjusts for the number of comparisons being made. Bonferroni is most strict / conservative, holm (sequential bonferroni) is less conservative but still more strict, Benjamini-Hochberg (BH) is less conservative and better for exploratory research whereas bonferroni and holm are more used to confirm findings under very stringent conditions that can't tolerate any false positives
+
+#Bonferroni correction - strict method, just trying this to see. See BH method below, which I will report for my analysis 
+```{r}
+install.packages("FSA")
+library(FSA)  # For Dunn's test
+
+# For significant results, run Dunn's post-hoc test
+
+# Example for FCH4 Growing Season:
+# growing_fc <- df_avg_FC %>% filter(season == "Growing Season")
+# 
+# dunn_result <- dunnTest(FC ~ WD_cardinal2,
+#                        data = growing_fc,
+#                        method = "bonferroni")  # Adjust for multiple comparisons
+# print(dunn_result)
+
+
+#FC - all seasons showed sig diffs per the Kruskal-wallis tests 
+
+#Growing Season 
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(df_avg_FC, season == "Growing Season"),
+                       method = "bonferroni")  # Adjust for multiple comparisons
+print(dunn_result)
+
+
+#Fall
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(df_avg_FC, season == "Fall Senescence"),
+                       method = "bonferroni")  # Adjust for multiple comparisons
+print(dunn_result)
+
+#Winter
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(df_avg_FC, season == "Winter"),
+                       method = "bonferroni")  # Adjust for multiple comparisons
+print(dunn_result)
+
+#------------ FCH4 -----------------
+
+#only growing season showed sig diffs per kruskal-wallis test
+
+#Growing Season 
+dunn_result <- dunnTest(FCH4 ~ WD_cardinal2, 
+                       data = subset(df_avg_FCH4, season == "Growing Season"),
+                       method = "bonferroni")  # Adjust for multiple comparisons
+print(dunn_result)
+
+
+
+
+
+
+```
+
+#BH correction 
+```{r}
+library(FSA)
+
+# For all your significant Kruskal-Wallis results:
+
+#FC - all seasons showed sig diffs per the Kruskal-wallis tests 
+
+#Growing Season 
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(df_avg_FC, season == "Growing Season"),
+                       method = "bh")  # Adjust for multiple comparisons
+print(dunn_result) #shows sig diff in E - S, and NW - S; undadj p shows sig diffs between E wind and various others 
+
+#Important to note that there are 3 days with prevailing E winds in growing season, so this likely is driven by outliers / has poor statistical power 
+
+
+
+#Fall
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(df_avg_FC, season == "Fall Senescence"),
+                       method = "bh")  # Adjust for multiple comparisons
+print(dunn_result) #found no sig diffs
+
+#Winter
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(df_avg_FC, season == "Winter"),
+                       method = "bh")  # Adjust for multiple comparisons
+print(dunn_result)
+
+#------------ FCH4 -----------------
+
+
+#Growing Season 
+dunn_result <- dunnTest(FCH4 ~ WD_cardinal2, 
+                       data = subset(df_avg_FCH4, season == "Growing Season"),
+                       method = "bh")  # Adjust for multiple comparisons
+print(dunn_result)
+
+
+
+```
+#Summary stats of E winds due to n = 3 during growing season, which is too small to trust statistically 
+
+```{r}
+# Instead of statistical tests, show descriptive summaries
+east_summary <- growing_fc %>% 
+  filter(WD_cardinal2 == "E") %>%
+  summarise(
+    n_days = n(),
+    median_FC = median(FC),
+    range = paste(round(min(FC), 3), "to", round(max(FC), 3)),
+    dates = paste(date, collapse = ", ")
+  )
+east_summary
+
+
+# Method 1: Use dplyr:: to specify which select function
+east_details <- growing_fc %>% 
+  filter(WD_cardinal2 == "E") %>%
+  dplyr::select(date, FC, FC_night, G_1_1_1, TA, TS_3_1_1, NETRAD, SW_IN, H, LE, PPFD_IN, SWC_3_1_1) %>%
+  arrange(date)
+
+print("East wind days with FC values:")
+print(east_details)
+```
+
+
+
+#Holm correction 
+```{r}
+library(FSA)
+
+# For all your significant Kruskal-Wallis results:
+
+#FC - all seasons showed sig diffs per the Kruskal-wallis tests 
+
+#Growing Season 
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(df_avg_FC, season == "Growing Season"),
+                       method = "holm")  # Adjust for multiple comparisons
+print(dunn_result)
+
+#Fall
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(df_avg_FC, season == "Fall Senescence"),
+                       method = "holm")  # Adjust for multiple comparisons
+print(dunn_result)
+
+#Winter
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(df_avg_FC, season == "Winter"),
+                       method = "holm")  # Adjust for multiple comparisons
+print(dunn_result)
+
+#------------ FCH4 -----------------
+
+
+#Growing Season 
+dunn_result <- dunnTest(FCH4 ~ WD_cardinal2, 
+                       data = subset(df_avg_FCH4, season == "Growing Season"),
+                       method = "holm")  # Adjust for multiple comparisons
+print(dunn_result)
+
+
+
+```
+
+
+
+
+
+
+#Verifying the above output from Claude's code with stepwise tests for normality and homogeneity of variance 
+
+#Test normality of FC and FCH4 using shapiro-wilkes and QQ plots 
+```{r}
+
+# Test normality by season - this is the most relevant as I'm asking if fluxes vary by WD within a season 
+df_avg_FC %>%
+  group_by(season) %>%
+  summarize(
+    shapiro_p = shapiro.test(FC)$p.value,
+    normal = ifelse(shapiro_p > 0.05, "Yes", "No")
+          )
+#growing season yes, other seasons no 
+
+
+#Test normality of all FC data 
+df_avg_FC %>%
+  summarize(
+    shapiro_p = shapiro.test(FC)$p.value,
+    normal = ifelse(shapiro_p > 0.05, "Yes", "No")
+      )
+#overall = no 
+
+# QQ plots for each season 
+qqnorm(df_avg_FC$FC[df_avg_FC$season == "Growing Season"]) #looks good!
+qqline(df_avg_FC$FC[df_avg_FC$season == "Growing Season"], col = "red")
+
+qqnorm(df_avg_FC$FC[df_avg_FC$season == "Winter"]) #looks ok 
+qqline(df_avg_FC$FC[df_avg_FC$season == "Winter"], col = "red")
+
+qqnorm(df_avg_FC$FC[df_avg_FC$season == "Fall Senescence"]) #looks ok, bit of spread one one tail
+qqline(df_avg_FC$FC[df_avg_FC$season == "Fall Senescence"], col = "red")
+
+
+#---------------------------------------------------------------
+
+#for FCH4 have to filter out E because there are no E-prevailing wind days in df_avg
+
+#Test for normality by season 
+df_avg_FCH4 %>%
+  group_by(season) %>%
+  filter(n() >= 3) %>%  # Skip groups too small for testing
+  summarize(
+    n_obs = n(),
+    shapiro_p = shapiro.test(FCH4)$p.value,
+    normal = ifelse(shapiro_p > 0.05, "Yes", "No"),
+    .groups = 'drop'
+  )
+#all no 
+
+
+#Test normality of all FCH4 data 
+df_avg_FCH4 %>%
+  summarize(
+    shapiro_p = shapiro.test(FCH4)$p.value,
+    normal = ifelse(shapiro_p > 0.05, "Yes", "No")
+      )
+#overall = no 
+
+# Q-Q plot of full dataset 
+qqnorm(df_avg_FCH4$FCH4)
+qqline(df_avg_FCH4$FCH4, col = "red")
+
+# One-liner version
+qqnorm(df_avg_FCH4$FCH4[df_avg_FCH4$season == "Growing Season"]) #meh, spread in tails 
+qqline(df_avg_FCH4$FCH4[df_avg_FCH4$season == "Growing Season"], col = "red")
+
+qqnorm(df_avg_FCH4$FCH4[df_avg_FCH4$season == "Winter"]) #kind of U shape
+qqline(df_avg_FCH4$FCH4[df_avg_FCH4$season == "Winter"], col = "red")
+
+qqnorm(df_avg_FCH4$FCH4[df_avg_FCH4$season == "Fall Senescence"]) #looks funky
+qqline(df_avg_FCH4$FCH4[df_avg_FCH4$season == "Fall Senescence"], col = "red")
+```
+#Test for homogeneity of variance 
+```{r}
+#levene test among seasons / whole dataset
+leveneTest(FC ~ season, data = df_avg_FC) # p<0.001, fail
+leveneTest(FCH4 ~ season, data = df_avg_FCH4) #p = 0.61, pass 
+
+#levene test of WD by season - FC
+leveneTest(FC ~ WD_cardinal2, data = subset(df_avg_FC, season == "Growing Season")) #fail
+leveneTest(FC ~ WD_cardinal2, data = subset(df_avg_FC, season == "Winter")) #ok
+leveneTest(FC ~ WD_cardinal2, data = subset(df_avg_FC, season == "Fall Senescence")) #fail
+
+
+#levene test of WD by season - FCH4
+leveneTest(FCH4 ~ WD_cardinal2, data = subset(df_avg_FCH4, season == "Growing Season")) #fail
+leveneTest(FCH4 ~ WD_cardinal2, data = subset(df_avg_FCH4, season == "Winter")) #ok
+leveneTest(FCH4 ~ WD_cardinal2, data = subset(df_avg_FCH4, season == "Fall Senescence")) #ok
+
+
+
+```
+####Since all fail either one or both assumptions, use non-parametric stats tests 
+
+#Kruskal- wallis test (used for when there are more than 3 levels, non-parametric ANOVA)
+#but this is pre-filtering out any WD with n<5, so this changes below, where we do filter for it 
+```{r}
+# FC
+kruskal.test(FC ~ WD_cardinal2, data = subset(df_avg_FC, season == "Growing Season")) 
+#p-value = 0.00137 *SIG
+kruskal.test(FC ~ WD_cardinal2, data = subset(df_avg_FC, season == "Winter")) 
+# p-value = 1.304e-05 *SIG
+kruskal.test(FC ~ WD_cardinal2, data = subset(df_avg_FC, season == "Fall Senescence")) 
+# p-value = 0.009111 *SIG
+
+
+#FCH4
+kruskal.test(FCH4 ~ WD_cardinal2, data = subset(df_avg_FCH4, season == "Growing Season")) 
+#p-value = 1.361e-07 *SIG
+kruskal.test(FCH4 ~ WD_cardinal2, data = subset(df_avg_FCH4, season == "Winter")) 
+#p-value = 0.1617 not sig 
+kruskal.test(FCH4 ~ WD_cardinal2, data = subset(df_avg_FCH4, season == "Fall Senescence")) 
+#p-value = 0.417 - not sig 
+
+
+```
+# ** Filtering out n < 5 from statistical analysis of wd C fluxes
+
+#### Due to the very low sample size of fluxes from some wind directions within a season, generate a table of descriptive statistics & then compare WD with a big enough sample size within each season to avid skew 
+
+#streamlined code from Claude
+
+```{r}
+# 1. CREATE COMPREHENSIVE SUMMARY TABLE
+library(dplyr)
+library(knitr)
+library(FSA)
+
+# Function to create summary statistics table
+create_flux_summary <- function(fch4_data, fc_data, min_n = 5) {
+  
+  cat("DEBUG: FCH4 seasons available:", paste(unique(fch4_data$season), collapse = ", "), "\n")
+  cat("DEBUG: FC seasons available:", paste(unique(fc_data$season), collapse = ", "), "\n")
+  
+  # FCH4 summary
+  fch4_summary <- fch4_data %>%
+    group_by(season, WD_cardinal2) %>%
+    summarise(
+      n_obs_FCH4 = n(),
+      FCH4_mean = round(mean(FCH4, na.rm = TRUE), 3),
+      FCH4_se = round(sd(FCH4, na.rm = TRUE) / sqrt(n()), 3),
+      .groups = 'drop'
+    ) %>%
+    mutate(adequate_n_FCH4 = ifelse(n_obs_FCH4 >= min_n, "Yes", "No"))
+  
+  # FC summary  
+  fc_summary <- fc_data %>%
+    group_by(season, WD_cardinal2) %>%
+    summarise(
+      n_obs_FC = n(),
+      FC_mean = round(mean(FC, na.rm = TRUE), 3),
+      FC_se = round(sd(FC, na.rm = TRUE) / sqrt(n()), 3),
+      .groups = 'drop'
+    ) %>%
+    mutate(adequate_n_FC = ifelse(n_obs_FC >= min_n, "Yes", "No"))
+  
+  # Merge summaries
+  combined_summary <- fch4_summary %>%
+    full_join(fc_summary, by = c("season", "WD_cardinal2")) %>%
+    mutate(
+      n_obs_FCH4 = coalesce(n_obs_FCH4, 0),
+      n_obs_FC = coalesce(n_obs_FC, 0),
+      # Fix NA values for adequacy when n_obs = 0
+      adequate_n_FCH4 = ifelse(n_obs_FCH4 >= min_n, "Yes", "No"),
+      adequate_n_FC = ifelse(n_obs_FC >= min_n, "Yes", "No")
+    ) %>%
+    arrange(season, WD_cardinal2)
+  
+  return(combined_summary)
+}
+
+# Create the summary table
+summary_table <- create_flux_summary(df_avg_FCH4, df_avg_FC, min_n = 5)
+
+print("=== COMPREHENSIVE FLUX SUMMARY BY SEASON AND WIND DIRECTION ===")
+print("(Minimum n = 5 for adequate statistical analysis)")
+
+# Check if summary table was created properly
+cat("DEBUG: Summary table dimensions:", nrow(summary_table), "rows x", ncol(summary_table), "cols\n")
+cat("DEBUG: Summary table columns:", paste(colnames(summary_table), collapse = ", "), "\n")
+cat("DEBUG: Summary table seasons:", paste(unique(summary_table$season), collapse = ", "), "\n")
+
+# Print separately by season for clarity
+seasons <- unique(summary_table$season)
+for(season_name in seasons) {
+  cat("\n--- ", toupper(season_name), " ---\n")
+  season_summary <- summary_table %>% filter(season == season_name)
+  
+  cat("DEBUG: Season summary rows for", season_name, ":", nrow(season_summary), "\n")
+  
+  if(nrow(season_summary) > 0) {
+    # Use base R selection to avoid conflicts
+    key_cols <- c("WD_cardinal2", "n_obs_FCH4", "FCH4_mean", "FCH4_se", "adequate_n_FCH4", 
+                  "n_obs_FC", "FC_mean", "FC_se", "adequate_n_FC")
+    
+    # Check which columns actually exist
+    available_cols <- key_cols[key_cols %in% colnames(season_summary)]
+    
+    if(length(available_cols) > 0) {
+      display_cols <- season_summary[, available_cols, drop = FALSE]
+      
+      # Create separate tables for FCH4 and FC
+      cat("\n** FCH4 SUMMARY **\n")
+      cat(sprintf("%-8s %6s %12s %8s\n", "Wind", "n", "Mean±SE", "Adequate"))
+      cat(rep("-", 40), "\n")
+      
+      for(i in 1:nrow(display_cols)) {
+        if(display_cols$n_obs_FCH4[i] > 0) {
+          mean_se <- paste0(display_cols$FCH4_mean[i], "±", display_cols$FCH4_se[i])
+        } else {
+          mean_se <- "No data"
+        }
+        cat(sprintf("%-8s %6d %12s %8s\n",
+                   display_cols$WD_cardinal2[i],
+                   display_cols$n_obs_FCH4[i],
+                   mean_se,
+                   display_cols$adequate_n_FCH4[i]))
+      }
+      
+      cat("\n** FC SUMMARY **\n")
+      cat(sprintf("%-8s %6s %12s %8s\n", "Wind", "n", "Mean±SE", "Adequate"))
+      cat(rep("-", 40), "\n")
+      
+      for(i in 1:nrow(display_cols)) {
+        if(display_cols$n_obs_FC[i] > 0) {
+          mean_se <- paste0(display_cols$FC_mean[i], "±", display_cols$FC_se[i])
+        } else {
+          mean_se <- "No data"
+        }
+        cat(sprintf("%-8s %6d %12s %8s\n",
+                   display_cols$WD_cardinal2[i],
+                   display_cols$n_obs_FC[i],
+                   mean_se,
+                   display_cols$adequate_n_FC[i]))
+      }
+      cat("\n")
+    } else {
+      # Fallback: print all columns
+      cat("Fallback: printing all columns\n")
+      print(season_summary)
+    }
+  } else {
+    cat("No data found for", season_name, "\n")
+  }
+}
+
+# 2. REWORK STATISTICS WITH SAMPLE SIZE FILTERING
+
+# Function to run analysis with sample size filtering
+run_filtered_analysis <- function(data, response_var, season_name, min_n = 5) {
+  
+  cat("\n", rep("=", 60), "\n")
+  cat("ANALYSIS:", toupper(response_var), "- SEASON:", toupper(season_name), "\n")
+  cat(rep("=", 60), "\n")
+  
+  # Check sample sizes
+  wind_counts <- table(data$WD_cardinal2)
+  adequate_directions <- names(wind_counts[wind_counts >= min_n])
+  excluded_directions <- names(wind_counts[wind_counts < min_n])
+  
+  # Also check for wind directions with zero observations (not in table)
+  all_possible_directions <- levels(data$WD_cardinal2)
+  zero_directions <- all_possible_directions[!all_possible_directions %in% names(wind_counts)]
+  
+  # Combine all excluded directions
+  all_excluded <- c(excluded_directions, zero_directions)
+  
+  cat("Wind directions with adequate sample size (n ≥", min_n, "):", 
+      paste(adequate_directions, collapse = ", "), "\n")
+  
+  if(length(all_excluded) > 0) {
+    excluded_info <- character(0)
+    for(dir in all_excluded) {
+      if(dir %in% names(wind_counts)) {
+        excluded_info <- c(excluded_info, paste0(dir, "(n=", wind_counts[dir], ")"))
+      } else {
+        excluded_info <- c(excluded_info, paste0(dir, "(n=0)"))
+      }
+    }
+    cat("EXCLUDED wind directions (insufficient n):", 
+        paste(excluded_info, collapse = ", "), "\n")
+  }
+  
+  if(length(adequate_directions) < 2) {
+    cat("INSUFFICIENT WIND DIRECTIONS FOR ANALYSIS\n")
+    return(NULL)
+  }
+  
+  # Filter data to adequate directions only
+  filtered_data <- data %>%
+    filter(WD_cardinal2 %in% adequate_directions) %>%
+    mutate(WD_cardinal2 = factor(WD_cardinal2, levels = adequate_directions))
+  
+  cat("Filtered sample size:", nrow(filtered_data), "\n")
+  
+  # Run Kruskal-Wallis test
+  if(nrow(filtered_data) >= 10) {
+    kw_formula <- as.formula(paste(response_var, "~ WD_cardinal2"))
+    kw_result <- kruskal.test(kw_formula, data = filtered_data)
+    
+    cat("Kruskal-Wallis test p-value:", format.pval(kw_result$p.value), "\n")
+    
+    # If significant, run Dunn's test
+    if(kw_result$p.value < 0.05) {
+      cat("SIGNIFICANT DIFFERENCES FOUND - Running Dunn's post-hoc test:\n")
+      
+      dunn_result <- dunnTest(kw_formula, data = filtered_data, method = "bh")
+      significant_pairs <- dunn_result$res[dunn_result$res$P.adj < 0.05, ]
+      
+      if(nrow(significant_pairs) > 0) {
+        cat("Significant pairwise differences (BH-corrected):\n")
+        for(i in 1:nrow(significant_pairs)) {
+          cat(sprintf("  %s: p = %.4f\n", 
+                     significant_pairs$Comparison[i], 
+                     significant_pairs$P.adj[i]))
+        }
+      } else {
+        cat("No significant pairwise differences after BH correction\n")
+      }
+      
+      return(list(
+        kruskal_p = kw_result$p.value,
+        dunn_result = dunn_result,
+        filtered_data = filtered_data,
+        excluded_directions = excluded_directions,
+        adequate_directions = adequate_directions
+      ))
+    } else {
+      cat("No significant differences among wind directions\n")
+      return(list(
+        kruskal_p = kw_result$p.value,
+        filtered_data = filtered_data,
+        excluded_directions = excluded_directions,
+        adequate_directions = adequate_directions
+      ))
+    }
+  } else {
+    cat("Insufficient total observations for reliable testing\n")
+    return(NULL)
+  }
+}
+
+# Run filtered analysis for all significant combinations
+cat("\n", rep("#", 80), "\n")
+cat("FILTERED STATISTICAL ANALYSIS (EXCLUDING INSUFFICIENT SAMPLE SIZES)\n")
+cat(rep("#", 80), "\n")
+
+# FCH4 Growing Season
+fch4_growing <- df_avg_FCH4 %>% filter(season == "Growing Season")
+fch4_growing_results <- run_filtered_analysis(fch4_growing, "FCH4", "Growing Season")
+
+# FCH4 Fall Senescence
+fch4_fall <- df_avg_FCH4 %>% filter(season == "Fall Senescence")
+fch4_fall_results <- run_filtered_analysis(fch4_fall, "FCH4", "Fall Senescence")
+
+# FCH4 Winter
+fch4_winter <- df_avg_FCH4 %>% filter(season == "Winter")
+fch4_winter_results <- run_filtered_analysis(fch4_winter, "FCH4", "Winter")
+
+# FC Growing Season  
+fc_growing <- df_avg_FC %>% filter(season == "Growing Season")
+fc_growing_results <- run_filtered_analysis(fc_growing, "FC", "Growing Season")
+
+# FC Fall Senescence
+fc_fall <- df_avg_FC %>% filter(season == "Fall Senescence")
+fc_fall_results <- run_filtered_analysis(fc_fall, "FC", "Fall Senescence")
+
+# FC Winter
+fc_winter <- df_avg_FC %>% filter(season == "Winter")
+fc_winter_results <- run_filtered_analysis(fc_winter, "FC", "Winter")
+
+
+#note: FC is in umol/m2/s; FCH4 is in nmol/m2/s
+```
+
+#Confirming that though FC growing season has a sig diff among WD, there were no statistical groupings
+```{r}
+
+test <- fc_growing %>%
+  filter(!WD_cardinal2 == "E" & !WD_cardinal2 == "W") #removing the WD with n<5
+
+
+kruskal.test(FC ~ WD_cardinal2, data = test) #p = 0.0059
+
+
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(test, season == "Growing Season"),
+                       method = "bh")
+dunn_result #in the adj p, no sig diffs; in un-adj p, sig diffs are related to S, SE, SW winds vs others
+```
+
+#Adding statistics to figures 
+
+#FC figure with stats 
+
+#Figure adj - help from Claude - distinguishing the wind directions within each season that had obs_n < 5 ** 
+```{r}
+
+# Create a dataset with sample size information for transparency mapping
+library(dplyr)
+library(ggplot2)
+
+#FC
+
+# First, calculate sample sizes by season and wind direction
+sample_sizes <- df_avg_FC %>%
+  group_by(season, WD_cardinal2) %>%
+  summarise(n_obs = n(), .groups = 'drop') %>%
+  mutate(adequate_n = ifelse(n_obs >= 5, "Adequate", "Insufficient"))
+
+# Merge sample size info back to the main dataset
+df_avg_FC_with_n <- df_avg_FC %>%
+  left_join(sample_sizes, by = c("season", "WD_cardinal2")) %>%
+  mutate(
+    # Create alpha value based on sample size
+    alpha_level = ifelse(n_obs >= 5, 1.0, 0.4)  # Full opacity for n>=5, reduced for n<5
+  )
+
+# Modified FC box plot with transparency based on sample size
+FC_by_WD <- ggplot(df_avg_FC_with_n, aes(x = WD_cardinal2, y = FC, fill = season)) +
+  geom_boxplot(aes(alpha = alpha_level)) +
+  stat_summary(aes(alpha = alpha_level), fun = mean, geom = "point", shape = 23, size = 4) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~season) +
+  theme_bw() +
+  scale_x_discrete(limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")) +
+  scale_alpha_identity() +  # Use the alpha values directly
+  theme(
+    # bold the axis titles
+    axis.title = element_text(face = "bold"),
+    # bold the axis tick labels
+    axis.text = element_text(face = "bold"),
+    plot.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = expression("Wind Direction"),
+    y = expression("Daily Average Half-hourly CO"[2] * " Flux (" * mu * mol ~ m^-2 ~ s^-1 * ")"),
+    title = expression("Daily Average CO"[2] ~ "by Wind Direction"),
+    caption = "Directions with reduced opacity have n < 5 observations"
+  )
+
+# Display the plot
+print(FC_by_WD)
+
+# Print sample sizes for footnote reference
+cat("\n=== FC SAMPLE SIZES FOR FOOTNOTE ===\n")
+insufficient_samples <- sample_sizes %>%
+  filter(adequate_n == "Insufficient") %>%
+  arrange(season, WD_cardinal2)
+
+if(nrow(insufficient_samples) > 0) {
+  cat("Wind directions with n < 5:\n")
+  for(i in 1:nrow(insufficient_samples)) {
+    cat(sprintf("%s %s: n = %d\n", 
+                insufficient_samples$season[i], 
+                insufficient_samples$WD_cardinal2[i], 
+                insufficient_samples$n_obs[i]))
+  }
+  
+  # Create a concise footnote text
+  cat("\nSuggested footnote text:\n")
+  footnote_info <- insufficient_samples %>%
+    mutate(season_abbrev = case_when(
+      season == "Growing Season" ~ "GS",
+      season == "Fall Senescence" ~ "FS", 
+      season == "Winter" ~ "W"
+    )) %>%
+    mutate(combined = paste0(season_abbrev, "-", WD_cardinal2, " (n=", n_obs, ")"))
+  
+  cat("Reduced opacity indicates n < 5: ", paste(footnote_info$combined, collapse = ", "), "\n")
+} else {
+  cat("All wind directions have adequate sample sizes (n ≥ 5)\n")
+}
+
+# ------- FCH4 ---------------------
+
+# First, calculate sample sizes by season and wind direction
+sample_sizes <- df_avg_FCH4 %>%
+  group_by(season, WD_cardinal2) %>%
+  summarise(n_obs = n(), .groups = 'drop') %>%
+  mutate(adequate_n = ifelse(n_obs >= 5, "Adequate", "Insufficient"))
+
+# Merge sample size info back to the main dataset
+df_avg_FCH4_with_n <- df_avg_FCH4 %>%
+  left_join(sample_sizes, by = c("season", "WD_cardinal2")) %>%
+  mutate(
+    # Create alpha value based on sample size
+    alpha_level = ifelse(n_obs >= 5, 1.0, 0.4)  # Full opacity for n>=5, reduced for n<5
+  )
+
+# Modified FCH4 box plot with transparency based on sample size
+FCH4_by_WD <- ggplot(df_avg_FCH4_with_n, aes(x = WD_cardinal2, y = FCH4 * 1/1000, fill = season)) +
+  geom_boxplot(aes(alpha = alpha_level)) +
+  stat_summary(aes(alpha = alpha_level), fun = mean, geom = "point", shape = 23, size = 4) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(~season) +
+  theme_bw() +
+  scale_x_discrete(limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")) +
+  scale_alpha_identity() +  # Use the alpha values directly
+  theme(
+    # bold the axis titles
+    axis.title = element_text(face = "bold"),
+    # bold the axis tick labels
+    axis.text = element_text(face = "bold"),
+    plot.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = expression("Wind Direction"),
+    y = expression("Daily Average Half-hourly CH"[4] * " Flux ("*mu*mol~m^-2~s^-1*")"),
+    title = expression("Daily Average CO"[2] ~ "by Wind Direction"),
+    caption = "Directions with reduced opacity have n < 5 observations"
+  )
+
+# Display the plot
+print(FCH4_by_WD)
+
+# Print sample sizes for footnote reference
+cat("\n=== FCH4 SAMPLE SIZES FOR FOOTNOTE ===\n")
+insufficient_samples <- sample_sizes %>%
+  filter(adequate_n == "Insufficient") %>%
+  arrange(season, WD_cardinal2)
+
+if(nrow(insufficient_samples) > 0) {
+  cat("Wind directions with n < 5:\n")
+  for(i in 1:nrow(insufficient_samples)) {
+    cat(sprintf("%s %s: n = %d\n", 
+                insufficient_samples$season[i], 
+                insufficient_samples$WD_cardinal2[i], 
+                insufficient_samples$n_obs[i]))
+  }
+  
+  # Create a concise footnote text
+  cat("\nSuggested footnote text:\n")
+  footnote_info <- insufficient_samples %>%
+    mutate(season_abbrev = case_when(
+      season == "Growing Season" ~ "GS",
+      season == "Fall Senescence" ~ "FS", 
+      season == "Winter" ~ "W"
+    )) %>%
+    mutate(combined = paste0(season_abbrev, "-", WD_cardinal2, " (n=", n_obs, ")"))
+  
+  cat("Reduced opacity indicates n < 5: ", paste(footnote_info$combined, collapse = ", "), "\n")
+} else {
+  cat("All wind directions have adequate sample sizes (n ≥ 5)\n")
+
+}
+
+```
+#Attempting to add statistical groupings to the figure - code from Claude
+#### multcompview didn't really work...will try to set groupings manually - code from Claude
+```{r}
+# Function to run multcompView for a specific season
+run_season_multcomp <- function(comparisons, directions, season_name) {
+  
+  if(length(comparisons) == 0) {
+    # No significant differences - all get same letter
+    result <- data.frame(
+      WD_cardinal2 = directions,
+      letters = "a",
+      stringsAsFactors = FALSE
+    )
+    cat(season_name, "- No significant differences, all directions get 'a'\n")
+    return(result)
+  }
+  
+  # Create all possible pairwise combinations for this season's directions
+  all_pairs <- combn(directions, 2, simplify = FALSE)
+  all_pair_names <- sapply(all_pairs, function(x) paste(x, collapse = " - "))
+  
+  # Initialize with non-significant values
+  pval_vector <- rep(1.0, length(all_pair_names))
+  names(pval_vector) <- all_pair_names
+  
+  # Fill in actual p-values
+  for(comp_name in names(comparisons)) {
+    if(comp_name %in% names(pval_vector)) {
+      pval_vector[comp_name] <- comparisons[comp_name]
+    } else {
+      # Try reverse order
+      comp_parts <- strsplit(comp_name, " - ")[[1]]
+      reverse_name <- paste(comp_parts[2], comp_parts[1], sep = " - ")
+      if(reverse_name %in% names(pval_vector)) {
+        pval_vector[reverse_name] <- comparisons[comp_name]
+      }
+    }
+  }
+  
+  # Use multcompLetters
+  letters_result <- multcompLetters(pval_vector, 
+                                   compare = "<", 
+                                   threshold = 0.05,
+                                   Letters = letters)
+  
+  result <- data.frame(
+    WD_cardinal2 = names(letters_result$Letters),
+    letters = as.character(letters_result$Letters),
+    stringsAsFactors = FALSE
+  )
+  
+  cat(season_name, "letter assignments:\n")
+  for(i in 1:nrow(result)) {
+    cat("  ", result$WD_cardinal2[i], ": ", result$letters[i], "\n")
+  }
+  cat("\n")
+  
+  return(result)
+}
+
+# Create a data frame with letters for each season/wind direction combination
+create_letter_data <- function() {
+  
+  # Manual assignments based on your statistical results
+  letter_data <- data.frame(
+    season = c(
+      # Fall Senescence - all "a" 
+      rep("Fall Senescence", 5),
+      # Growing Season - all "a"
+      rep("Growing Season", 6), 
+      # Winter - complex relationships
+      rep("Winter", 5)
+    ),
+    WD_cardinal2 = c(
+      # Fall Senescence directions with n≥5
+      "E", "N", "NW", "S", "SE",
+      # Growing Season directions with n≥5  
+      "N", "NE", "SE", "S", "SW", "NW",
+      # Winter directions with n≥5
+      "N", "NE", "NW", "S", "SE"
+    ),
+    letters = c(
+      # Fall Senescence - no significant differences
+      rep("a", 5),
+      # Growing Season - no significant differences
+      rep("a", 6),
+      # Winter - based on Dunn's test results
+      "a", "a", "b", "c", "bc"
+    ),
+    stringsAsFactors = FALSE
+  )
+  
+  return(letter_data)
+}
+
+letter_data <- create_letter_data()
+print("Letter assignments by season:")
+print(letter_data)
+
+# Calculate letter positions for geom_text
+letter_positions <- df_avg_FC_with_n %>%
+  group_by(season, WD_cardinal2) %>%
+  summarise(
+    max_y = max(FC, na.rm = TRUE),
+    q75 = quantile(FC, 0.75, na.rm = TRUE),
+    n_obs = first(n_obs),
+    .groups = 'drop'
+  ) %>%
+  # Only keep directions with adequate sample size
+  filter(n_obs >= 5) %>%
+  # Join with letter assignments
+  left_join(letter_data, by = c("season", "WD_cardinal2")) %>%
+  filter(!is.na(letters)) %>%
+  mutate(
+    # Position letters above the data
+    letter_y = pmax(max_y, q75) + 0.7
+    #letter_y = 2.5
+  )
+
+print("Letter positions for plotting:")
+print(letter_positions)
+
+# Create plot using geom_text (not annotate) for panel-specific letters
+FC_by_WD_final <- ggplot(df_avg_FC_with_n, aes(x = WD_cardinal2, y = FC, fill = season)) +
+  geom_boxplot(aes(alpha = alpha_level)) +
+  stat_summary(aes(alpha = alpha_level), fun = mean, geom = "point", shape = 23, size = 4) +
+  
+  # Add letters using geom_text with panel-specific data
+  geom_text(data = letter_positions,
+           aes(x = WD_cardinal2, y = letter_y, label = letters),
+           inherit.aes = FALSE,
+           size = 5, fontface = "bold", color = "black") +
+  
+  geom_hline(yintercept = 0) +
+  facet_wrap(~season) +
+  theme_bw() +
+  scale_x_discrete(limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")) +
+  scale_alpha_identity() +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(face = "bold"),
+    plot.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = expression("Wind Direction"),
+    y = expression("Daily Average Half-hourly CO"[2] * " Flux (" * mu * mol ~ m^-2 ~ s^-1 * ")"),
+    title = expression("Daily Average CO"[2] ~ "by Wind Direction"),
+    caption = "Reduced opacity: n < 5. Letters indicate statistical groups (Kruskal-Wallis + Dunn's test, BH correction)."
+  )
+
+print(FC_by_WD_final)
+
+cat("=== INTERPRETATION ===\n")
+cat("Each season analyzed separately with multcompView\n")
+cat("Letters only appear in their respective panels\n")
+cat("This avoids overlap and shows season-specific statistical relationships\n")
+
+
+
+```
+#save figure with statistical lettering 
+```{r}
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjFC_by_WD_seasons_stats.png", FC_by_WD_final, 
+       width = 10, height = 7, dpi = 600)
+```
+
+#FCH4
+
+#Figure adj - help from Claude - distinguishing the wind directions within each season that had obs_n < 5 ** 
+
+```{r}
+# Create letter assignments for FCH4 based on your statistical results
+create_fch4_letter_data <- function() {
+  
+  # Based FCH4 analysis results:
+  # Growing Season: Significant differences found w groupings 
+  # Fall Senescence: No significant differences  
+  # Winter: No significant differences
+  
+  # Manual assignment for FCH4 Growing Season based on Dunn's test
+  # Significant comparisons: N-NW, N-S, NW-S, N-SE, NE-SE, NW-SE, N-SW
+  
+  
+  letter_data <- data.frame(
+    season = c(
+      # Fall Senescence - all "a" (no significant differences)
+      rep("Fall Senescence", 6),  # N, NE, NW, S, SE, SW (excluding E=0, W<5)
+      # Growing Season - complex relationships 
+      rep("Growing Season", 6),   # N, NE, NW, S, SE, SW (excluding E=0, W<5)
+      # Winter - all "a" (no significant differences)
+      rep("Winter", 7)           # N, NE, NW, S, SE, SW, W (excluding E=0)
+    ),
+    WD_cardinal2 = c(
+      # Fall Senescence directions with n≥5
+      "N", "NE", "NW", "S", "SE", "SW",
+      # Growing Season directions with n≥5  
+      "N", "NE", "NW", "S", "SE", "SW",
+      # Winter directions with n≥5
+      "N", "NE", "NW", "S", "SE", "SW", "W"
+    ),
+    letters = c(
+      # Fall Senescence - no significant differences
+      rep("a", 6),
+      # Growing Season - based on significant Dunn's test results
+      # N differs from NW, S, SE, SW
+      # NE differs from SE  
+      # NW differs from N, S, SE
+      # Pattern: N=a, NE=ab, NW=b, S/SE/SW=c
+      "a", "ab", "b", "c", "c", "c",
+      # Winter - no significant differences
+      rep("a", 7)
+    ),
+    stringsAsFactors = FALSE
+  )
+  
+  return(letter_data)
+}
+
+# Create sample size information for FCH4 (similar to FC approach)
+sample_sizes_fch4 <- df_avg_FCH4 %>%
+  group_by(season, WD_cardinal2) %>%
+  summarise(n_obs = n(), .groups = 'drop') %>%
+  mutate(adequate_n = ifelse(n_obs >= 5, "Adequate", "Insufficient"))
+
+# Add sample size info to FCH4 dataset
+df_avg_FCH4_with_n <- df_avg_FCH4 %>%
+  left_join(sample_sizes_fch4, by = c("season", "WD_cardinal2")) %>%
+  mutate(
+    alpha_level = ifelse(n_obs >= 5, 1.0, 0.4)  # Transparency for n<5
+  )
+
+# Create letter data
+fch4_letter_data <- create_fch4_letter_data()
+print("FCH4 Letter assignments by season:")
+print(fch4_letter_data)
+
+# Calculate letter positions for FCH4 (convert to μmol for positioning)
+fch4_letter_positions <- df_avg_FCH4_with_n %>%
+  group_by(season, WD_cardinal2) %>%
+  summarise(
+    max_y = max(FCH4 * 1/1000, na.rm = TRUE),  # Convert to μmol for positioning
+    q75 = quantile(FCH4 * 1/1000, 0.75, na.rm = TRUE),
+    n_obs = first(n_obs),
+    .groups = 'drop'
+  ) %>%
+  # Only keep directions with adequate sample size
+  filter(n_obs >= 5) %>%
+  # Join with letter assignments
+  left_join(fch4_letter_data, by = c("season", "WD_cardinal2")) %>%
+  filter(!is.na(letters)) %>%
+  mutate(
+    # Position letters well above the data (using μmol scale)
+    letter_y = pmax(max_y, q75) + 0.005  # Adjust for μmol scale
+  )
+
+print("FCH4 Letter positions:")
+print(fch4_letter_positions)
+
+# Create FCH4 plot with letters (following your original format)
+FCH4_by_WD_with_letters <- ggplot(df_avg_FCH4_with_n, aes(x = WD_cardinal2, y = FCH4 * 1/1000, fill = season)) +
+  geom_boxplot(aes(alpha = alpha_level)) +
+  stat_summary(aes(alpha = alpha_level), fun = mean, geom = "point", shape = 23, size = 4) +
+  
+  # Add letters using geom_text with panel-specific data
+  geom_text(data = fch4_letter_positions,
+           aes(x = WD_cardinal2, y = letter_y, label = letters),
+           inherit.aes = FALSE,
+           size = 5, fontface = "bold", color = "black") +
+  
+  geom_hline(yintercept = 0) +
+  facet_wrap(~season) +
+  theme_bw() +
+  scale_x_discrete(limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")) +
+  scale_alpha_identity() +
+  theme(
+    # bold the axis titles
+    axis.title = element_text(face = "bold"),
+    # bold the axis tick labels  
+    axis.text = element_text(face = "bold"),
+    plot.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = expression("Wind Direction"),
+    y = expression("Daily Average Half-hourly CH"[4] * " Flux (" * mu * mol ~ m^-2 ~ s^-1 * ")"),
+    title = expression("Daily Average CH"[4] ~ "by Wind Direction"),
+    caption = "Reduced opacity: n < 5. Letters indicate statistical groups (Kruskal-Wallis + Dunn's test, BH correction)."
+  )
+
+print(FCH4_by_WD_with_letters)
+
+cat("\n=== FCH4 LETTER INTERPRETATION ===\n")
+cat("Growing Season (significant differences):\n")
+cat("- N: 'a' (lowest emissions group)\n")  
+cat("- NE: 'ab' (intermediate)\n")
+cat("- NW: 'b' (intermediate)\n") 
+cat("- S, SE, SW: 'c' (highest emissions group)\n")
+cat("This pattern aligns with your southern disturbance hypothesis!\n\n")
+
+cat("Fall Senescence & Winter: All directions 'a' (no significant differences)\n")
+
+# Print sample size summary for footnote
+cat("\n=== SAMPLE SIZE SUMMARY FOR FOOTNOTE ===\n")
+insufficient_fch4 <- sample_sizes_fch4 %>%
+  filter(adequate_n == "Insufficient") %>%
+  arrange(season, WD_cardinal2)
+
+if(nrow(insufficient_fch4) > 0) {
+  cat("FCH4 directions with n < 5:\n")
+  for(i in 1:nrow(insufficient_fch4)) {
+    cat(sprintf("%s %s: n = %d\n", 
+                insufficient_fch4$season[i], 
+                insufficient_fch4$WD_cardinal2[i], 
+                insufficient_fch4$n_obs[i]))
   }
 }
 ```
 
-
+#save figure with statistical lettering 
 ```{r}
-
-# FC box plot with coloring by WD - all seasons 
-ggplot(df_avg2 %>% filter(complete.cases(WD_cardinal2, season, FC)), aes(x = WD_cardinal2, y = FC, fill = season)) +
-  geom_boxplot()+
-     stat_summary(fun=mean, geom="point", shape=23, size=4)+
-  geom_hline(yintercept = 0)+
-  facet_wrap(~season)+
-  theme_bw() +
-    scale_x_discrete(
-    limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))+
-  theme(
-        # bold the axis titles
-    axis.title   = element_text(face = "bold"),
-    # bold the axis tick labels
-    axis.text    = element_text(face = "bold"),
-    plot.title = element_text(face="bold")) +
-    labs(
-    x = expression("Wind Direction"),
-    y = expression("Daily Average Half-hourly CO"[2] * " Flux ("*mu*mol~m^-2~s^-1*")"),
-    title = expression("Daily Average CO"[2] ~ "by Wind Direction "))
-
-
-# FC box plot with coloring by WD - all seasons 
-ggplot(df_avg2, aes(x = WD_cardinal2, y = FC, fill = season)) +
-  geom_boxplot()+
-     stat_summary(fun=mean, geom="point", shape=23, size=4)+
-  geom_hline(yintercept = 0)+
-  facet_wrap(~season)+
-  theme_bw() +
-    scale_x_discrete(
-    limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))+
-  theme(
-        # bold the axis titles
-    axis.title   = element_text(face = "bold"),
-    # bold the axis tick labels
-    axis.text    = element_text(face = "bold"),
-    plot.title = element_text(face="bold")) +
-    labs(
-    x = expression("Wind Direction"),
-    y = expression("Daily Average Half-hourly CO"[2] * " Flux ("*mu*mol~m^-2~s^-1*")"),
-    title = expression("Daily Average CO"[2] ~ "by Wind Direction "))
-
-
-# FC box plot with coloring by WD - all seasons 
-ggplot(df_avg %>% filter(complete.cases(WD_cardinal2, season, FC)), aes(x = WD_cardinal2, y = FC, fill = season)) +
-  geom_boxplot()+
-     stat_summary(fun=mean, geom="point", shape=23, size=4)+
-  geom_hline(yintercept = 0)+
-  facet_wrap(~season)+
-  theme_bw() +
-    scale_x_discrete(
-    limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))+
-  theme(
-        # bold the axis titles
-    axis.title   = element_text(face = "bold"),
-    # bold the axis tick labels
-    axis.text    = element_text(face = "bold"),
-    plot.title = element_text(face="bold")) +
-    labs(
-    x = expression("Wind Direction"),
-    y = expression("Daily Average Half-hourly CO"[2] * " Flux ("*mu*mol~m^-2~s^-1*")"),
-    title = expression("Daily Average CO"[2] ~ "by Wind Direction "))
-
-
-# FC box plot with coloring by WD - all seasons 
-ggplot(df_avg_FC, aes(x = WD_cardinal2, y = FC, fill = season)) +
-  geom_boxplot()+
-     stat_summary(fun=mean, geom="point", shape=23, size=4)+
-  geom_hline(yintercept = 0)+
-  facet_wrap(~season)+
-  theme_bw() +
-    scale_x_discrete(
-    limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))+
-  theme(
-        # bold the axis titles
-    axis.title   = element_text(face = "bold"),
-    # bold the axis tick labels
-    axis.text    = element_text(face = "bold"),
-    plot.title = element_text(face="bold")) +
-    labs(
-    x = expression("Wind Direction"),
-    y = expression("Daily Average Half-hourly CO"[2] * " Flux ("*mu*mol~m^-2~s^-1*")"),
-    title = expression("Daily Average CO"[2] ~ "by Wind Direction "))
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjFC_by_WD_seasons_stats.png", FCH4_by_WD_with_letters, 
+       width = 10, height = 7, dpi = 600)
 ```
 
+#Removing letters from panels without seasonal sig diffs to clean up the figures better
+
+#FC - code from Claude
+
+```{r}
+# Updated FC letter data - only include seasons with significant Kruskal-Wallis results
+create_fc_letter_data_updated <- function() {
+  
+  letter_data <- data.frame(
+    season = c(
+      # Growing Season - significant K-W test but no pairwise differences after BH correction
+      rep("Growing Season", 6),
+      # Winter - significant K-W with multiple pairwise differences
+      rep("Winter", 5)
+      # Fall Senescence - NOT significant (p = 0.056), no letters
+    ),
+    WD_cardinal2 = c(
+      # Growing Season directions with n≥5  
+      "N", "NE", "SE", "S", "SW", "NW",
+      # Winter directions with n≥5
+      "N", "NE", "NW", "S", "SE"
+    ),
+    letters = c(
+      # Growing Season - significant overall but no pairwise differences after correction
+      # All get same letter since Dunn's test found no significant pairs
+      rep("a", 6),
+      # Winter - based on significant Dunn's test results
+      "a", "a", "b", "c", "bc"
+    ),
+    stringsAsFactors = FALSE
+  )
+  
+  return(letter_data)
+}
+
+# Update the FC plot code to use the corrected letter data
+fc_letter_data_updated <- create_fc_letter_data_updated()
+
+print("Updated FC letter assignments (significant seasons only):")
+print(fc_letter_data_updated)
+
+# Update your existing FC plot code to use this new letter data
+# Replace the previous all_letter_assignments with:
+all_letter_assignments_updated <- list(
+  "Growing Season" = fc_letter_data_updated[fc_letter_data_updated$season == "Growing Season", c("WD_cardinal2", "letters")],
+  "Winter" = fc_letter_data_updated[fc_letter_data_updated$season == "Winter", c("WD_cardinal2", "letters")]
+  # Fall Senescence removed - no letters since not significant
+)
+
+# Create updated letter positions for FC (only significant seasons)
+fc_letter_positions_updated <- df_avg_FC_with_n %>%
+  group_by(season, WD_cardinal2) %>%
+  summarise(
+    max_y = max(FC, na.rm = TRUE),
+    q75 = quantile(FC, 0.75, na.rm = TRUE),
+    n_obs = first(n_obs),
+    .groups = 'drop'
+  ) %>%
+  # Only keep directions with adequate sample size AND significant seasons
+  filter(n_obs >= 5 & season %in% c("Growing Season", "Winter")) %>%
+  # Join with updated letter assignments
+  left_join(fc_letter_data_updated, by = c("season", "WD_cardinal2")) %>%
+  filter(!is.na(letters)) %>%
+  mutate(
+    letter_y = pmax(max_y, q75) + 0.7  # Using your preferred spacing
+  )
+
+# Updated FC plot
+FC_by_WD_final_updated <- ggplot(df_avg_FC_with_n, aes(x = WD_cardinal2, y = FC, fill = season)) +
+  geom_boxplot(aes(alpha = alpha_level)) +
+  stat_summary(aes(alpha = alpha_level), fun = mean, geom = "point", shape = 23, size = 4) +
+  
+  # Add letters only for significant seasons
+  geom_text(data = fc_letter_positions_updated,
+           aes(x = WD_cardinal2, y = letter_y, label = letters),
+           inherit.aes = FALSE,
+           size = 5, fontface = "bold", color = "black") +
+  
+  geom_hline(yintercept = 0) +
+  facet_wrap(~season) +
+  theme_bw() +
+  scale_x_discrete(limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")) +
+  scale_alpha_identity() +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(face = "bold"),
+    plot.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = expression("Wind Direction"),
+    y = expression("Daily Average Half-hourly CO"[2] * " Flux (" * mu * mol ~ m^-2 ~ s^-1 * ")"),
+    title = expression("Daily Average CO"[2] ~ "by Wind Direction"),
+    caption = "Reduced opacity: n < 5. Letters indicate statistical groups for significant seasons only (Kruskal-Wallis + Dunn's test, BH correction)."
+  )
+
+print(FC_by_WD_final_updated)
+
+
+
+```
+#save figure with statistical lettering 
+```{r}
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjFC_by_WD_seasons_stats.png", FC_by_WD_final_updated, 
+       width = 10, height = 7, dpi = 600)
+```
+
+
+# FCH4 - code from Claude
+```{r}
+# FINAL FCH4 plot with correct transparency and letters only for significant seasons
+
+# Use your working transparency assignment
+df_avg_FCH4_fixed <- df_avg_FCH4 %>%
+  mutate(
+    # Set alpha based on ALL sample sizes from your summary table (n < 5 gets reduced opacity)
+    alpha_level = case_when(
+      # Fall Senescence: NE(n=3), E(n=1), SE(n=4), S(n=2), SW(n=4), W(n=0) all have n<5
+      season == "Fall Senescence" & WD_cardinal2 %in% c("NE", "E", "SE", "S", "SW", "W") ~ 0.4,
+      
+      # Growing Season: E(n=0), W(n=1) have n<5
+      season == "Growing Season" & WD_cardinal2 %in% c("E", "W") ~ 0.4,
+      
+      # Winter: E(n=0), S(n=2), SW(n=2), W(n=2) have n<5
+      season == "Winter" & WD_cardinal2 %in% c("E", "S", "SW", "W") ~ 0.4,
+      
+      TRUE ~ 1.0  # All others have n≥5
+    )
+  )
+
+# Create letter data ONLY for significant seasons (Growing Season only for FCH4)
+fch4_letter_data_final <- data.frame(
+  season = rep("Growing Season", 6),
+  WD_cardinal2 = c("N", "NE", "SE", "S", "SW", "NW"),
+  letters = c("a", "ab", "c", "c", "c", "b"),
+  stringsAsFactors = FALSE
+)
+
+print("FCH4 Letter assignments (Growing Season only):")
+print(fch4_letter_data_final)
+
+# Calculate letter positions using the corrected letter data
+fch4_letter_positions_final <- df_avg_FCH4_fixed %>%
+  group_by(season, WD_cardinal2) %>%
+  summarise(
+    max_y = max(FCH4 * 1/1000, na.rm = TRUE),
+    q75 = quantile(FCH4 * 1/1000, 0.75, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  # Join with letter assignments (only Growing Season)
+  left_join(fch4_letter_data_final, by = c("season", "WD_cardinal2")) %>%
+  filter(!is.na(letters)) %>%
+  mutate(
+    letter_y = pmax(max_y, q75) + 0.005
+  )
+
+print("FCH4 Letter positions (Growing Season only):")
+print(fch4_letter_positions_final)
+
+# Create final FCH4 plot
+FCH4_by_WD_final <- ggplot(df_avg_FCH4_fixed, aes(x = WD_cardinal2, y = FCH4 * 1/1000, fill = season)) +
+  geom_boxplot(aes(alpha = alpha_level)) +
+  stat_summary(aes(alpha = alpha_level), fun = mean, geom = "point", shape = 23, size = 4) +
+  
+  # Add letters only for Growing Season
+  geom_text(data = fch4_letter_positions_final,
+           aes(x = WD_cardinal2, y = letter_y, label = letters),
+           inherit.aes = FALSE,
+           size = 5, fontface = "bold", color = "black") +
+  
+  geom_hline(yintercept = 0) +
+  facet_wrap(~season) +
+  theme_bw() +
+  scale_x_discrete(limits = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")) +
+  scale_alpha_identity() +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(face = "bold"),
+    plot.title = element_text(face = "bold")
+  ) +
+  labs(
+    x = expression("Wind Direction"),
+    y = expression("Daily Average Half-hourly CH"[4] * " Flux (" * mu * mol ~ m^-2 ~ s^-1 * ")"),
+    title = expression("Daily Average CH"[4] ~ "by Wind Direction"),
+    caption = "Reduced opacity: n < 5. Letters indicate statistical groups for significant seasons only (Kruskal-Wallis + Dunn's test, BH correction)."
+  )
+
+print(FCH4_by_WD_final)
+
+cat("\n=== FCH4 FINAL SUMMARY ===\n")
+cat("Growing Season: Letters displayed (significant differences p = 5.60×10⁻⁸)\n")
+cat("- N: 'a', NE: 'ab', NW: 'b', S/SE/SW: 'c'\n")
+cat("Fall Senescence & Winter: No letters (not significant)\n")
+cat("Transparency correctly applied to all directions with n < 5\n")
+```
+#save figure with statistical lettering 
+```{r}
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjFCH4_by_WD_seasons_stats.png", FCH4_by_WD_final, 
+       width = 10, height = 7, dpi = 600)
+```
