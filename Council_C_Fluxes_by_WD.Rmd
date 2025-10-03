@@ -2727,7 +2727,14 @@ FCH4_by_WD_final <- ggplot(df_avg_FCH4_fixed, aes(x = WD_cardinal2, y = FCH4 * 1
   theme(
     axis.title = element_text(face = "bold"),
     axis.text = element_text(face = "bold"),
-    plot.title = element_text(face = "bold")
+    plot.title = element_text(face = "bold"),
+
+    # legend.title = element_text(face = "bold"),
+    # legend.text = element_text(face = "bold"),
+    # axis.title.x = element_text(face = "bold"),  # Make x-axis title larger and bold
+    # axis.title.y = element_text( face = "bold"),  # Make y-axis title larger and bold
+    # axis.text.x = element_text(face = "bold"),   # Make x-axis text larger and bold
+    # axis.text.y = element_text(face = "bold") 
   ) +
   labs(
     x = expression("Wind Direction"),
