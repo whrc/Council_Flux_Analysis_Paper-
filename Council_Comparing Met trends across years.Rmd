@@ -58,6 +58,22 @@ df2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/counc
 df_avg2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.3.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 
+#join df_avg and df_avg2 as df_avg has the new wind cardinal directions, and df_avg 2 has the gapfilled TS_3 and SWC_3 
+library(dplyr)
+
+df_avg2  <- df_avg2 %>%
+  left_join(df_avg %>% select(date, WD_modal2, WD_cardinal2), by = "date") #only adding the two rows that are new, the new wind direction classifications 
+
+
+
+#check the merge worked properly 
+summary(df_avg$SWC_3_1_1)
+summary(df_avg2$SWC_3_1_1)
+
+summary(df_avg$TS_3_gapfilled)
+summary(df_avg2$TS_3_gapfilled)
+
+
 # #make sure timestamp is correct and in POSIXct (it should be already)
 # summary(df_avg$date)
 # 
@@ -79,7 +95,6 @@ df_avg2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/c
 
 #Annual Avg air temp (based on all years, 2017 - 2022, excluding the incomplete 2023*)
 ```{r}
-
 library(dplyr)
 library(lubridate)
 
@@ -100,32 +115,6 @@ annual_temps <- df_avg %>%
 #sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC)))
 print(annual_temps)
 
-
-#Make nicer plot with all together 
-
-library(dplyr)
-library(knitr)
-
-annual_temps_formatted <- annual_temps %>%
-  # 1) Create new character columns combining mean ± sd, rounded to 2 dp
-  mutate(
-    Obs_TA   = sprintf("%.2f ± %.2f", obs_airtemp, obs_airtemp_se),
-    ERA5_TA  = sprintf("%.2f ± %.2f", era5_airtemp, era5_airtemp_se),
-    Obs_TS3 = sprintf("%.2f ± %.2f", obs_soiltemp, obs_airtemp_se),
-    ERA5_TS  = sprintf("%.2f ± %.2f", era5_soiltemp, era5_soiltemp_se),
-  ) %>%
-  # 2) Select only the columns you want in the final table
-  select(year, Obs_TA, ERA5_TA, Obs_TS3, ERA5_TS)
-
-# 3) Print it neatly with knitr::kable()
-annual_temps_formatted %>%
-  kable(
-    col.names = c("Year", "Obs. Air Temp (°C)", "ERA5 Air Temp (°C)", "Obs. Soil Temp at Tuss (°C)", "ERA5 Soil Temp (°C)" ),
-    caption   = "Mean Annual Air & Soil Temperature ± SE (2017–2022)"
-  )
-
-
-#Big differences here in the obs temp and ERA5 temp due to large gaps in data for many years...need to try to gapfill?
 ```
 
 #Era5.mod-gapfilled Annual Avg air & soil (TS_3) temp (based on all years, 2017 - 2022, excluding the incomplete 2023*)
@@ -149,33 +138,7 @@ annual_temps2 <- df_avg2 %>%
 print(annual_temps2)
 
 
-#Make nicer plot with all together 
-
-library(dplyr)
-library(knitr)
-
-annual_temps_formatted2 <- annual_temps2 %>%
-  # 1) Create new character columns combining mean ± sd, rounded to 2 dp
-  mutate(
-    TA_GF   = sprintf("%.2f ± %.2f", TA_gapfilled, TA_gapfilled_se),
-    TS3_GF  = sprintf("%.2f ± %.2f", TS_3_gapfilled, TS_3_gapfilled_se)
-  ) %>%
-  # 2) Select only the columns you want in the final table
-  select(year, TA_GF, TS3_GF)
-
-# 3) Print it neatly with knitr::kable()
-annual_temps_formatted2 %>%
-  kable(
-    col.names = c("Year", "Gapfilled Air Temp (°C)", "Gapfilled Soil Temp at Tuss (°C)"), 
-    caption   = "Gapfilled Mean Annual Air & Soil Temperature ± SE (2017–2022)"
-  )
-
-
-
-
 ```
-
-
 
 # % gapfilled vs observed for TS3 and TA
 
@@ -210,7 +173,7 @@ TA_summary <- df_avg2 %>%
     missing_percent = round((missing_count / total_records) * 100, 1)
   ) %>%
   mutate(variable = "Air_Temperature")
-
+TA_summary
 
 #HH - year only 
 TA_summaryHH_annual <- df2 %>%
@@ -313,7 +276,6 @@ TS_summary_annual <- df_avg2 %>%
 ```{r}
 # Load necessary packages
 library(dplyr)
-library(ggplot2)
 library(lubridate)
 
 #Annual and seasonal summaries with SE 
@@ -372,31 +334,22 @@ seasonal_budgets <- df_avg2 %>%
 
 print(annual_budgets)
 print(seasonal_budgets)
+
+
 ```
 
 
 
 #Save table of annual and/or seasonal budgets 
 ```{r}
-# Save as a nicely formatted table using kableExtra from knitr package 
-# good for a publication or report --> creates HTML table, but not as customize-able as if you were to make it in Excel 
-
-install.packages("kableExtra") 
-
-library(kableExtra)
 
 #Seasonal budgets 
-
-seasonal_budgets %>%
-  kable(digits = 2) %>%  # rounds numbers to 2 decimal places
-  kable_styling(bootstrap_options = c("striped", "hover")) %>%
-  save_kable("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_formatted.html")
 
 #Write table to Excel file:
 # First install if needed:
 install.packages("writexl")
-
 library(writexl)
+
 write_xlsx(seasonal_budgets, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets.xlsx")
 
 #Write table to CSV
@@ -417,6 +370,8 @@ seasonal_budgets_formatted <- seasonal_budgets %>%
   ) %>%
   select(year, season, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5, TA_GF, TS3_GF, days)
 
+seasonal_budgets_formatted
+
 # Save to Excel
 write_xlsx(seasonal_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_formatted3.xlsx")
 
@@ -436,16 +391,17 @@ annual_budgets_formatted <- annual_budgets %>%
   ) %>%
   select(year, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5, TA_GF, TS3_GF)
 
+annual_budgets_formatted
+
 # Save to Excel
 write_xlsx(annual_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_budgets_formatted2.xlsx")
 
 ```
 
-#Add % gapfilled to seasonal and annual table 
+#Add % gapfilled (from HH datasets) to seasonal and annual averages table 
 
 ```{r}
-
-# Join the season, year datasets, adding only the gapfilled_percent column
+# Join the season, year datasets, adding only the gapfilled_percent column 
 seasonal_budgets_with_gapfill <- seasonal_budgets %>%
   left_join(TA_summaryHH %>% select(year, season, TA_gapfill_percent = gapfilled_percent), 
             by = c("year", "season")) %>%
@@ -502,30 +458,10 @@ write_xlsx(annual_budgets_formatted2, "C:/Users/kkent/Documents/Github Flux Netw
 #seasonal 
 write_xlsx(seasonal_budgets_formatted2, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_formatted3.xlsx")
 
-```
 
-
-#plot annual means 
-```{r}
-
-#pivot to plot 
-annual_temps_long <- annual_temps %>%
-  pivot_longer(-year, names_to = "source", values_to = "annual_mean_temp")
-
-
-library(ggplot2)
-
-ggplot(annual_temps_long, aes(x = year, y = annual_mean_temp, color = source)) +
-  geom_line() +
-  geom_point() +
-  scale_x_continuous(breaks = 2017:2022) +
-  labs(
-    x = "Year",
-    y = expression("Mean Annual Temp ("*degree*"C)"),
-    color = "Data Source"
-  ) +
-  theme_minimal()
-
+#checking 
+average_annual_temp <- mean(df_avg2$TA_gapfilled)
+print(average_annual_temp)
 
 ```
 
@@ -533,7 +469,7 @@ ggplot(annual_temps_long, aes(x = year, y = annual_mean_temp, color = source)) +
 #Yearly summaries of key variables 
 ```{r}
 # Create yearly summaries of key variables
-yearly_summary <- df_avg %>%
+yearly_summary <- df_avg2 %>%
   mutate(year = format(date, "%Y")) %>%
   group_by(year) %>%
   summarise(
@@ -581,66 +517,57 @@ ggplot(yearly_long, aes(x = year, y = value, group = 1)) +
        x = "Year")
 
 #Results of total annual avg:
-#2019 had lower mean air temp and soil temps at tussock location (TS3)
-#very high temps in 2023 compared to others, but this is likely driven by missing half the year ** 
-#can see the come down from the heat spike in 2017 
-#in measure TA you don't see the air temp spike in 2019, which is likely due to having the most complete winter data, which evens out the mean? **need to look at seasons ** 
-#VPD also appears to substantially increase over the years - conversely, RH is decreasing over the years 
-#netrad increases over the years, as well
-
-#**but these are annual averages which don't capture a lot of the nuance, going to break it down into seasons and compare seasons among years
+#not all very accurate because some years have lots of missing data, so though this makes a quick and easy visual of annual averages, for this Council dataset with lots of missing data, a lot of the trends are probably wrong / misleading 
 ```
 
 
 #Create yearly dataframes 
 ```{r}
-#create dataframes for each year for the data you have so you can look at annual trends --> the previous way I did them doesn't work here for some reason, so using filtering 
+#create dataframes for each year for the data you have so you can look at annual trends -
 
 #Daily avg
 
-df_avg_2017 <- df_avg %>%
+df_avg_2017 <- df_avg2 %>%
   filter(year(date) == 2017)
 
-df_avg_2018 <- df_avg %>%
+df_avg_2018 <- df_avg2 %>%
   filter(year(date) == 2018)
 
-df_avg_2019 <- df_avg %>%
+df_avg_2019 <- df_avg2 %>%
   filter(year(date) == 2019)
 
-df_avg_2020 <- df_avg %>%
+df_avg_2020 <- df_avg2 %>%
   filter(year(date) == 2020)
 
-df_avg_2021 <- df_avg %>%
+df_avg_2021 <- df_avg2 %>%
   filter(year(date) == 2021)
 
-df_avg_2022 <- df_avg %>%
+df_avg_2022 <- df_avg2 %>%
   filter(year(date) == 2022)
 
-df_avg_2023 <- df_avg %>%
-  filter(year(date) == 2023)
+
 
 # HH 
 
-df_2017 <- df %>%
+df_2017 <- df2 %>%
   filter(year(date) == 2017)
 
-df_2018 <- df %>%
+df_2018 <- df2 %>%
   filter(year(date) == 2018)
 
-df_2019 <- df %>%
+df_2019 <- df2 %>%
   filter(year(date) == 2019)
 
-df_2020 <- df %>%
+df_2020 <- df2 %>%
   filter(year(date) == 2020)
 
-df_2021 <- df %>%
+df_2021 <- df2 %>%
   filter(year(date) == 2021)
 
-df_2022 <- df %>%
+df_2022 <- df2 %>%
   filter(year(date) == 2022)
 
-df_2023 <- df %>%
-  filter(year(date) == 2023)
+
 
 
 ```
@@ -688,12 +615,9 @@ sum(is.na(df_avg_fall$season))
 
 
 
-
-
-
 #Creating timeseries for each year, with seasonal delineations 
 ```{r}
-#Below code sets it up as a function so all you have to do it change the years at the bottom, and re-run, and it'll adjust the figure with associated seasonal delineations 
+#Below code sets it up as a function so all you have to do it change the years at the bottom, and re-run, and it'll adjust the figure with associated seasonal delineations (code from Claude)
 
 library(ggplot2)
 library(dplyr)
@@ -845,177 +769,189 @@ plots_2020$fluxes    # Display GPP, RECO, NEE, and CH4 plot
 
 #Comparison plots 
 
-####Trying to map the different met data trends by season, for each year
-####trouble getting continuous winter figure due to it occuring at first and end of year 
+
+##Mapping monthly avg of enviromental variables for each year - creates table with avg, SE, and also plots the means (should plot SE but the error bars are not showing up on the fig)
+
+#####error bars only for months where there is sufficient data - Claude help, not working - will have to revisit 
+
 
 
 ```{r}
+# Load required libraries
 library(ggplot2)
 library(dplyr)
-library(tidyr)
 library(lubridate)
+library(tidyr)
 
-create_seasonal_comparison <- function(df_avg, season_name) {
-  # Filter data for the specified season and handle winter wrap-around
-  seasonal_data <- df_avg %>%
-    filter(season == season_name) %>%
-    mutate(
-      doy = case_when(
-        season == "Winter" & month(date) <= 6 ~ yday(date),
-        season == "Winter" & month(date) >= 7 ~ yday(date) - 365,
-        TRUE ~ yday(date)
-      )
-    )
-  
-  # Create a long format dataset for the variables we want to compare
-  long_data <- seasonal_data %>%
-    select(date, year, doy, TA, TA_ERA5, TS_3_1_1, SWC_3_1_1) %>%
-    pivot_longer(
-      cols = c(TA, TA_ERA5, TS_3_1_1, SWC_3_1_1),
-      names_to = "variable",
-      values_to = "value"
-    ) %>%
-    mutate(
-      variable = factor(variable, 
-                       levels = c("TA", "TA_ERA5", "TS_3_1_1", "SWC_3_1_1"),
-                       labels = c("Air Temperature (°C)", "ERA5 Air Temperature (°C)", 
-                                "Soil Temperature (Tussock) (°C)", "Soil Moisture (Tussock) (%SWC)"))
-    )
-  
-  # Get unique months that appear in this season's data
-  if(season_name == "Winter") {
-    # For winter, explicitly set the months we want to show
-    month_doys <- c(-31, -15, 0, 31, 59)  # Mid-Nov through mid-Mar
-    month_labels <- c("Nov", "Dec", "Jan", "Feb", "Mar")
-  } else {
-    # For other seasons, use the actual months in the data
-    unique_months <- unique(month(seasonal_data$date))
-    month_dates <- as.Date(paste0("2019-", unique_months, "-15"))
-    month_doys <- yday(month_dates)
-    month_labels <- format(month_dates, "%b")
-  }
-  
-  # Create the plot
-  p <- ggplot(long_data, aes(x = doy, y = value)) +
-    geom_line(aes(color = as.factor(year))) +
-    facet_wrap(~variable, scales = "free_y", ncol = 1) +
-    scale_color_brewer(palette = "Dark2", name = "Year") +
-    scale_x_continuous(
-      breaks = month_doys,
-      labels = month_labels,
-      limits = range(long_data$doy)
-    ) +
-    labs(
-      title = paste(season_name, "Conditions"),
-      x = "Month",
-      y = NULL
-    ) +
-    theme_bw() +
-    theme(
-      strip.background = element_rect(fill = "white"),
-      strip.text = element_text(size = 10, face = "bold"),
-      legend.position = "right",
-      panel.grid.minor = element_blank()
-    )
-  
-  return(p)
-}
+# Prepare the data with error bars
+monthly_env_data <- df_avg2 %>%
+  # Extract year and month from date
+  mutate(
+    year = year(date),
+    month = month(date, label = TRUE, abbr = TRUE)  # Creates abbreviated month names (Jan, Feb, etc.)
+  ) %>%
+  # Filter for your years of interest
+  filter(year >= 2017 & year <= 2023) %>%
 
-# Create plots for each season
-winter_plot <- create_seasonal_comparison(df_avg, "Winter")
-growing_plot <- create_seasonal_comparison(df_avg, "Growing Season")
-fall_plot <- create_seasonal_comparison(df_avg, "Fall Senescence")
+  # Group by year and month to calculate monthly averages and standard errors
+  group_by(year, month) %>%
+  summarise(
+    Air_Temperature_mean = mean(TA, na.rm = TRUE),
+    Air_Temperature_se = sd(TA, na.rm = TRUE) / sqrt(sum(!is.na(TA))),
+    Soil_Temperature_mean = mean(TS_3_1_1, na.rm = TRUE),
+    Soil_Temperature_se = sd(TS_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_1_1))),
+    Air_TemperatureGF_mean = mean(TA_gapfilled, na.rm = TRUE),
+    Air_TemperatureGF_se = sd(TA_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TA_gapfilled))),
+    Soil_TemperatureGF_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    Soil_TemperatureGF_se = sd(TS_3_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_gapfilled))),
+    Soil_Moisture_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    Soil_Moisture_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    Net_Radiation_mean = mean(NETRAD, na.rm = TRUE),
+    Net_Radiation_se = sd(NETRAD, na.rm = TRUE) / sqrt(sum(!is.na(NETRAD))),
+    Wind_Speed_mean = mean(WS, na.rm = TRUE),
+    Wind_Speed_se = sd(WS, na.rm = TRUE) / sqrt(sum(!is.na(WS))),
+    PAR_mean = mean(PPFD_IN, na.rm = TRUE),
+    PAR_se = sd(PPFD_IN, na.rm = TRUE) / sqrt(sum(!is.na(PPFD_IN))),
+    H_mean = mean(H, na.rm = TRUE),
+    H_se = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    LE_mean = mean(LE, na.rm = TRUE),
+    LE_se = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    SWC_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    SWC_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    RH_mean = mean(RH, na.rm = TRUE),
+    RH_se = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    G_se = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    
+    .groups = 'drop'
+  ) %>%
+  # Convert to long format for faceting
+  pivot_longer(
+    cols = contains("_mean"),
+    names_to = "Variable",
+    values_to = "Value",
+    names_pattern = "(.*)_mean"
+  ) %>%
+  # Add corresponding standard errors
+  mutate(
+    SE = case_when(
+      Variable == "Air_Temperature" ~ Air_Temperature_se,
+      Variable == "Soil_Temperature" ~ Soil_Temperature_se,
+      Variable == "Air_TemperatureGF" ~ Air_TemperatureGF_se,
+      Variable == "Soil_TemperatureGF" ~ Soil_TemperatureGF_se,
+      Variable == "Soil_Moisture" ~ Soil_Moisture_se,
+      Variable == "VPD" ~ VPD_se,
+      Variable == "Net_Radiation" ~ Net_Radiation_se,
+      Variable == "Wind_Speed" ~ Wind_Speed_se,
+      Variable == "PAR" ~ PAR_se,
+      Variable == "H" ~ H_se,
+      Variable == "LE" ~ LE_se,
+      Variable == "SWC" ~ SWC_se,
+      Variable == "RH" ~ RH_se,
+      Variable == "G" ~ G_se
+    )
+  ) %>%
+  # Create proper labels and units for each variable
+  mutate(
+    Variable_Label = case_when(
+      Variable == "Air_Temperature" ~ "Air Temperature (°C)",
+      Variable == "Soil_Temperature" ~ "Soil Temperature to 15cm (°C)", 
+      Variable == "Air_TemperatureGF" ~ "Air Temperature ERA5-GF  (°C)",
+      Variable == "Soil_TemperatureGF" ~ "Soil Temperature to 15cm ERA5-GF (°C)", 
+      Variable == "Soil_Moisture" ~ "Soil Moisture (%)",
+      Variable == "VPD" ~ "VPD (hPa)",
+      Variable == "Net_Radiation" ~ "Net Radiation (W m⁻²)",
+      Variable == "Wind_Speed" ~ "Wind Speed (m s⁻¹)",
+      Variable == "PAR" ~ "PAR In (μmol m⁻² s⁻¹)",
+      Variable == "H" ~ "Sensible Heat Flux (W m⁻²)",
+      Variable == "LE" ~ "Latent Heat Flux (W m⁻²)",
+      Variable == "SWC" ~ "SWC to 15cm (%)",
+      Variable == "RH" ~ "Relative Humidity (%)",
+      Variable == "G" ~ "Soil Heat Flux (W m⁻²)",
+    ),
+    year = as.factor(year)  # Convert year to factor for better color mapping
+  ) %>%
+  # Remove the individual SE columns we don't need anymore
+  select(-ends_with("_se"))
 
-# Display plots
-winter_plot
-growing_plot
-fall_plot
+# Create the plot with error bars
+monthly_plot <- ggplot(monthly_env_data, aes(x = month, y = Value, color = year, group = year)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(ymin = Value - SE, ymax = Value + SE), 
+                width = 0.2, alpha = 0.7) +
+  facet_wrap(~ Variable_Label, scales = "free_y", ncol = 3, 
+             labeller = labeller(Variable_Label = label_wrap_gen(width = 15))) +
+  scale_color_manual(
+    values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
+               "2020" = "#d62728", "2021" = "#9467bd", "2022" = "#8c564b", 
+               "2023" = "#e377c2")
+  ) +
+  theme_bw() +  # Changed to light theme for better label visibility
+  theme(
+    strip.text = element_text(size = 11, face = "bold"),
+    strip.background = element_rect(fill = "gray90"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    axis.text.y = element_text(size = 9),
+    axis.title = element_text(face = "bold", size = 12),
+    legend.title = element_text(face = "bold", size = 12),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90", size = 0.5),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+  ) +
+  labs(
+    x = "Month",
+    y = "",
+    color = "Year",
+    title = "Monthly Averages of Environmental Variables (2017-2022)"
+  )
+
+# Display the plot
+print(monthly_plot)
+
+
+# Alternative version with white background 
+monthly_plot_light <- ggplot(monthly_env_data, aes(x = month, y = Value, color = year, group = year)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +
+  facet_wrap(~ Variable_Label, scales = "free_y", ncol = 3) +
+  scale_color_manual(
+    values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
+               "2020" = "#d62728", "2021" = "#9467bd", "2022" = "#8c564b", 
+               "2023" = "#e377c2")
+  ) +
+  theme_bw() +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    x = "Month",
+    y = "",
+    color = "Year",
+    title = "Monthly Averages of Environmental Variables (2017- 2022)"
+  )
+
+
+ print(monthly_plot_light)
+
 ```
+#save figure 
 ```{r}
-library(ggplot2)
-library(dplyr)
-library(tidyr)
-library(lubridate)
-
-create_seasonal_comparison <- function(df_avg, season_name) {
-  # Filter data for the specified season and handle winter wrap-around
-  seasonal_data <- df_avg %>%
-    filter(season == season_name) %>%
-    mutate(
-      doy = case_when(
-        season == "Winter" & month(date) <= 6 ~ yday(date),
-        season == "Winter" & month(date) >= 7 ~ yday(date) - 365,
-        TRUE ~ yday(date)
-      )
-    )
-  
-  # Create a long format dataset for the variables we want to compare
-  long_data <- seasonal_data %>%
-    select(date, year, doy, TA, TA_ERA5, TS_3_1_1, SWC_3_1_1) %>%
-    pivot_longer(
-      cols = c(TA, TA_ERA5, TS_3_1_1, SWC_3_1_1),
-      names_to = "variable",
-      values_to = "value"
-    ) %>%
-    mutate(
-      variable = factor(variable, 
-                       levels = c("TA", "TA_ERA5", "TS_3_1_1", "SWC_3_1_1"),
-                       labels = c("Air Temperature (°C)", "ERA5 Air Temperature (°C)", 
-                                "Soil Temperature (Tussock) (°C)", "Soil Moisture (Tussock) (%SWC)"))
-    )
-  
-  # Get unique months that appear in this season's data
-  if(season_name == "Winter") {
-    # For winter, explicitly set the months we want to show
-    month_doys <- c(-31, -15, 0, 31, 59)  # Mid-Nov through mid-Mar
-    month_labels <- c("Nov", "Dec", "Jan", "Feb", "Mar")
-  } else {
-    # For other seasons, use the actual months in the data
-    unique_months <- unique(month(seasonal_data$date))
-    month_dates <- as.Date(paste0("2019-", unique_months, "-15"))
-    month_doys <- yday(month_dates)
-    month_labels <- format(month_dates, "%b")
-  }
-  
-  # Create the plot
-  p <- ggplot(long_data, aes(x = doy, y = value)) +
-    geom_line(aes(color = as.factor(year))) +
-    facet_wrap(~variable, scales = "free_y", ncol = 1) +
-    scale_color_brewer(palette = "Dark2", name = "Year") +
-    scale_x_continuous(
-      breaks = month_doys,
-      labels = month_labels,
-      limits = range(long_data$doy)
-    ) +
-    labs(
-      title = paste(season_name, "Conditions"),
-      x = "Month",
-      y = NULL
-    ) +
-    theme_bw() +
-    theme(
-      strip.background = element_rect(fill = "white"),
-      strip.text = element_text(size = 10, face = "bold"),
-      legend.position = "right",
-      panel.grid.minor = element_blank()
-    )
-  
-  return(p)
-}
-
-# Create plots for each season
-winter_plot <- create_seasonal_comparison(df_avg, "Winter")
-growing_plot <- create_seasonal_comparison(df_avg, "Growing Season")
-fall_plot <- create_seasonal_comparison(df_avg, "Fall Senescence")
-
-# Display plots
-winter_plot
-growing_plot
-fall_plot
-
-#**need to find a way to double check the months included in each season for each year 
+ #Save figure 
+ 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/monthly_MeanMet_vars_plot.png", monthly_plot_light, 
+        width = 12, height = 7, dpi = 600)
 ```
-#Create seasonal subsets from df_avg
+
+
+#seasonal delineations - shows start and end date of each season within the year, and # days within each season for that year - Claude streamlined code 
 ```{r}
 create_seasonal_subsets <- function(year_data, year_num) {
   # Create seasonal datasets
@@ -1052,22 +988,24 @@ create_seasonal_subsets <- function(year_data, year_num) {
   ))
 }
 
-# print results 
-seasons_2017 <- create_seasonal_subsets(df_avg_2017, 2017)
+
+# print results for each year 
+seasons_2018 <- create_seasonal_subsets(df_avg_2018, 2018)
+seasons_2019 <- create_seasonal_subsets(df_avg_2019, 2019)
+seasons_2020 <- create_seasonal_subsets(df_avg_2020, 2020)
+seasons_2021 <- create_seasonal_subsets(df_avg_2021, 2021)
+seasons_2022 <- create_seasonal_subsets(df_avg_2022, 2022)
 
 # Access individual seasonal datasets if needed:
 winter_2017 <- seasons_2017$winter
 growing_2017 <- seasons_2017$growing
 fall_2017 <- seasons_2017$fall
 
-# Can easily do for other years:
-seasons_2018 <- create_seasonal_subsets(df_avg_2018, 2018)
-seasons_2019 <- create_seasonal_subsets(df_avg_2019, 2019)
-seasons_2020 <- create_seasonal_subsets(df_avg_2020, 2020)
-seasons_2021 <- create_seasonal_subsets(df_avg_2021, 2021)
-seasons_2022 <- create_seasonal_subsets(df_avg_2019, 2022)
+
 ```
-#Met data per season
+
+
+#Met data per season - prints summaries for each season within each year with average, min, max (range) --> Claude streamlined code 
 ```{r}
 create_seasonal_subsets <- function(year_data, year_num) {
   # Create seasonal datasets
@@ -1168,19 +1106,2786 @@ create_seasonal_subsets <- function(year_data, year_num) {
 }
 
 # print results 
+seasons_2017 <- create_seasonal_subsets(df_avg_2017, 2017)
+seasons_2018 <- create_seasonal_subsets(df_avg_2018, 2018)
 seasons_2019 <- create_seasonal_subsets(df_avg_2019, 2019)
+seasons_2020 <- create_seasonal_subsets(df_avg_2020, 2020)
+seasons_2021 <- create_seasonal_subsets(df_avg_2021, 2021)
+seasons_2022 <- create_seasonal_subsets(df_avg_2022, 2022)
+
 
 # Access individual seasonal datasets if needed:
 winter_2019 <- seasons_2019$winter
 growing_2019 <- seasons_2019$growing
 fall_2019 <- seasons_2019$fall
 
-# Easily print results for other years:
-seasons_2018 <- create_seasonal_subsets(df_avg_2018, 2018)
-seasons_2019 <- create_seasonal_subsets(df_avg_2019, 2019)
-seasons_2020 <- create_seasonal_subsets(df_avg_2020, 2020)
-seasons_2021 <- create_seasonal_subsets(df_avg_2021, 2021)
-seasons_2022 <- create_seasonal_subsets(df_avg_2019, 2022)
+
+
 ```
 
+#---------------------------------------------
+
+#Coding help w Claude
+```{r}
+# Step 2a: Annual Trends Analysis - Complete Visualization Script
+# Air Temperature, Soil Temperature, Soil Moisture, and VPD
+# Distinguish observed (solid) vs gap-filled (open/transparent) data
+
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+
+# ============================================================================
+# AIR TEMPERATURE
+# ============================================================================
+
+# Calculate annual means for air temperature (exclude 2023)
+annual_temp_summary <- df_avg2 %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year) %>%
+  summarise(
+    # Observed air temp
+    TA_mean = mean(TA, na.rm = TRUE),
+    TA_se = sd(TA, na.rm = TRUE) / sqrt(sum(!is.na(TA))),
+    TA_n = sum(!is.na(TA)),
+    
+    # Gap-filled air temp  
+    TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TA_gapfilled_se = sd(TA_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TA_gapfilled))),
+    TA_gapfilled_n = sum(!is.na(TA_gapfilled)),
+    
+    # Calculate gap-fill percentage
+    gapfill_percent = (TA_gapfilled_n - TA_n) / TA_gapfilled_n * 100
+  )
+
+# Calculate seasonal means for air temperature
+seasonal_temp_summary <- df_avg2 %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year, season) %>%
+  summarise(
+    # Observed air temp
+    TA_mean = mean(TA, na.rm = TRUE),
+    TA_se = sd(TA, na.rm = TRUE) / sqrt(sum(!is.na(TA))),
+    TA_n = sum(!is.na(TA)),
+    
+    # Gap-filled air temp
+    TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TA_gapfilled_se = sd(TA_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TA_gapfilled))),
+    TA_gapfilled_n = sum(!is.na(TA_gapfilled)),
+    
+    # Calculate gap-fill percentage
+    gapfill_percent = (TA_gapfilled_n - TA_n) / TA_gapfilled_n * 100,
+    .groups = 'drop'
+  )
+
+# Plot 1: Annual air temperature trends
+p1 <- ggplot(annual_temp_summary) +
+  # Gap-filled data (open circles, transparent)
+  geom_point(aes(x = year, y = TA_gapfilled_mean), 
+             shape = 1, size = 3, color = "blue", alpha = 0.7) +
+  geom_errorbar(aes(x = year, ymin = TA_gapfilled_mean - TA_gapfilled_se, 
+                    ymax = TA_gapfilled_mean + TA_gapfilled_se),
+                width = 0.1, color = "blue", alpha = 0.7) +
+  
+  # Observed data (solid circles)
+  geom_point(aes(x = year, y = TA_mean), 
+             shape = 16, size = 3, color = "red") +
+  geom_errorbar(aes(x = year, ymin = TA_mean - TA_se, 
+                    ymax = TA_mean + TA_se),
+                width = 0.1, color = "red") +
+  
+  # Add trend lines
+  geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+              method = "lm", se = TRUE, color = "blue", alpha = 0.3) +
+  geom_smooth(aes(x = year, y = TA_mean), 
+              method = "lm", se = TRUE, color = "red", alpha = 0.3) +
+  
+  labs(title = "Annual Air Temperature Trends (2017-2022)",
+       subtitle = "Red = Observed data, Blue = Gap-filled data",
+       x = "Year", 
+       y = "Air Temperature (°C)") +
+  theme_bw() +
+  scale_x_continuous(breaks = 2017:2022)
+
+# Plot 2: Seasonal air temperature trends (faceted)
+p2 <- ggplot(seasonal_temp_summary) +
+  # Gap-filled data (open circles)
+  geom_point(aes(x = year, y = TA_gapfilled_mean), 
+             shape = 1, size = 2.5, color = "blue", alpha = 0.7) +
+  geom_errorbar(aes(x = year, ymin = TA_gapfilled_mean - TA_gapfilled_se, 
+                    ymax = TA_gapfilled_mean + TA_gapfilled_se),
+                width = 0.1, color = "blue", alpha = 0.7) +
+  
+  # Observed data (solid circles)
+  geom_point(aes(x = year, y = TA_mean), 
+             shape = 16, size = 2.5, color = "red") +
+  geom_errorbar(aes(x = year, ymin = TA_mean - TA_se, 
+                    ymax = TA_mean + TA_se),
+                width = 0.1, color = "red") +
+  
+  # Add trend lines by season
+  geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+              method = "lm", se = FALSE, color = "blue", alpha = 0.7, size = 0.8) +
+  geom_smooth(aes(x = year, y = TA_mean), 
+              method = "lm", se = FALSE, color = "red", alpha = 0.7, size = 0.8) +
+  
+  facet_wrap(~ season, scales = "free_y", ncol = 3) +
+  
+  labs(title = "Seasonal Air Temperature Trends by Season (2017-2022)",
+       subtitle = "Red = Observed data, Blue = Gap-filled data",
+       x = "Year", 
+       y = "Air Temperature (°C)") +
+  theme_bw() +
+  scale_x_continuous(breaks = c(2017, 2019, 2021)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# ============================================================================
+# SOIL TEMPERATURE
+# ============================================================================
+
+# Calculate annual means for soil temperature
+annual_soil_temp_summary <- df_avg2 %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year) %>%
+  summarise(
+    # Observed soil temp (TS_3_1_1)
+    TS_3_mean = mean(TS_3_1_1, na.rm = TRUE),
+    TS_3_se = sd(TS_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_1_1))),
+    TS_3_n = sum(!is.na(TS_3_1_1)),
+    
+    # Gap-filled soil temp
+    TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled_se = sd(TS_3_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_gapfilled))),
+    TS_3_gapfilled_n = sum(!is.na(TS_3_gapfilled)),
+    
+    # Calculate gap-fill percentage
+    gapfill_percent = (TS_3_gapfilled_n - TS_3_n) / TS_3_gapfilled_n * 100
+  )
+
+# Calculate seasonal means for soil temperature
+seasonal_soil_temp_summary <- df_avg2 %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year, season) %>%
+  summarise(
+    # Observed soil temp
+    TS_3_mean = mean(TS_3_1_1, na.rm = TRUE),
+    TS_3_se = sd(TS_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_1_1))),
+    TS_3_n = sum(!is.na(TS_3_1_1)),
+    
+    # Gap-filled soil temp
+    TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled_se = sd(TS_3_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_gapfilled))),
+    TS_3_gapfilled_n = sum(!is.na(TS_3_gapfilled)),
+    
+    # Calculate gap-fill percentage
+    gapfill_percent = (TS_3_gapfilled_n - TS_3_n) / TS_3_gapfilled_n * 100,
+    .groups = 'drop'
+  )
+
+# Plot 3: Annual soil temperature trends
+p3 <- ggplot(annual_soil_temp_summary) +
+  # Gap-filled data (open circles, transparent)
+  geom_point(aes(x = year, y = TS_3_gapfilled_mean), 
+             shape = 1, size = 3, color = "darkgreen", alpha = 0.7) +
+  geom_errorbar(aes(x = year, ymin = TS_3_gapfilled_mean - TS_3_gapfilled_se, 
+                    ymax = TS_3_gapfilled_mean + TS_3_gapfilled_se),
+                width = 0.1, color = "darkgreen", alpha = 0.7) +
+  
+  # Observed data (solid circles)
+  geom_point(aes(x = year, y = TS_3_mean), 
+             shape = 16, size = 3, color = "orange") +
+  geom_errorbar(aes(x = year, ymin = TS_3_mean - TS_3_se, 
+                    ymax = TS_3_mean + TS_3_se),
+                width = 0.1, color = "orange") +
+  
+  # Add trend lines
+  geom_smooth(aes(x = year, y = TS_3_gapfilled_mean), 
+              method = "lm", se = TRUE, color = "darkgreen", alpha = 0.3) +
+  geom_smooth(aes(x = year, y = TS_3_mean), 
+              method = "lm", se = TRUE, color = "orange", alpha = 0.3) +
+  
+  labs(title = "Annual Soil Temperature Trends (2017-2022)",
+       subtitle = "Orange = Observed data, Green = Gap-filled data",
+       x = "Year", 
+       y = "Soil Temperature (°C)") +
+  theme_bw() +
+  scale_x_continuous(breaks = 2017:2022)
+
+# Plot 4: Seasonal soil temperature trends (faceted)
+p4 <- ggplot(seasonal_soil_temp_summary) +
+  # Gap-filled data (open circles)
+  geom_point(aes(x = year, y = TS_3_gapfilled_mean), 
+             shape = 1, size = 2.5, color = "darkgreen", alpha = 0.7) +
+  geom_errorbar(aes(x = year, ymin = TS_3_gapfilled_mean - TS_3_gapfilled_se, 
+                    ymax = TS_3_gapfilled_mean + TS_3_gapfilled_se),
+                width = 0.1, color = "darkgreen", alpha = 0.7) +
+  
+  # Observed data (solid circles)
+  geom_point(aes(x = year, y = TS_3_mean), 
+             shape = 16, size = 2.5, color = "orange") +
+  geom_errorbar(aes(x = year, ymin = TS_3_mean - TS_3_se, 
+                    ymax = TS_3_mean + TS_3_se),
+                width = 0.1, color = "orange") +
+  
+  # Add trend lines by season
+  geom_smooth(aes(x = year, y = TS_3_gapfilled_mean), 
+              method = "lm", se = FALSE, color = "darkgreen", alpha = 0.7, size = 0.8) +
+  geom_smooth(aes(x = year, y = TS_3_mean), 
+              method = "lm", se = FALSE, color = "orange", alpha = 0.7, size = 0.8) +
+  
+  facet_wrap(~ season, scales = "free_y", ncol = 3) +
+  
+  labs(title = "Seasonal Soil Temperature Trends by Season (2017-2022)",
+       subtitle = "Orange = Observed data, Green = Gap-filled data",
+       x = "Year", 
+       y = "Soil Temperature (°C)") +
+  theme_bw() +
+  scale_x_continuous(breaks = c(2017, 2019, 2021)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# ============================================================================
+# SOIL MOISTURE AND VPD
+# ============================================================================
+
+# Calculate annual means for soil moisture and VPD
+annual_other_summary <- df_avg2 %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year) %>%
+  summarise(
+    # Soil moisture (SWC_3_1_1)
+    SWC_3_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    SWC_3_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    SWC_3_n = sum(!is.na(SWC_3_1_1)),
+    
+    # VPD
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    VPD_n = sum(!is.na(VPD))
+  )
+
+# Calculate seasonal means
+seasonal_other_summary <- df_avg2 %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year, season) %>%
+  summarise(
+    # Soil moisture
+    SWC_3_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    SWC_3_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    SWC_3_n = sum(!is.na(SWC_3_1_1)),
+    
+    # VPD
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    VPD_n = sum(!is.na(VPD)),
+    .groups = 'drop'
+  )
+
+# Plot 5: Annual soil moisture trends
+p5 <- ggplot(annual_other_summary) +
+  geom_point(aes(x = year, y = SWC_3_mean), 
+             shape = 16, size = 3, color = "brown") +
+  geom_errorbar(aes(x = year, ymin = SWC_3_mean - SWC_3_se, 
+                    ymax = SWC_3_mean + SWC_3_se),
+                width = 0.1, color = "brown") +
+  
+  # Add trend line
+  geom_smooth(aes(x = year, y = SWC_3_mean), 
+              method = "lm", se = TRUE, color = "brown", alpha = 0.3) +
+  
+  labs(title = "Annual Soil Moisture Trends (2017-2022)",
+       x = "Year", 
+       y = "Soil Water Content (%)") +
+  theme_bw() +
+  scale_x_continuous(breaks = 2017:2022)
+
+# Plot 6: Seasonal soil moisture trends
+p6 <- ggplot(seasonal_other_summary) +
+  geom_point(aes(x = year, y = SWC_3_mean), 
+             shape = 16, size = 2.5, color = "brown") +
+  geom_errorbar(aes(x = year, ymin = SWC_3_mean - SWC_3_se, 
+                    ymax = SWC_3_mean + SWC_3_se),
+                width = 0.1, color = "brown") +
+  
+  # Add trend lines by season
+  geom_smooth(aes(x = year, y = SWC_3_mean), 
+              method = "lm", se = FALSE, color = "brown", alpha = 0.7, size = 0.8) +
+  
+  facet_wrap(~ season, scales = "free_y", ncol = 3) +
+  
+  labs(title = "Seasonal Soil Moisture Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "Soil Water Content (%)") +
+  theme_bw() +
+  scale_x_continuous(breaks = c(2017, 2019, 2021)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Plot 7: Annual VPD trends
+p7 <- ggplot(annual_other_summary) +
+  geom_point(aes(x = year, y = VPD_mean), 
+             shape = 16, size = 3, color = "purple") +
+  geom_errorbar(aes(x = year, ymin = VPD_mean - VPD_se, 
+                    ymax = VPD_mean + VPD_se),
+                width = 0.1, color = "purple") +
+  
+  # Add trend line
+  geom_smooth(aes(x = year, y = VPD_mean), 
+              method = "lm", se = TRUE, color = "purple", alpha = 0.3) +
+  
+  labs(title = "Annual Vapor Pressure Deficit Trends (2017-2022)",
+       x = "Year", 
+       y = "VPD (hPa)") +
+  theme_bw() +
+  scale_x_continuous(breaks = 2017:2022)
+
+# Plot 8: Seasonal VPD trends
+p8 <- ggplot(seasonal_other_summary) +
+  geom_point(aes(x = year, y = VPD_mean), 
+             shape = 16, size = 2.5, color = "purple") +
+  geom_errorbar(aes(x = year, ymin = VPD_mean - VPD_se, 
+                    ymax = VPD_mean + VPD_se),
+                width = 0.1, color = "purple") +
+  
+  # Add trend lines by season
+  geom_smooth(aes(x = year, y = VPD_mean), 
+              method = "lm", se = FALSE, color = "purple", alpha = 0.7, size = 0.8) +
+  
+  facet_wrap(~ season, scales = "free_y", ncol = 3) +
+  
+  labs(title = "Seasonal VPD Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "VPD (hPa)") +
+  theme_bw() +
+  scale_x_continuous(breaks = c(2017, 2019, 2021)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# ============================================================================
+# DISPLAY ALL PLOTS
+# ============================================================================
+
+# Display plots
+print(p1)  # Annual air temp
+print(p2)  # Seasonal air temp
+print(p3)  # Annual soil temp
+print(p4)  # Seasonal soil temp
+print(p5)  # Annual soil moisture
+print(p6)  # Seasonal soil moisture
+print(p7)  # Annual VPD
+print(p8)  # Seasonal VPD
+
+# ============================================================================
+# PRINT SUMMARY STATISTICS
+# ============================================================================
+
+cat("\n=== AIR TEMPERATURE SUMMARY ===\n")
+cat("\nAnnual Air Temperature:\n")
+print(annual_temp_summary)
+cat("\nSeasonal Air Temperature:\n")
+print(seasonal_temp_summary)
+
+cat("\n=== SOIL TEMPERATURE SUMMARY ===\n")
+cat("\nAnnual Soil Temperature:\n")
+print(annual_soil_temp_summary)
+cat("\nSeasonal Soil Temperature:\n")
+print(seasonal_soil_temp_summary)
+
+cat("\n=== SOIL MOISTURE AND VPD SUMMARY ===\n")
+cat("\nAnnual Summary:\n")
+print(annual_other_summary)
+cat("\nSeasonal Summary:\n")
+print(seasonal_other_summary)
+
+  
+```
+ 
+
+#Seasonal averages for each year, facetwrapped by season 
+
+##prepare seasonal summary dataset by year, set color for each year for consistency across figures 
+```{r}
+# Seasonal Trends Faceted by Season - All Variables
+
+library(ggplot2)
+library(dplyr)
+
+# Prepare seasonal summaries for all variables (2017-2022)
+seasonal_summary_all <- df_avg2 %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year, season) %>%
+  summarise(
+    # ERA5 GF Air temperature (gap-filled)
+    TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TA_gapfilled_se = sd(TA_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TA_gapfilled))),
+    
+    # measured Air temperature 
+    TA_mean = mean(TA, na.rm = TRUE),
+    TA_se = sd(TA, na.rm = TRUE) / sqrt(sum(!is.na(TA))),
+    
+    # ERA5 GF Soil temperature (gap-filled only)
+    TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled_se = sd(TS_3_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_gapfilled))),
+    
+    # Measured Soil temperature 
+    TS_3_mean = mean(TS_3_1_1, na.rm = TRUE),
+    TS_3_se = sd(TS_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_1_1))),
+    
+    # Soil moisture
+    SWC_3_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    SWC_3_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    
+    # VPD
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    
+    # RH - relative humidity 
+    RH_mean = mean(RH, na.rm = TRUE),
+    RH_se = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    
+    # Sensible heat
+    H_mean = mean(H, na.rm = TRUE),
+    H_se = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    
+    # Latent heat
+    LE_mean = mean(LE, na.rm = TRUE),
+    LE_se = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    
+    # Ground heat
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    G_se = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    
+    
+    
+    .groups = 'drop'
+  )
+
+# Define consistent year colors
+year_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+# Convert year to factor for consistent color mapping
+seasonal_summary_all$year_factor <- as.factor(seasonal_summary_all$year)
+```
+
+
+####make plots 
+```{r}
+# ============================================================================
+# Plot 1: Air Temperature by Season (Gap-filled only)
+# ============================================================================
+
+p_TA <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = TA_gapfilled_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = TA_gapfilled_mean - TA_gapfilled_se, 
+                    ymax = TA_gapfilled_mean + TA_gapfilled_se, color = year_factor),
+                width = 0.2) +
+  
+  geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+              method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Air Temperature Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "Air Temperature (°C)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 2: Soil Temperature by Season (Gap-filled only)
+# ============================================================================
+
+p_TS <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = TS_3_gapfilled_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = TS_3_gapfilled_mean - TS_3_gapfilled_se, 
+                    ymax = TS_3_gapfilled_mean + TS_3_gapfilled_se, color = year_factor),
+                width = 0.2) +
+  
+  geom_smooth(aes(x = year, y = TS_3_gapfilled_mean), 
+              method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Soil Temperature Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "Soil Temperature (°C)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 3: Soil Moisture by Season
+# ============================================================================
+
+p_SWC <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = SWC_3_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = SWC_3_mean - SWC_3_se, 
+                    ymax = SWC_3_mean + SWC_3_se, color = year_factor),
+                width = 0.2) +
+  
+  geom_smooth(aes(x = year, y = SWC_3_mean), 
+              method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Soil Moisture Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "Soil Water Content (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 4: VPD by Season
+# ============================================================================
+
+p_VPD <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = VPD_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = VPD_mean - VPD_se, 
+                    ymax = VPD_mean + VPD_se, color = year_factor),
+                width = 0.2) +
+  
+  geom_smooth(aes(x = year, y = VPD_mean), 
+              method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal VPD Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "VPD (hPa)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+
+# ============================================================================
+# Plot 5: RH by Season
+# ============================================================================
+
+p_RH <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = RH_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = RH_mean - RH_se, 
+                    ymax = RH_mean + RH_se, color = year_factor),
+                width = 0.2) +
+  
+  geom_smooth(aes(x = year, y = RH_mean), 
+              method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal RH Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "RH (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 6: Sensible Heat (H) by Season
+# ============================================================================
+
+p_H <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = H_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = H_mean - H_se, 
+                    ymax = H_mean + H_se, color = year_factor),
+                width = 0.2) +
+  
+  geom_smooth(aes(x = year, y = H_mean), 
+              method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Sensible Heat Flux Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "H (W/m²)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 7: Latent Heat (LE) by Season
+# ============================================================================
+
+p_LE <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = LE_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = LE_mean - LE_se, 
+                    ymax = LE_mean + LE_se, color = year_factor),
+                width = 0.2) +
+  
+  geom_smooth(aes(x = year, y = LE_mean), 
+              method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Latent Heat Flux Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "LE (W/m²)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+
+# ============================================================================
+# Plot 8: Ground Heat Flux (G) by Season
+# ============================================================================
+
+p_G <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = G_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = G_mean - G_se, 
+                    ymax = G_mean + G_se, color = year_factor),
+                width = 0.2) +
+  
+  geom_smooth(aes(x = year, y = G_mean), 
+              method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Ground Heat Flux Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "G (W/m²)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+# ============================================================================
+# DISPLAY ALL PLOTS
+# ============================================================================
+
+print(p_TA)
+print(p_TS)
+print(p_SWC)
+print(p_VPD)
+print(p_RH)
+print(p_H)
+print(p_LE)
+print(p_G)
+```
+ 
+####Adj figure to take out the trendline and trendline SE-shading 
+```{r}
+# Seasonal Trends Faceted by Season - All Variables
+
+# ============================================================================
+# Plot 1: Air Temperature by Season (ERA5 Gap-filled)
+# ============================================================================
+
+p_TA <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = TA_gapfilled_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = TA_gapfilled_mean - TA_gapfilled_se, 
+                    ymax = TA_gapfilled_mean + TA_gapfilled_se, color = "black"), # color = year_factor),
+                width = 0.3, linewidth = 0.7, alpha = 1 ) +
+  
+  # geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+  #             method = "auto", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Air Temperature Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "Air Temperature (°C)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+
+# ============================================================================
+# Plot 2: Soil Temperature by Season (ERA5 Gap-filled)
+# ============================================================================
+
+p_TS <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = TS_3_gapfilled_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = TS_3_gapfilled_mean - TS_3_gapfilled_se, 
+                    ymax = TS_3_gapfilled_mean + TS_3_gapfilled_se, color = "black"), # color = year_factor),
+                 width = 0.3, linewidth = 0.7, alpha = 1 ) +
+  
+  # geom_smooth(aes(x = year, y = TS_3_gapfilled_mean), 
+  #             method = "auto", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Soil Temperature Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "Soil Temperature (°C)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 3: Soil Moisture by Season
+# ============================================================================
+
+p_SWC <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = SWC_3_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = SWC_3_mean - SWC_3_se, 
+                    ymax = SWC_3_mean + SWC_3_se, color = "black"), # color = year_factor),
+                width = 0.3, linewidth = 0.7, alpha = 1 ) +
+  
+  # geom_smooth(aes(x = year, y = SWC_3_mean), 
+  #             method = "auto", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Soil Moisture Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "Soil Water Content (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 4: RH by Season
+# ============================================================================
+
+p_RH <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = RH_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = RH_mean - RH_se, 
+                    ymax = RH_mean + RH_se, color = "black"), # color = year_factor),
+                width = 0.3, linewidth = 0.7, alpha = 1 ) +
+  
+  # geom_smooth(aes(x = year, y = RH_mean), 
+  #             method = "auto", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal RH Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "RH (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 5: VPD by Season
+# ============================================================================
+
+p_VPD <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = VPD_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = VPD_mean - VPD_se, 
+                    ymax = VPD_mean + VPD_se, color = "black"), # color = year_factor),
+                 width = 0.3, linewidth = 0.7, alpha = 1 ) +
+  
+  # geom_smooth(aes(x = year, y = VPD_mean), 
+  #             method = "auto", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal VPD Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "VPD (hPa)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 6: Sensible Heat (H) by Season
+# ============================================================================
+
+p_H <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = H_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = H_mean - H_se, 
+                    ymax = H_mean + H_se, color = "black"), # color = year_factor),
+                 width = 0.3, linewidth = 0.7, alpha = 1 ) +
+  
+  #geom_smooth(aes(x = year, y = H_mean), 
+             # method = "auto", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Sensible Heat Flux Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "H (W/m²)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 7: Latent Heat (LE) by Season
+# ============================================================================
+
+p_LE <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = LE_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = LE_mean - LE_se, 
+                    ymax = LE_mean + LE_se, color = "black"), #color = year_factor),
+                 width = 0.3, linewidth = 0.7, alpha = 1 ) +
+  
+  #geom_smooth(aes(x = year, y = LE_mean), 
+             # method = "auto", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Latent Heat Flux Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "LE (W/m²)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# Plot 8: Ground Heat Flux (G) by Season
+# ============================================================================
+
+p_G <- ggplot(seasonal_summary_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = G_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = G_mean - G_se, 
+                    ymax = G_mean + G_se, color = "black"),
+                 width = 0.3, linewidth = 0.7, alpha = 1 ) +
+  
+  # geom_smooth(aes(x = year, y = G_mean), 
+  #             method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Seasonal Ground Heat Flux Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "G (W/m²)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# ============================================================================
+# DISPLAY ALL PLOTS  
+# ============================================================================
+
+print(p_TA)
+print(p_TS)
+print(p_SWC)
+print(p_RH)
+print(p_VPD)
+print(p_H)
+print(p_LE)
+print(p_G)
+
+
+#note, SE is present but some error bars are so small compared to the scale of the fig they appear as if they're not showing up...but if you change scale = "free", you can see them, this just doesn't maintain consistent axis ranges among seasons
+```
+
+
+#Arrange figures into one 
+```{r}
+library(gridExtra)
+library(grid)
+library(ggplot2)
+
+# Remove titles from all plots
+p_TA <- p_TA + labs(title = NULL)
+p_TS <- p_TS + labs(title = NULL)
+p_SWC <- p_SWC + labs(title = NULL)
+p_VPD <- p_VPD + labs(title = NULL)
+p_RH <- p_RH + labs(title = NULL)
+p_H <- p_H + labs(title = NULL)
+p_LE <- p_LE + labs(title = NULL)
+p_G <- p_G + labs(title = NULL)
+
+
+# Extract the legend from one of your existing plots
+# First, temporarily modify one plot to show the legend
+p_with_legend <- p_TA + 
+  theme(legend.position = "right") +
+  scale_color_manual(values = year_colors, name = "Year")
+
+# Function to extract legend
+get_legend <- function(myggplot) {
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+legend <- get_legend(p_with_legend)
+
+# Arrange all your existing plots with the shared legend
+seasonal_MeanMet_by_yr <- grid.arrange(
+  arrangeGrob(p_TA, p_TS, p_SWC, p_VPD, p_RH, p_H, p_LE, p_G, ncol = 2),
+  legend,
+  ncol = 2,
+  widths = c(10, 1.5),
+  top = textGrob("Seasonal Environmental Trends (2017-2022)", 
+                 gp = gpar(fontsize = 16, fontface = "bold"))
+)
+```
+#Save figure 
+
+```{r}
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_MeanMet_vars_by_year_plot.png", seasonal_MeanMet_by_yr, 
+        width = 15, height = 15, dpi = 600)
+```
+
+```{r}
+sum(is.na(df$FC)) #82174
+sum(is.na(df$FCH4)) #91231   # difference of 9057 obs for FC vs FCH4
+
+sum(is.na(df_avg2$FC)) # 1614
+sum(is.na(df_avg2$FCH4)) # 1855   - diff of 241 obs for FC vs FCH4
+
+```
+
+
+
+
+#Stats - differences in variables among years within each season 
+
+
+#Important: this is looking at the normality / heterogeneity of the annual means for each season, for each year (so n = 6) - shapiro-wilkes will have very low power with this low sample size so rely on QQ-plots and histograms 
+```{r}
+# Visual Diagnostics for Assumption Testing
+# QQ-plots and Histograms for normality assessment
+
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+
+# Prepare seasonal summaries
+# seasonal_summary_all <- df_avg2 %>%
+#   filter(year %in% 2017:2022) %>%
+#   group_by(year, season) %>%
+#   summarise(
+#     TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+#     TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+#     SWC_3_mean = mean(SWC_3_1_1, na.rm = TRUE),
+#     VPD_mean = mean(VPD, na.rm = TRUE),
+#     H_mean = mean(H, na.rm = TRUE),
+#     LE_mean = mean(LE, na.rm = TRUE),
+#     .groups = 'drop'
+#   )
+
+# ============================================================================
+# FUNCTION: Create diagnostic plots for a variable
+# ============================================================================
+
+create_diagnostic_plots <- function(data, var_name, var_label) {
+  
+  seasons <- unique(data$season)
+  plot_list <- list()
+  
+  for (s in seasons) {
+    season_data <- data %>% filter(season == s)
+    y_vals <- season_data[[var_name]]
+    
+    # Skip if too many NAs
+    if (sum(!is.na(y_vals)) < 4) next
+    
+    # Shapiro test
+    shapiro_p <- round(shapiro.test(y_vals)$p.value, 4)
+    normal_status <- ifelse(shapiro_p > 0.05, "Normal", "Non-normal")
+    
+    # QQ-plot
+    qq_plot <- ggplot(data.frame(sample = y_vals), aes(sample = sample)) +
+      stat_qq() +
+      stat_qq_line(color = "red", linewidth = 1) +
+      labs(title = paste(s, "- QQ Plot"),
+           subtitle = paste("Shapiro p =", shapiro_p, "-", normal_status),
+           x = "Theoretical Quantiles",
+           y = "Sample Quantiles") +
+      theme_bw() +
+      theme(
+        plot.title = element_text(face = "bold", size = 10),
+        plot.subtitle = element_text(size = 9),
+        axis.title = element_text(face = "bold", size = 9),
+        axis.text = element_text(face = "bold", size = 8)
+      )
+    
+    # Histogram
+    hist_plot <- ggplot(data.frame(value = y_vals), aes(x = value)) +
+      geom_histogram(bins = 5, fill = "steelblue", color = "black", alpha = 0.7) +
+      geom_density(aes(y = after_stat(count)), color = "red", linewidth = 1) +
+      labs(title = paste(s, "- Histogram"),
+           x = var_label,
+           y = "Count") +
+      theme_bw() +
+      theme(
+        plot.title = element_text(face = "bold", size = 10),
+        axis.title = element_text(face = "bold", size = 9),
+        axis.text = element_text(face = "bold", size = 8)
+      )
+    
+    # Residuals plot (from linear model)
+    # Remove NAs to ensure consistent lengths
+    complete_cases <- complete.cases(y_vals, season_data$year)
+    y_complete <- y_vals[complete_cases]
+    x_complete <- season_data$year[complete_cases]
+    
+    lm_model <- lm(y_complete ~ x_complete)
+    resid_data <- data.frame(
+      fitted = fitted(lm_model),
+      residuals = residuals(lm_model),
+      year = x_complete
+    )
+    
+    resid_plot <- ggplot(resid_data, aes(x = fitted, y = residuals)) +
+      geom_point(size = 3, color = "steelblue") +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "red", linewidth = 1) +
+      geom_smooth(method = "loess", se = FALSE, color = "black", linewidth = 0.8) +
+      labs(title = paste(s, "- Residuals vs Fitted"),
+           x = "Fitted Values",
+           y = "Residuals") +
+      theme_bw() +
+      theme(
+        plot.title = element_text(face = "bold", size = 10),
+        axis.title = element_text(face = "bold", size = 9),
+        axis.text = element_text(face = "bold", size = 8)
+      )
+    
+    plot_list[[s]] <- list(qq = qq_plot, hist = hist_plot, resid = resid_plot)
+  }
+  
+  return(plot_list)
+}
+
+# ============================================================================
+# CREATE DIAGNOSTIC PLOTS FOR ALL VARIABLES
+# ============================================================================
+
+
+cat("Creating diagnostic plots for assumption testing...\n\n")
+
+# ERA5-GF Air Temperature
+cat("--- AIR TEMPERATURE (Gap-filled) ---\n")
+GF_ta_diag <- create_diagnostic_plots(seasonal_summary_all, 
+                                    "TA_gapfilled_mean", 
+                                    "GF Air Temperature (°C)")
+
+# Arrange plots in a grid for each season
+for (season in names(GF_ta_diag)) {
+  grid.arrange(GF_ta_diag[[season]]$qq, 
+               GF_ta_diag[[season]]$hist, 
+               GF_ta_diag[[season]]$resid,
+               ncol = 3,
+               top = paste("GF Air Temperature -", season))
+}
+
+# Air Temperature
+cat("--- AIR TEMPERATURE (measured) ---\n")
+ta_diag <- create_diagnostic_plots(seasonal_summary_all, 
+                                    "TA_mean", 
+                                    "Air Temperature (°C)")
+
+# Arrange plots in a grid for each season
+for (season in names(ta_diag)) {
+  grid.arrange(ta_diag[[season]]$qq, 
+               ta_diag[[season]]$hist, 
+               ta_diag[[season]]$resid,
+               ncol = 3,
+               top = paste("Air Temperature -", season))
+}
+
+# ERA5-GF Soil Temperature
+cat("\n--- SOIL TEMPERATURE (Gap-filled) ---\n")
+GF_ts_diag <- create_diagnostic_plots(seasonal_summary_all, 
+                                    "TS_3_gapfilled_mean", 
+                                    "GF Soil Temperature (°C)")
+
+for (season in names(GF_ts_diag)) {
+  grid.arrange(GF_ts_diag[[season]]$qq, 
+               GF_ts_diag[[season]]$hist, 
+               GF_ts_diag[[season]]$resid,
+               ncol = 3,
+               top = paste("GF Soil Temperature -", season))
+}
+
+# Measured Soil Temperature
+cat("\n--- SOIL TEMPERATURE (measured) ---\n")
+ts_diag <- create_diagnostic_plots(seasonal_summary_all, 
+                                    "TS_3_mean", 
+                                    "Soil Temperature (°C)")
+
+for (season in names(ts_diag)) {
+  grid.arrange(ts_diag[[season]]$qq, 
+               ts_diag[[season]]$hist, 
+               ts_diag[[season]]$resid,
+               ncol = 3,
+               top = paste("Soil Temperature -", season))
+}
+
+# Soil Moisture
+cat("\n--- SOIL MOISTURE ---\n")
+swc_diag <- create_diagnostic_plots(seasonal_summary_all, 
+                                     "SWC_3_mean", 
+                                     "Soil Moisture (%)")
+
+for (season in names(swc_diag)) {
+  grid.arrange(swc_diag[[season]]$qq, 
+               swc_diag[[season]]$hist, 
+               swc_diag[[season]]$resid,
+               ncol = 3,
+               top = paste("Soil Moisture -", season))
+}
+
+# RH
+cat("\n--- RH ---\n")
+rh_diag <- create_diagnostic_plots(seasonal_summary_all, 
+                                     "RH_mean", 
+                                     "SRH (%)")
+
+for (season in names(rh_diag)) {
+  grid.arrange(rh_diag[[season]]$qq, 
+               rh_diag[[season]]$hist, 
+               rh_diag[[season]]$resid,
+               ncol = 3,
+               top = paste("RH -", season))
+}
+
+# VPD
+cat("\n--- VAPOR PRESSURE DEFICIT ---\n")
+vpd_diag <- create_diagnostic_plots(seasonal_summary_all, 
+                                     "VPD_mean", 
+                                     "VPD (hPa)")
+
+for (season in names(vpd_diag)) {
+  grid.arrange(vpd_diag[[season]]$qq, 
+               vpd_diag[[season]]$hist, 
+               vpd_diag[[season]]$resid,
+               ncol = 3,
+               top = paste("VPD -", season))
+}
+
+# Sensible Heat
+cat("\n--- SENSIBLE HEAT FLUX ---\n")
+h_diag <- create_diagnostic_plots(seasonal_summary_all, 
+                                   "H_mean", 
+                                   "Sensible Heat (W/m²)")
+
+for (season in names(h_diag)) {
+  grid.arrange(h_diag[[season]]$qq, 
+               h_diag[[season]]$hist, 
+               h_diag[[season]]$resid,
+               ncol = 3,
+               top = paste("Sensible Heat -", season))
+}
+
+# Latent Heat
+cat("\n--- LATENT HEAT FLUX ---\n")
+le_diag <- create_diagnostic_plots(seasonal_summary_all, 
+                                    "LE_mean", 
+                                    "Latent Heat (W/m²)")
+
+for (season in names(le_diag)) {
+  grid.arrange(le_diag[[season]]$qq, 
+               le_diag[[season]]$hist, 
+               le_diag[[season]]$resid,
+               ncol = 3,
+               top = paste("Latent Heat -", season))
+}
+
+# Ground heat flux 
+cat("\n--- Ground HEAT FLUX ---\n")
+g_diag <- create_diagnostic_plots(seasonal_summary_all, 
+                                    "G_mean", 
+                                    "Ground Heat Flux (W/m²)")
+
+for (season in names(g_diag)) {
+  grid.arrange(g_diag[[season]]$qq, 
+               g_diag[[season]]$hist, 
+               g_diag[[season]]$resid,
+               ncol = 3,
+               top = paste("Ground Heat -", season))
+}
+
+cat("\n\nInterpretation Guide:\n")
+cat("====================\n")
+cat("QQ-Plot: Points should fall along the red line for normal data\n")
+cat("  - Points above line = right skew (heavy upper tail)\n")
+cat("  - Points below line = left skew (heavy lower tail)\n")
+cat("  - S-shape = data has both tails heavier/lighter than normal\n\n")
+cat("Histogram: Should be approximately bell-shaped for normal data\n\n")
+cat("Residuals Plot: Should show random scatter around 0 line\n")
+cat("  - Pattern/curve = non-linear relationship\n")
+cat("  - Funnel shape = heteroscedasticity (non-constant variance)\n\n")
+cat("Shapiro-Wilk p-value: > 0.05 suggests normality\n") #but important to note that with n=6, shapiro wilkes has VERY low power, so rely on QQplot & histogram & use your judgement 
+
+#QQ plots don't look terrible, but the histograms don't look like normal distributions most times 
+```
+
+#Spot-test: Verifying the above output from Claude's code with stepwise tests for normality and homogeneity of variance 
+
+#Test normality of avg annual met vars within each season 
+```{r}
+library(dplyr)
+
+#swap out variables of interest to spot check 
+seasonal_summary_all %>% #this is the dataset with the seasonal avg by year 
+#filter(complete.cases(season, VPD)) %>%   # remove NA values
+  group_by(season) %>%
+  summarize(
+    shapiro_p = shapiro.test(TS_3_mean)$p.value,
+    normal = ifelse(shapiro_p > 0.05, "Yes", "No")
+          )
+#TA_gapfilled air: all yes - agreement 
+#TS_3: all yes 
+
+
+#VPD
+seasonal_summary_all %>% #this is the dataset with the seasonal avg by year 
+#filter(complete.cases(season, VPD)) %>%   # remove NA values
+  group_by(season) %>%
+  summarize(
+    shapiro_p = shapiro.test(VPD_mean)$p.value,
+    normal = ifelse(shapiro_p > 0.05, "Yes", "No")
+          )
+#VPD: winter no, summer / fall yes 
+
+
+# QQ plots for each season 
+qqnorm(seasonal_summary_all$VPD_mean[seasonal_summary_all$season == "Growing Season"]) #looks ok..?
+qqline(seasonal_summary_all$VPD_mean[seasonal_summary_all$season == "Growing Season"], col = "red")
+
+qqnorm(seasonal_summary_all$SWC_3_mean[seasonal_summary_all$season == "Growing Season"]) 
+qqline(seasonal_summary_all$SWC_3_mean[seasonal_summary_all$season == "Growing Season"], col = "red")
+
+ggplot(seasonal_summary_all, aes(x = VPD_mean)) +
+  geom_histogram(bins = 5, fill = "steelblue", color = "black", alpha = 0.7) +
+  geom_density(aes(y = after_stat(count)), color = "red", linewidth = 1) +
+  theme_bw() +
+  facet_wrap(~season, scales = "free_x") +  # Added scales = "free_x"
+  labs(title = "VPD Distribution by Season (Annual Means)",
+       x = "VPD (hPa)",
+       y = "Count")
+
+
+```
+
+##### starts with testing lm assumptions, pivots to non-parametric if assumptions are violated, used kendall's tau (similar to spearman corr but supposedly better for small sample sizes and here we only have 6 yrs so n = 6) - streamlined function code by Claude 
+```{r}
+
+# Tests for significant trends in environmental variables by season (2017-2022)
+
+library(dplyr)
+library(broom)
+
+
+
+# ============================================================================
+# FUNCTION: Test trends for a variable within each season
+# ============================================================================
+
+test_seasonal_trends <- function(data, var_name, var_label, units) {
+  
+  results_list <- list()
+  seasons <- unique(data$season)
+  
+  for (s in seasons) {
+    season_data <- data %>% filter(season == s)
+    
+    # Extract variable values
+    y_vals <- season_data[[var_name]]
+    x_vals <- season_data$year
+    
+    # Skip if too many NAs
+    if (sum(!is.na(y_vals)) < 4) {
+      next
+    }
+    
+    # Test normality (Shapiro-Wilk) - tests normality of raw data, but for this we want residuals of the fitted lm 
+    #shapiro_p <- shapiro.test(y_vals)$p.value
+    
+    # Linear regression
+    lm_model <- lm(y_vals ~ x_vals)
+    lm_summary <- summary(lm_model)
+    
+    #Test normality of RESIDUALS (not raw data)
+    residuals_vals <- residuals(lm_model)
+    shapiro_p <- shapiro.test(residuals_vals)$p.value
+    
+    # Extract key statistics
+    slope <- coef(lm_model)[2]
+    slope_se <- summary(lm_model)$coefficients[2, 2]
+    slope_p <- summary(lm_model)$coefficients[2, 4]
+    r_squared <- lm_summary$r.squared
+    adj_r_squared <- lm_summary$adj.r.squared
+    
+    # Mann-Kendall test (non-parametric trend test) - run on the raw/observed data 
+    # Kendall's tau correlation
+    kendall_test <- cor.test(x_vals, y_vals, method = "kendall")
+    kendall_tau <- kendall_test$estimate
+    kendall_p <- kendall_test$p.value
+    
+    # Spearman correlation (another non-parametric option) - run on the raw/observed data 
+    spearman_test <- cor.test(x_vals, y_vals, method = "spearman")
+    spearman_rho <- spearman_test$estimate
+    spearman_p <- spearman_test$p.value
+    
+    # Calculate percent change over period - not sure this is working properly...
+    first_val <- y_vals[1]
+    last_val <- y_vals[length(y_vals)]
+    total_change <- last_val - first_val
+    pct_change <- (total_change / abs(first_val)) * 100
+    
+    # Calculate change per year
+    change_per_year <- slope
+    
+    # Store results
+    results_list[[s]] <- data.frame(
+      season = s,
+      variable = var_label,
+      units = units,
+      n_years = length(y_vals),
+      mean_value = mean(y_vals, na.rm = TRUE),
+      
+      # Normality test
+      shapiro_p = shapiro_p,
+      normal = ifelse(shapiro_p > 0.05, "Yes", "No"),
+      
+      # Linear model
+      slope = slope,
+      slope_se = slope_se,
+      slope_p = slope_p,
+      r_squared = r_squared,
+      adj_r_squared = adj_r_squared,
+      
+      # Non-parametric tests
+      kendall_tau = kendall_tau,
+      kendall_p = kendall_p,
+      spearman_rho = spearman_rho,
+      spearman_p = spearman_p,
+      
+      # Trend magnitude
+      change_per_year = change_per_year,
+      total_change_2017_2022 = total_change,
+      percent_change_2017_2022 = pct_change,
+      
+      # Significance (using appropriate test)
+      significant = ifelse(shapiro_p > 0.05, 
+                          ifelse(slope_p < 0.05, "Yes*", "No"),
+                          ifelse(kendall_p < 0.05, "Yes**", "No")),
+      
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # Combine all seasons
+  do.call(rbind, results_list)
+}
+
+# ============================================================================
+# RUN TESTS FOR ALL VARIABLES
+# ============================================================================
+
+cat("============================================================\n")
+cat("ANNUAL TREND ANALYSIS BY SEASON (2017-2022)\n")
+cat("============================================================\n\n")
+
+cat("Significance codes:\n")
+cat("* = Linear regression (data normal)\n")
+cat("** = Kendall's tau (data non-normal)\n")
+cat("p < 0.05 = significant trend\n\n")
+
+# GF Air Temperature
+cat("\n--- AIR TEMPERATURE (Gap-filled) ---\n")
+gf_ta_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TA_gapfilled_mean", 
+                                    "GF Air Temperature", 
+                                    "°C")
+print(gf_ta_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "kendall_tau", "kendall_p", "change_per_year", 
+                     "percent_change_2017_2022", "significant")])
+
+# Air Temperature (measured)
+cat("\n--- AIR TEMPERATURE (measured) ---\n")
+ta_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TA_mean", 
+                                    "Air Temperature", 
+                                    "°C")
+print(ta_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "kendall_tau", "kendall_p", "change_per_year", 
+                     "percent_change_2017_2022", "significant")])
+
+
+# GF Soil Temperature
+cat("\n--- SOIL TEMPERATURE (Gap-filled) ---\n")
+gf_ts_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TS_3_gapfilled_mean", 
+                                    "GF Soil Temperature", 
+                                    "°C")
+print(gf_ts_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "kendall_tau", "kendall_p", "change_per_year", 
+                     "percent_change_2017_2022", "significant")])
+
+# Soil Temperature (measured)
+cat("\n--- SOIL TEMPERATURE ---\n")
+ts_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TS_3_mean", 
+                                    "Soil Temperature", 
+                                    "°C")
+print(ts_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "kendall_tau", "kendall_p", "change_per_year", 
+                     "percent_change_2017_2022", "significant")])
+
+
+# Soil Moisture
+cat("\n--- SOIL MOISTURE ---\n")
+swc_results <- test_seasonal_trends(seasonal_summary_all, 
+                                     "SWC_3_mean", 
+                                     "Soil Moisture", 
+                                     "%")
+print(swc_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                      "kendall_tau", "kendall_p", "change_per_year", 
+                      "percent_change_2017_2022", "significant")])
+
+# VPD
+cat("\n--- VAPOR PRESSURE DEFICIT ---\n")
+vpd_results <- test_seasonal_trends(seasonal_summary_all, 
+                                     "VPD_mean", 
+                                     "VPD", 
+                                     "hPa")
+print(vpd_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                      "kendall_tau", "kendall_p", "change_per_year", 
+                      "percent_change_2017_2022", "significant")])
+
+# RH
+cat("\n--- RH ---\n")
+rh_results <- test_seasonal_trends(seasonal_summary_all, 
+                                     "RH_mean", 
+                                     "RH", 
+                                     "%")
+print(rh_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                      "kendall_tau", "kendall_p", "change_per_year", 
+                      "percent_change_2017_2022", "significant")])
+
+# Sensible Heat
+cat("\n--- SENSIBLE HEAT FLUX ---\n")
+h_results <- test_seasonal_trends(seasonal_summary_all, 
+                                   "H_mean", 
+                                   "Sensible Heat", 
+                                   "W/m²")
+print(h_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                    "kendall_tau", "kendall_p", "change_per_year", 
+                    "percent_change_2017_2022", "significant")])
+
+# Latent Heat
+cat("\n--- LATENT HEAT FLUX ---\n")
+le_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "LE_mean", 
+                                    "Latent Heat", 
+                                    "W/m²")
+print(le_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "kendall_tau", "kendall_p", "change_per_year", 
+                     "percent_change_2017_2022", "significant")])
+
+# Ground Heat
+cat("\n--- Ground HEAT FLUX ---\n")
+g_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "G_mean", 
+                                    "Ground Heat Flux", 
+                                    "W/m²")
+print(g_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "kendall_tau", "kendall_p", "change_per_year", 
+                     "percent_change_2017_2022", "significant")])
+
+# ============================================================================
+# COMBINE ALL RESULTS INTO ONE TABLE
+# ============================================================================
+
+all_results <- rbind(gf_ta_results, ta_results, gf_ts_results, ts_results, swc_results, 
+                     vpd_results, rh_results, h_results, le_results, g_results)
+
+cat("\n\n============================================================\n")
+cat("SUMMARY: SIGNIFICANT TRENDS ONLY\n")
+cat("============================================================\n")
+
+significant_trends <- all_results %>%
+  filter(significant %in% c("Yes*", "Yes**")) %>%
+  select(variable, season, mean_value, units, change_per_year, 
+         percent_change_2017_2022, slope_p, kendall_p, significant)
+
+if (nrow(significant_trends) > 0) {
+  print(significant_trends)
+} else {
+  cat("No statistically significant trends detected at p < 0.05\n")
+}
+
+cat("\n\nInterpretation:\n")
+cat("- Positive slope/change = increasing trend\n")
+cat("- Negative slope/change = decreasing trend\n")
+cat("- change_per_year = average annual change\n")
+cat("- percent_change = total change from 2017 to 2022\n")
+```
+
+
+
+
+
+```{r}
+library(ggpmisc)
+
+p_VPD_with_stats <- ggplot(seasonal_summary_all, aes(x = year, y = VPD_mean, color = year_factor)) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  geom_point(size = 2.5) +
+  geom_errorbar(aes(ymin = VPD_mean - VPD_se, 
+                    ymax = VPD_mean + VPD_se),
+                width = 0.2, linewidth = 0.8) +
+  
+  # Add trend line
+  geom_smooth(aes(group = season), method = "lm", se = TRUE, 
+              color = "black", linewidth = 0.8, alpha = 0.2) +
+  
+  # Add only slope, R², and p-value (no full equation)
+  stat_poly_eq(aes(label = paste("Slope ==", 
+                                   after_stat(sprintf("%.3f", coef.ls[[1]][[2]])),
+                                   "~~~R^2 ==", 
+                                   after_stat(sprintf("%.2f", r.squared)),
+                                   "~~~italic(p) ==",
+                                   after_stat(sprintf("%.3f", p.value)),
+                                   sep = "~")),
+               formula = y ~ x, 
+               parse = TRUE,
+               size = 3,
+               color = "black") +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(
+    values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
+               "2020" = "#d62728", "2021" = "#9467bd", "2022" = "#8c564b"),
+    name = "Year"
+  ) +
+  
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(x = "Year", y = "VPD (hPa)") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+p_VPD_with_stats
+```
+
+
+#pairwise comparisons of years using daily avg data 
+```{r}
+# Pairwise Year Comparisons Using Daily Averages
+# Tests if specific years differ from each other within each season
+
+library(dplyr)
+library(broom)
+
+# Function to perform pairwise comparisons for a variable
+pairwise_year_comparison <- function(data, var_name, var_label, season_name) {
+  
+  # Filter to specific season
+  season_data <- data %>%
+    filter(year %in% 2017:2022, season == season_name) %>%
+    select(year, value = !!sym(var_name)) %>%
+    filter(!is.na(value))
+  
+  # Get all unique years
+  years <- sort(unique(season_data$year))
+  
+  # Create all pairwise combinations
+  comparisons <- combn(years, 2, simplify = FALSE)
+  
+  results_list <- list()
+  
+  for (i in seq_along(comparisons)) {
+    year1 <- comparisons[[i]][1]
+    year2 <- comparisons[[i]][2]
+    
+    # Extract data for each year
+    data1 <- season_data %>% filter(year == year1) %>% pull(value)
+    data2 <- season_data %>% filter(year == year2) %>% pull(value)
+    
+    # Skip if insufficient data
+    if (length(data1) < 3 || length(data2) < 3) next
+    
+    # Test normality
+    shapiro1 <- shapiro.test(data1)$p.value
+    shapiro2 <- shapiro.test(data2)$p.value
+    both_normal <- (shapiro1 > 0.05 & shapiro2 > 0.05)
+    
+    # Perform appropriate test
+    if (both_normal) {
+      # t-test
+      test_result <- t.test(data1, data2)
+      test_stat <- test_result$statistic
+      p_value <- test_result$p.value
+      test_used <- "t-test"
+    } else {
+      # Mann-Whitney U test (Wilcoxon rank-sum)
+      test_result <- wilcox.test(data1, data2)
+      test_stat <- test_result$statistic
+      p_value <- test_result$p.value
+      test_used <- "Mann-Whitney"
+    }
+    
+    # Calculate effect size (Cohen's d or rank-biserial)
+    mean1 <- mean(data1, na.rm = TRUE)
+    mean2 <- mean(data2, na.rm = TRUE)
+    diff <- mean1 - mean2
+    
+    # Store results
+    results_list[[i]] <- data.frame(
+      variable = var_label,
+      season = season_name,
+      comparison = paste(year1, "vs", year2),
+      year1 = year1,
+      year2 = year2,
+      n1 = length(data1),
+      n2 = length(data2),
+      mean1 = mean1,
+      mean2 = mean2,
+      difference = diff,
+      test_used = test_used,
+      p_value = p_value,
+      significant = ifelse(p_value < 0.05, "Yes", "No"),
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # Combine results
+  do.call(rbind, results_list)
+}
+
+# ============================================================================
+# Run pairwise comparisons for key variables
+# ============================================================================
+
+cat("============================================================\n")
+cat("PAIRWISE YEAR COMPARISONS (Using Daily Averages)\n")
+cat("============================================================\n\n")
+
+# Air Temperature - Growing Season
+cat("\n--- AIR TEMPERATURE - GROWING SEASON ---\n")
+ta_gs_pairs <- pairwise_year_comparison(df_avg2, "TA_gapfilled", 
+                                        "Air Temperature", "Growing Season")
+print(ta_gs_pairs[, c("comparison", "n1", "n2", "mean1", "mean2", 
+                      "difference", "test_used", "p_value", "significant")])
+
+# Air Temperature - Winter
+cat("\n--- AIR TEMPERATURE - WINTER ---\n")
+ta_winter_pairs <- pairwise_year_comparison(df_avg2, "TA_gapfilled", 
+                                            "Air Temperature", "Winter")
+print(ta_winter_pairs[, c("comparison", "n1", "n2", "mean1", "mean2", 
+                          "difference", "test_used", "p_value", "significant")])
+
+# VPD - Growing Season (significant trend detected)
+cat("\n--- VPD - GROWING SEASON ---\n")
+vpd_gs_pairs <- pairwise_year_comparison(df_avg2, "VPD", 
+                                         "VPD", "Growing Season")
+print(vpd_gs_pairs[, c("comparison", "n1", "n2", "mean1", "mean2", 
+                       "difference", "test_used", "p_value", "significant")])
+
+# Soil Moisture - Growing Season (marginally significant trend)
+cat("\n--- SOIL MOISTURE - GROWING SEASON ---\n")
+swc_gs_pairs <- pairwise_year_comparison(df_avg2, "SWC_3_1_1", 
+                                         "Soil Moisture", "Growing Season")
+print(swc_gs_pairs[, c("comparison", "n1", "n2", "mean1", "mean2", 
+                       "difference", "test_used", "p_value", "significant")])
+
+# ============================================================================
+# Identify anomalous years
+# ============================================================================
+
+cat("\n\n============================================================\n")
+cat("SUMMARY: SIGNIFICANT PAIRWISE DIFFERENCES\n")
+cat("============================================================\n")
+
+# Combine all results
+all_pairs <- rbind(ta_gs_pairs, ta_winter_pairs, vpd_gs_pairs, swc_gs_pairs)
+
+significant_pairs <- all_pairs %>%
+  filter(significant == "Yes") %>%
+  select(variable, season, comparison, difference, p_value)
+
+if (nrow(significant_pairs) > 0) {
+  print(significant_pairs)
+  
+  # Identify which years appear most often as different
+  cat("\n\nYears appearing most frequently in significant comparisons:\n")
+  year_counts <- c(significant_pairs$year1, significant_pairs$year2)
+  year_freq <- sort(table(year_counts), decreasing = TRUE)
+  print(year_freq)
+  
+} else {
+  cat("No statistically significant pairwise differences detected.\n")
+}
+
+cat("\n\nInterpretation:\n")
+cat("- Uses daily averages for each comparison (n ~ 100-200 per year)\n")
+cat("- Automatically selects t-test (normal data) or Mann-Whitney (non-normal)\n")
+cat("- Years appearing frequently may be anomalous\n")
+cat("- Compare with trend analysis to distinguish anomalies from trends\n")
+
+#nearly all pairings are sig, this suggests that mayber there is autocorrelation, which wouldn't be a surprise using days in sequential order. Likely doing the stats this way isn't appropriate 
+
+# After getting all results - apply multiple comparison correction to see if that slims down the number of sig pairings 
+all_pairs <- all_pairs %>%
+  mutate(p_adjusted = p.adjust(p_value, method = "BH"))
+
+# Filter for adjusted significance
+significant_pairs <- all_pairs %>%
+  filter(p_adjusted < 0.05)
+
+significant_pairs
+
+#still almost all are sig, so the correction didn't help potential autocorrelation 
+```
+
+#Multi-yr mean to detect anomalous years - code from Claude
+```{r}
+# Compare Each Year to Multi-Year Mean (2017-2022)
+# More conservative approach to identify truly anomalous years
+
+library(dplyr)
+library(broom)
+
+# Function to test if each year differs from the overall mean
+identify_anomalous_years <- function(data, var_name, var_label, season_name) {
+  
+  # Filter to specific season, all years
+  season_data <- data %>%
+    filter(year %in% 2017:2022, season == season_name) %>%
+    select(year, value = !!sym(var_name)) %>%
+    filter(!is.na(value))
+  
+  # Calculate overall statistics
+  overall_mean <- mean(season_data$value, na.rm = TRUE)
+  overall_sd <- sd(season_data$value, na.rm = TRUE)
+  
+  years <- 2017:2022
+  results_list <- list()
+  
+  for (yr in years) {
+    # Get data for this year and all other years
+    year_data <- season_data %>% filter(year == yr) %>% pull(value)
+    other_years_data <- season_data %>% filter(year != yr) %>% pull(value)
+    
+    # Skip if insufficient data
+    if (length(year_data) < 3) next
+    
+    # Test normality
+    if (length(year_data) >= 3) {
+      shapiro_p <- shapiro.test(year_data)$p.value
+      is_normal <- shapiro_p > 0.05
+    } else {
+      is_normal <- FALSE
+    }
+    
+    # Test if this year differs from all other years combined
+    if (is_normal && length(other_years_data) > 30) {
+      test_result <- t.test(year_data, other_years_data)
+      test_used <- "t-test"
+    } else {
+      test_result <- wilcox.test(year_data, other_years_data)
+      test_used <- "Mann-Whitney"
+    }
+    
+    # Calculate year statistics
+    year_mean <- mean(year_data, na.rm = TRUE)
+    year_sd <- sd(year_data, na.rm = TRUE)
+    
+    # Calculate z-score (how many SDs from overall mean)
+    z_score <- (year_mean - overall_mean) / overall_sd
+    
+    # Store results
+    results_list[[as.character(yr)]] <- data.frame(
+      variable = var_label,
+      season = season_name,
+      year = yr,
+      n_days = length(year_data),
+      year_mean = year_mean,
+      year_sd = year_sd,
+      overall_mean = overall_mean,
+      difference = year_mean - overall_mean,
+      percent_diff = ((year_mean - overall_mean) / abs(overall_mean)) * 100,
+      z_score = z_score,
+      test_used = test_used,
+      p_value = test_result$p.value,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # Combine results
+  results_df <- do.call(rbind, results_list)
+  
+  # Add adjusted p-values and significance
+  results_df <- results_df %>%
+    mutate(
+      p_adjusted = p.adjust(p_value, method = "BH"),
+      significant = ifelse(p_adjusted < 0.05, "Yes", "No"),
+      anomaly_type = case_when(
+        significant == "No" ~ "Normal",
+        z_score > 2 ~ "High anomaly",
+        z_score > 1 ~ "Moderately high",
+        z_score < -2 ~ "Low anomaly",
+        z_score < -1 ~ "Moderately low",
+        TRUE ~ "Significant"
+      )
+    )
+  
+  return(results_df)
+}
+
+# ============================================================================
+# Run anomaly detection for key variables
+# ============================================================================
+
+cat("============================================================\n")
+cat("ANOMALOUS YEAR DETECTION (Comparison to 2017-2022 Mean)\n")
+cat("============================================================\n\n")
+
+# Air Temperature - Growing Season
+cat("\n--- AIR TEMPERATURE - GROWING SEASON ---\n")
+ta_gs_anom <- identify_anomalous_years(df_avg2, "TA_gapfilled", 
+                                       "Air Temperature", "Growing Season")
+print(ta_gs_anom[, c("year", "n_days", "year_mean", "overall_mean", 
+                     "difference", "z_score", "p_adjusted", "anomaly_type")])
+
+# Air Temperature - Winter
+cat("\n--- AIR TEMPERATURE - WINTER ---\n")
+ta_winter_anom <- identify_anomalous_years(df_avg2, "TA_gapfilled", 
+                                           "Air Temperature", "Winter")
+print(ta_winter_anom[, c("year", "n_days", "year_mean", "overall_mean", 
+                         "difference", "z_score", "p_adjusted", "anomaly_type")])
+
+# Soil Temperature - Growing Season
+cat("\n--- SOIL TEMPERATURE - GROWING SEASON ---\n")
+ts_gs_anom <- identify_anomalous_years(df_avg2, "TS_3_gapfilled", 
+                                       "Soil Temperature", "Growing Season")
+print(ts_gs_anom[, c("year", "n_days", "year_mean", "overall_mean", 
+                     "difference", "z_score", "p_adjusted", "anomaly_type")])
+
+# VPD - Growing Season
+cat("\n--- VPD - GROWING SEASON ---\n")
+vpd_gs_anom <- identify_anomalous_years(df_avg2, "VPD", 
+                                        "VPD", "Growing Season")
+print(vpd_gs_anom[, c("year", "n_days", "year_mean", "overall_mean", 
+                      "difference", "z_score", "p_adjusted", "anomaly_type")])
+
+# VPD - Winter
+cat("\n--- VPD - WINTER ---\n")
+vpd_winter_anom <- identify_anomalous_years(df_avg2, "VPD", 
+                                            "VPD", "Winter")
+print(vpd_winter_anom[, c("year", "n_days", "year_mean", "overall_mean", 
+                          "difference", "z_score", "p_adjusted", "anomaly_type")])
+
+# Soil Moisture - Growing Season
+cat("\n--- SOIL MOISTURE - GROWING SEASON ---\n")
+swc_gs_anom <- identify_anomalous_years(df_avg2, "SWC_3_1_1", 
+                                        "Soil Moisture", "Growing Season")
+print(swc_gs_anom[, c("year", "n_days", "year_mean", "overall_mean", 
+                      "difference", "z_score", "p_adjusted", "anomaly_type")])
+
+# Soil Moisture - Winter
+cat("\n--- SOIL MOISTURE - WINTER ---\n")
+swc_winter_anom <- identify_anomalous_years(df_avg2, "SWC_3_1_1", 
+                                            "Soil Moisture", "Winter")
+print(swc_winter_anom[, c("year", "n_days", "year_mean", "overall_mean", 
+                          "difference", "z_score", "p_adjusted", "anomaly_type")])
+
+# ============================================================================
+# Summary of anomalous years
+# ============================================================================
+
+cat("\n\n============================================================\n")
+cat("SUMMARY: ANOMALOUS YEARS IDENTIFIED\n")
+cat("============================================================\n")
+
+# Combine all results
+all_anomalies <- rbind(
+  ta_gs_anom, ta_winter_anom, ts_gs_anom,
+  vpd_gs_anom, vpd_winter_anom, 
+  swc_gs_anom, swc_winter_anom
+)
+
+# Filter for significant anomalies
+significant_anomalies <- all_anomalies %>%
+  filter(significant == "Yes") %>%
+  arrange(variable, season, year) %>%
+  select(variable, season, year, difference, z_score, p_adjusted, anomaly_type)
+
+if (nrow(significant_anomalies) > 0) {
+  print(significant_anomalies)
+  
+  # Count anomalies by year
+  cat("\n\nYears with most anomalies:\n")
+  year_counts <- table(significant_anomalies$year)
+  print(sort(year_counts, decreasing = TRUE))
+  
+} else {
+  cat("No statistically significant anomalous years detected.\n")
+}
+
+cat("\n\nInterpretation Guide:\n")
+cat("- z_score: How many standard deviations from the 6-year mean\n")
+cat("  |z| > 2: Strong anomaly (unusual)\n")
+cat("  |z| > 1: Moderate anomaly\n")
+cat("  |z| < 1: Within normal range\n")
+cat("- p_adjusted: BH-corrected p-value for multiple comparisons\n")
+cat("- difference: Actual value difference from mean (in original units)\n")
+cat("- This approach is more conservative than pairwise comparisons\n")
+```
+#Checking linear trends of variables that showed sig slopes per lm and/or kendall's tau (which is VPD, RH, possibly SWC)
+#### note that here it's using an intercept based off of year = 0, when our first year is 2017...so the b/y-intercept here is wrong 
+
+### LM - VPD
+```{r}
+
+#coding suggestion from claude: set year 2017 as the first year so the intercept is interpretable - called "Centering" so that the intercept is within the range of your data's range 
+seasonal_summary_all <- seasonal_summary_all %>%
+  mutate(year_c = year - 2017) #sets 2017 at year 0, aka starting point - if the intercept is important, use the variable year_c instead of year in the lm formula 
+
+#VPD
+
+#Across all seasons and years 
+#want to use "year" (numeric) here, not year_factor 
+vpd_lm = lm(formula = seasonal_summary_all$VPD_mean ~ seasonal_summary_all$year, na.rm = TRUE)
+summary(vpd_lm) 
+#Results: slope = 0.81, R2=0.579, p = 0.00023
+
+#Growing season 
+vpd_lm_summer <- lm(VPD_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Growing Season")
+
+summary(vpd_lm_summer)
+#Results: slope = 0.81, R2 = 0.83, p = 0.0068 *SIG
+
+#Fall
+vpd_lm_fall <- lm(VPD_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Fall Senescence")
+
+summary(vpd_lm_fall) #slope = 0.6, R2 = 0.923, p = 0.0014 *SIG
+
+#Winter  - 2021 winter is missing VPD 
+vpd_lm_winter <- lm(VPD_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Winter", na.rm = TRUE)
+
+summary(vpd_lm_winter) # slope = 0.96, R2 = 0.738, p = 0.0393 *SIG
+```
+
+#LM - RH 
+```{r}
+#========== RH ==================
+
+#Across all seasons and years 
+rh_lm = lm(formula = seasonal_summary_all$RH_mean ~ seasonal_summary_all$year, na.rm = TRUE)
+summary(rh_lm) 
+#Results: slope = -7.269, R2 = 0.618, p = 0.000109 *SIG
+
+#Growing season 
+rh_lm_summer <- lm(RH_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Growing Season")
+
+summary(rh_lm_summer)
+#Results: slope = -6.66, R2 = 0.966, p = 0.000272 *SIG
+
+#Fall
+rh_lm_fall <- lm(RH_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Fall Senescence")
+
+summary(rh_lm_fall) #slope = -7.93, R2 = 0.869, p = 0.00422 *SIG
+
+#Winter
+rh_lm_winter <- lm(RH_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Winter", na.rm = TRUE)
+
+summary(rh_lm_winter) # slope = -8.336, R2 = 0.889, p = 0.0104 *SIG
+```
+
+#LM - SWC
+```{r}
+
+#========== SWC (potentially borderline) ==================
+
+#Across all seasons and years 
+SWC_lm = lm(formula = seasonal_summary_all$SWC_3_mean ~ seasonal_summary_all$year)
+summary(SWC_lm) 
+#Results: slope = -3.342, R2 = 0.076, p = 0.140 - not sig 
+
+#Growing season 
+SWC_lm_summer <- lm(SWC_3_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Growing Season")
+
+summary(SWC_lm_summer)
+#Results: slope = -1.984, R2 = 0.578, p = 0.0486 *sig but borderline 
+
+#Fall
+SWC_lm_fall <- lm(SWC_3_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Fall Senescence")
+
+summary(SWC_lm_fall) #slope = -0.7986, R2 = -0.023 (???), p = 0.401  - not sig 
+
+#Winter
+SWC_lm_winter <- lm(SWC_3_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Winter")
+
+summary(SWC_lm_winter) # slope = -7.243, R2 = 0.573, p = 0.04994
+```
+
+#LM - Air T
+
+```{r}
+
+#========== Air temp  ==================
+
+#Across all seasons and years 
+TA_lm = lm(formula = seasonal_summary_all$TA_mean ~ seasonal_summary_all$year)
+summary(TA_lm) 
+#Results: slope = -0.313, R2 = -0.05, p = 0.8 - not sig 
+
+#Growing season 
+TA_lm_summer <- lm(TA_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Growing Season")
+
+summary(TA_lm_summer)
+#Results: slope = -0.211, R2 = -0.057, p = 0.44 - not sig 
+
+#Fall
+TA_lm_fall <- lm(TA_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Fall Senescence")
+
+summary(TA_lm_fall) #slope = -0.146, R2=-0.22, p = 0.8 - not sig  
+
+#Winter
+TA_lm_winter <- lm(TA_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Winter")
+
+summary(TA_lm_winter) # slope = -0.58, R2 = 0.08, p = 0.29 - not sig 
+```
+
+# LM - TS_3
+
+```{r}
+
+#========== TS_3 ==================
+
+#Across all seasons and years 
+TS_lm = lm(formula = seasonal_summary_all$TS_3_mean ~ seasonal_summary_all$year)
+summary(TS_lm) 
+#Results: slope = -0.056, R2 = -0.061, p = 0.9 - not sig 
+
+#Growing season 
+TS_lm_summer <- lm(TS_3_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Growing Season")
+
+summary(TS_lm_summer)
+#Results: slope = 0.208, R2 = -0.125, p = 0.5 - not sig 
+
+#Fall
+TS_lm_fall <- lm(TS_3_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Fall Senescence")
+
+summary(TS_lm_fall) #slope = 0.0047, R2 = -0.25, p = 0.99 - not sig 
+
+#Winter
+TS_lm_winter <- lm(TS_3_mean ~ year,
+                data = seasonal_summary_all,
+                subset = season == "Winter")
+
+summary(TS_lm_winter) # slope = -0.38, R2 = 0.626, p = 0.0374 - *SIG* (but was borderline in kendall-tau)
+
+
+```
+#Checking normality / homogeneity again of the lm models that showed sig p 
+
+#### TS (measured, not gf) - Winter 
+```{r}
+library(car)
+library(nlme)
+library(lme4)
+
+# Extract fitted values and residuals
+fitted_values <- fitted(TS_lm_winter)
+residuals <- residuals(TS_lm_winter)
+
+
+# Graphical assessment
+par(mfrow = c(1, 2))
+# Histogram of residuals
+hist(residuals, main = "Histogram of Standardized Residuals", 
+     xlab = "Standardized Residuals", freq = FALSE)
+curve(dnorm, add = TRUE, col = "red")
+
+# QQ plot
+qqnorm(residuals, main = "Normal Q-Q Plot")
+qqline(residuals, col = "red")
+
+# Formal test
+shapiro_test <- shapiro.test(residuals)
+print(shapiro_test) #p=0.87 
+
+
+# Plot residuals vs. predictor
+
+ggplot(seasonal_summary_all %>% filter(season == "Winter"), 
+       aes(x = TS_3_mean, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Cont. Pred. Var",
+       y = "Residuals",
+       title = "Residuals vs. Predictor Var") +
+  theme_bw()
+
+# Create a scale-location plot --> should be randomly scattered with a relatively flat trend line (red) for homogeneity of variance 
+plot(TS_lm_winter, which = 3)
+
+
+#Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
+library(lmtest)
+bptest(TS_lm_winter) #p=0.08, ok 
+
+
+```
+#### RH - all seasons  
+```{r}
+library(car)
+library(nlme)
+library(lme4)
+
+#Winter - some NA's in RH, 2021 winter missing 
+
+rh_lm_winter2 <- lm(RH_mean ~ year,
+                   data = seasonal_summary_all,
+                   subset = season == "Winter",
+                   na.action = na.exclude)
+
+# Extract fitted values and residuals
+fitted_values <- fitted(rh_lm_winter2)
+residuals <- residuals(rh_lm_winter2)
+
+
+# Graphical assessment
+par(mfrow = c(1, 2))
+# Histogram of residuals
+hist(residuals, main = "Histogram of Standardized Residuals", 
+     xlab = "Standardized Residuals", freq = FALSE)
+curve(dnorm, add = TRUE, col = "red")
+
+# QQ plot
+qqnorm(residuals, main = "Normal Q-Q Plot")
+qqline(residuals, col = "red")
+
+# Formal test
+shapiro_test <- shapiro.test(residuals)
+print(shapiro_test) #p=0.207 - ok 
+
+
+# Plot residuals vs. predictor
+
+ggplot(seasonal_summary_all %>% filter(season == "Winter"), 
+       aes(x = RH_mean, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Cont. Pred. Var",
+       y = "Residuals",
+       title = "Residuals vs. Predictor Var") +
+  theme_bw()
+
+# Create a scale-location plot --> should be randomly scattered with a relatively flat trend line (red) for homogeneity of variance 
+plot(rh_lm_winter, which = 3)
+
+
+#Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
+library(lmtest)
+bptest(rh_lm_winter) #p=0.0.484 -ok 
+
+
+#================================================================================
+#Growing Season 
+#=================================================================================
+
+# Extract fitted values and residuals
+fitted_values <- fitted(rh_lm_summer)
+residuals <- residuals(rh_lm_summer)
+
+
+# Graphical assessment
+par(mfrow = c(1, 2))
+# Histogram of residuals
+hist(residuals, main = "Histogram of Standardized Residuals", 
+     xlab = "Standardized Residuals", freq = FALSE)
+curve(dnorm, add = TRUE, col = "red")
+
+# QQ plot
+qqnorm(residuals, main = "Normal Q-Q Plot")
+qqline(residuals, col = "red")
+
+# Formal test
+shapiro_test <- shapiro.test(residuals)
+print(shapiro_test) #p=0.817 - ok
+
+
+# Plot residuals vs. predictor
+
+ggplot(seasonal_summary_all %>% filter(season == "Growing Season"), 
+       aes(x = RH_mean, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Cont. Pred. Var",
+       y = "Residuals",
+       title = "Residuals vs. Predictor Var") +
+  theme_bw()
+
+# Create a scale-location plot --> should be randomly scattered with a relatively flat trend line (red) for homogeneity of variance 
+plot(rh_lm_summer , which = 3)
+
+
+#Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
+library(lmtest)
+bptest(rh_lm_summer ) #p=0.04 - NOT OK ** 
+
+
+#================================================================================
+# FALL
+#=================================================================================
+
+# Extract fitted values and residuals
+fitted_values <- fitted(rh_lm_fall)
+residuals <- residuals(rh_lm_fall)
+
+
+# Graphical assessment
+par(mfrow = c(1, 2))
+# Histogram of residuals
+hist(residuals, main = "Histogram of Standardized Residuals", 
+     xlab = "Standardized Residuals", freq = FALSE)
+curve(dnorm, add = TRUE, col = "red")
+
+# QQ plot
+qqnorm(residuals, main = "Normal Q-Q Plot")
+qqline(residuals, col = "red")
+
+# Formal test
+shapiro_test <- shapiro.test(residuals)
+print(shapiro_test) #p=0.146 - ok but QQ plot does NOT look ok
+
+
+# Plot residuals vs. predictor
+
+ggplot(seasonal_summary_all %>% filter(season == "Fall Senescence"), 
+       aes(x = RH_mean, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Cont. Pred. Var",
+       y = "Residuals",
+       title = "Residuals vs. Predictor Var") +
+  theme_bw()
+
+# Create a scale-location plot --> should be randomly scattered with a relatively flat trend line (red) for homogeneity of variance 
+plot(rh_lm_fall, which = 3)
+
+
+#Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
+library(lmtest)
+bptest(rh_lm_fall ) #p=0.09, ok, but the visuals don't look very good 
+
+```
+#VPD all seasons 
+```{r}
+
+#Winter - some NA's in VPD, 2021 winter missing 
+
+vpd_lm_winter2 <- lm(VPD_mean ~ year,
+                   data = seasonal_summary_all,
+                   subset = season == "Winter",
+                   na.action = na.exclude)
+
+# Extract fitted values and residuals
+fitted_values <- fitted(vpd_lm_winter2)
+residuals <- residuals(vpd_lm_winter2)
+
+
+# Graphical assessment
+par(mfrow = c(1, 2))
+# Histogram of residuals
+hist(residuals, main = "Histogram of Standardized Residuals", 
+     xlab = "Standardized Residuals", freq = FALSE)
+curve(dnorm, add = TRUE, col = "red")
+
+# QQ plot
+qqnorm(residuals, main = "Normal Q-Q Plot")
+qqline(residuals, col = "red")
+
+# Formal test
+shapiro_test <- shapiro.test(residuals)
+print(shapiro_test) #p=0.722 - ok 
+
+
+# Plot residuals vs. predictor
+
+ggplot(seasonal_summary_all %>% filter(season == "Winter"), 
+       aes(x = VPD_mean, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Cont. Pred. Var",
+       y = "Residuals",
+       title = "Residuals vs. Predictor Var") +
+  theme_bw()
+
+# Create a scale-location plot --> should be randomly scattered with a relatively flat trend line (red) for homogeneity of variance 
+plot(vpd_lm_winter, which = 3)
+
+
+#Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
+library(lmtest)
+bptest(vpd_lm_winter) #p=0.0.22 -ok but the visuals do NOT look ok 
+
+
+#================================================================================
+#Growing Season 
+#=================================================================================
+
+# Extract fitted values and residuals
+fitted_values <- fitted(vpd_lm_summer)
+residuals <- residuals(vpd_lm_summer)
+
+
+# Graphical assessment
+par(mfrow = c(1, 2))
+# Histogram of residuals
+hist(residuals, main = "Histogram of Standardized Residuals", 
+     xlab = "Standardized Residuals", freq = FALSE)
+curve(dnorm, add = TRUE, col = "red")
+
+# QQ plot
+qqnorm(residuals, main = "Normal Q-Q Plot")
+qqline(residuals, col = "red")
+
+# Formal test
+shapiro_test <- shapiro.test(residuals)
+print(shapiro_test) #p=0.644 - ok
+
+
+# Plot residuals vs. predictor
+
+ggplot(seasonal_summary_all %>% filter(season == "Growing Season"), 
+       aes(x = VPD_mean, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Cont. Pred. Var",
+       y = "Residuals",
+       title = "Residuals vs. Predictor Var") +
+  theme_bw()
+
+# Create a scale-location plot --> should be randomly scattered with a relatively flat trend line (red) for homogeneity of variance 
+plot(vpd_lm_summer , which = 3)
+
+
+#Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
+library(lmtest)
+bptest(vpd_lm_summer ) #p=0.44 - ok 
+
+
+#================================================================================
+# FALL
+#=================================================================================
+
+# Extract fitted values and residuals
+fitted_values <- fitted(vpd_lm_fall)
+residuals <- residuals(vpd_lm_fall)
+
+
+# Graphical assessment
+par(mfrow = c(1, 2))
+# Histogram of residuals
+hist(residuals, main = "Histogram of Standardized Residuals", 
+     xlab = "Standardized Residuals", freq = FALSE)
+curve(dnorm, add = TRUE, col = "red")
+
+# QQ plot
+qqnorm(residuals, main = "Normal Q-Q Plot")
+qqline(residuals, col = "red")
+
+# Formal test
+shapiro_test <- shapiro.test(residuals)
+print(shapiro_test) #p=0.27
+
+
+# Plot residuals vs. predictor
+
+ggplot(seasonal_summary_all %>% filter(season == "Fall Senescence"), 
+       aes(x = VPD_mean, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Cont. Pred. Var",
+       y = "Residuals",
+       title = "Residuals vs. Predictor Var") +
+  theme_bw()
+
+# Create a scale-location plot --> should be randomly scattered with a relatively flat trend line (red) for homogeneity of variance 
+plot(vpd_lm_fall, which = 3)
+
+
+#Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
+library(lmtest)
+bptest(vpd_lm_fall ) #p = 0.5, ok 
+
+```
+
+
+#### SWC - winter
+```{r}
+
+#Winter 
+
+# Extract fitted values and residuals
+fitted_values <- fitted(SWC_lm_winter)
+residuals <- residuals(SWC_lm_winter)
+
+
+# Graphical assessment
+par(mfrow = c(1, 2))
+# Histogram of residuals
+hist(residuals, main = "Histogram of Standardized Residuals", 
+     xlab = "Standardized Residuals", freq = FALSE)
+curve(dnorm, add = TRUE, col = "red")
+
+# QQ plot
+qqnorm(residuals, main = "Normal Q-Q Plot")
+qqline(residuals, col = "red")
+
+# Formal test
+shapiro_test <- shapiro.test(residuals)
+print(shapiro_test) #p=0.506 -ok 
+
+
+# Plot residuals vs. predictor
+
+ggplot(seasonal_summary_all %>% filter(season == "Winter"), 
+       aes(x = SWC_3_mean, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Cont. Pred. Var",
+       y = "Residuals",
+       title = "Residuals vs. Predictor Var") +
+  theme_bw()
+
+# Create a scale-location plot --> should be randomly scattered with a relatively flat trend line (red) for homogeneity of variance 
+plot(SWC_lm_winter, which = 3)
+
+
+#Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
+library(lmtest)
+bptest(SWC_lm_winter) #p=0.35, ok 
+
+```
+
+
+
+
+#VPD with stats 
+```{r}
+
+library(ggpmisc)  # For adding equation and stats to plots
+
+# Example for VPD which showed significant trends in all seasons
+p_VPD_with_stats <- ggplot(seasonal_summary_all, aes(x = year_c, y = VPD_mean, color = year_factor)) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  geom_point(size = 2.5) +
+  geom_errorbar(aes(ymin = VPD_mean - VPD_se, 
+                    ymax = VPD_mean + VPD_se),
+                width = 0.2, linewidth = 0.8) +
+  
+  # Add trend line
+  geom_smooth(aes(group = season), method = "lm", se = TRUE, 
+              color = "black", linewidth = 0.8, alpha = 0.2) +
+  
+  # Add R² and p-value
+  # stat_poly_eq(aes(label = paste(after_stat(eq.label),
+  #                                  after_stat(rr.label),
+  #                                  after_stat(p.value.label),
+  #                                  sep = "~~~")),
+  stat_poly_eq(aes(label = after_stat(paste("atop(", 
+                                           eq.label, ",", 
+                                           "atop(", adj.rr.label, ",", 
+                                           p.value.label, "))"))),
+               formula = y ~ x,
+               parse = TRUE,
+               size = 3,
+               color = "black") +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(
+    values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
+               "2020" = "#d62728", "2021" = "#9467bd", "2022" = "#8c564b"),
+    name = "Year"
+  ) +
+  
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(x = "Year", y = "VPD (hPa)") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+
+p_VPD_with_stats
+```
+
+#Plotting vars with sig linear trends over the years
+```{r}
+
+  # Example for VPD which showed significant trends in all seasons
+ p_VPD_lm<- ggplot(seasonal_summary_all, aes(x = year, y = VPD_mean, color = year_factor)) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  geom_point(size = 2.5) +
+  geom_errorbar(aes(ymin = VPD_mean - VPD_se, 
+                    ymax = VPD_mean + VPD_se),
+                width = 0.2, linewidth = 0.8) +
+  
+  # Add trend line
+  geom_smooth(aes(group = season), method = "lm", se = TRUE, 
+              color = "black", linewidth = 0.8, alpha = 0.2) +
+  
+
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(
+    values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
+               "2020" = "#d62728", "2021" = "#9467bd", "2022" = "#8c564b"),
+    name = "Year"
+  ) +
+  
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(x = "Year", y = "VPD (hPa)") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  ) + 
+ # Annotations
+  annotate("text", x = 2018, y = 8, label = "R² = 0.58", size = 3) +
+  annotate("text", x = 2018, y = 7.6,label = "Slope = 0.81", size = 3) 
+
+p_VPD_lm
+  
+
+```
 
