@@ -1125,9 +1125,9 @@ fall_2019 <- seasons_2019$fall
 
 #---------------------------------------------
 
-#Coding help w Claude
+#Coding help from Claude -streamlining some steps into one code chunk
 ```{r}
-# Step 2a: Annual Trends Analysis - Complete Visualization Script
+# Annual Trends Analysis - Complete Visualization Script
 # Air Temperature, Soil Temperature, Soil Moisture, and VPD
 # Distinguish observed (solid) vs gap-filled (open/transparent) data
 
@@ -2501,7 +2501,7 @@ cat("Histogram: Should be approximately bell-shaped for normal data\n\n")
 cat("Residuals Plot: Should show random scatter around 0 line\n")
 cat("  - Pattern/curve = non-linear relationship\n")
 cat("  - Funnel shape = heteroscedasticity (non-constant variance)\n\n")
-cat("Shapiro-Wilk p-value: > 0.05 suggests normality\n") #but important to note that with n=6, shapiro wilkes has VERY low power, so rely on QQplot & histogram & use your judgement 
+cat("Shapiro-Wilk p-value: > 0.05 suggests normality\n") #but important to note that with n=6, shapiro wilkes has VERY low power, so rely on QQ-plot & histogram & use your judgement 
 
 #QQ plots don't look terrible, but the histograms don't look like normal distributions most times 
 ```
@@ -2554,7 +2554,7 @@ ggplot(seasonal_summary_all, aes(x = VPD_mean)) +
 
 ```
 
-##### starts with testing lm assumptions, pivots to non-parametric if assumptions are violated, used kendall's tau (similar to spearman corr but supposedly better for small sample sizes and here we only have 6 yrs so n = 6) - streamlined function code by Claude 
+##### starts with testing lm assumptions, pivots to non-parametric if assumptions are violated, uses spearman's corr & kendall's tau (similar to spearman corr but supposedly better for small sample sizes and here we only have 6 yrs so n = 6) - streamlined function code by Claude 
 ```{r}
 
 # Tests for significant trends in environmental variables by season (2017-2022)
@@ -2614,14 +2614,14 @@ test_seasonal_trends <- function(data, var_name, var_label, units) {
     spearman_rho <- spearman_test$estimate
     spearman_p <- spearman_test$p.value
     
-    # Calculate percent change over period - not sure this is working properly...
-    first_val <- y_vals[1]
-    last_val <- y_vals[length(y_vals)]
-    total_change <- last_val - first_val
-    pct_change <- (total_change / abs(first_val)) * 100
+    # # Calculate percent change over period - not sure this is working properly...
+    # first_val <- y_vals[1]
+    # last_val <- y_vals[length(y_vals)]
+    # total_change <- last_val - first_val
+    # pct_change <- (total_change / abs(first_val)) * 100
     
     # Calculate change per year
-    change_per_year <- slope
+   # change_per_year <- slope
     
     # Store results
     results_list[[s]] <- data.frame(
@@ -2648,10 +2648,10 @@ test_seasonal_trends <- function(data, var_name, var_label, units) {
       spearman_rho = spearman_rho,
       spearman_p = spearman_p,
       
-      # Trend magnitude
-      change_per_year = change_per_year,
-      total_change_2017_2022 = total_change,
-      percent_change_2017_2022 = pct_change,
+      # # Trend magnitude
+      # change_per_year = change_per_year,
+      # total_change_2017_2022 = total_change,
+      # percent_change_2017_2022 = pct_change,
       
       # Significance (using appropriate test)
       significant = ifelse(shapiro_p > 0.05, 
@@ -2686,8 +2686,8 @@ gf_ta_results <- test_seasonal_trends(seasonal_summary_all,
                                     "GF Air Temperature", 
                                     "°C")
 print(gf_ta_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
-                     "kendall_tau", "kendall_p", "change_per_year", 
-                     "percent_change_2017_2022", "significant")])
+                     "kendall_tau", "kendall_p", #"change_per_year", #"percent_change_2017_2022"
+                     "spearman_rho", "spearman_p", "significant")])
 
 # Air Temperature (measured)
 cat("\n--- AIR TEMPERATURE (measured) ---\n")
@@ -2696,8 +2696,8 @@ ta_results <- test_seasonal_trends(seasonal_summary_all,
                                     "Air Temperature", 
                                     "°C")
 print(ta_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
-                     "kendall_tau", "kendall_p", "change_per_year", 
-                     "percent_change_2017_2022", "significant")])
+                     "kendall_tau", "kendall_p", #"change_per_year", 
+                     "spearman_rho", "spearman_p", "significant")])
 
 
 # GF Soil Temperature
@@ -2707,8 +2707,8 @@ gf_ts_results <- test_seasonal_trends(seasonal_summary_all,
                                     "GF Soil Temperature", 
                                     "°C")
 print(gf_ts_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
-                     "kendall_tau", "kendall_p", "change_per_year", 
-                     "percent_change_2017_2022", "significant")])
+                     "kendall_tau", "kendall_p", #"change_per_year", 
+                     "spearman_rho", "spearman_p", "significant")])
 
 # Soil Temperature (measured)
 cat("\n--- SOIL TEMPERATURE ---\n")
@@ -2717,8 +2717,8 @@ ts_results <- test_seasonal_trends(seasonal_summary_all,
                                     "Soil Temperature", 
                                     "°C")
 print(ts_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
-                     "kendall_tau", "kendall_p", "change_per_year", 
-                     "percent_change_2017_2022", "significant")])
+                     "kendall_tau", "kendall_p", #"change_per_year", 
+                     "spearman_rho", "spearman_p", "significant")])
 
 
 # Soil Moisture
@@ -2728,8 +2728,8 @@ swc_results <- test_seasonal_trends(seasonal_summary_all,
                                      "Soil Moisture", 
                                      "%")
 print(swc_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
-                      "kendall_tau", "kendall_p", "change_per_year", 
-                      "percent_change_2017_2022", "significant")])
+                      "kendall_tau", "kendall_p", #"change_per_year", 
+                      "spearman_rho", "spearman_p", "significant")])
 
 # VPD
 cat("\n--- VAPOR PRESSURE DEFICIT ---\n")
@@ -2738,8 +2738,8 @@ vpd_results <- test_seasonal_trends(seasonal_summary_all,
                                      "VPD", 
                                      "hPa")
 print(vpd_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
-                      "kendall_tau", "kendall_p", "change_per_year", 
-                      "percent_change_2017_2022", "significant")])
+                      "kendall_tau", "kendall_p", #"change_per_year", 
+                      "spearman_rho", "spearman_p", "significant")])
 
 # RH
 cat("\n--- RH ---\n")
@@ -2748,8 +2748,8 @@ rh_results <- test_seasonal_trends(seasonal_summary_all,
                                      "RH", 
                                      "%")
 print(rh_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
-                      "kendall_tau", "kendall_p", "change_per_year", 
-                      "percent_change_2017_2022", "significant")])
+                      "kendall_tau", "kendall_p", #"change_per_year", 
+                      "spearman_rho", "spearman_p", "significant")])
 
 # Sensible Heat
 cat("\n--- SENSIBLE HEAT FLUX ---\n")
@@ -2758,8 +2758,8 @@ h_results <- test_seasonal_trends(seasonal_summary_all,
                                    "Sensible Heat", 
                                    "W/m²")
 print(h_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
-                    "kendall_tau", "kendall_p", "change_per_year", 
-                    "percent_change_2017_2022", "significant")])
+                    "kendall_tau", "kendall_p", #"change_per_year", 
+                    "spearman_rho", "spearman_p", "significant")])
 
 # Latent Heat
 cat("\n--- LATENT HEAT FLUX ---\n")
@@ -2768,8 +2768,8 @@ le_results <- test_seasonal_trends(seasonal_summary_all,
                                     "Latent Heat", 
                                     "W/m²")
 print(le_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
-                     "kendall_tau", "kendall_p", "change_per_year", 
-                     "percent_change_2017_2022", "significant")])
+                     "kendall_tau", "kendall_p", #"change_per_year", 
+                     "spearman_rho", "spearman_p", "significant")])
 
 # Ground Heat
 cat("\n--- Ground HEAT FLUX ---\n")
@@ -2778,8 +2778,8 @@ g_results <- test_seasonal_trends(seasonal_summary_all,
                                     "Ground Heat Flux", 
                                     "W/m²")
 print(g_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
-                     "kendall_tau", "kendall_p", "change_per_year", 
-                     "percent_change_2017_2022", "significant")])
+                     "kendall_tau", "kendall_p", #"change_per_year", 
+                     "spearman_rho", "spearman_p","significant")])
 
 # ============================================================================
 # COMBINE ALL RESULTS INTO ONE TABLE
@@ -2794,8 +2794,8 @@ cat("============================================================\n")
 
 significant_trends <- all_results %>%
   filter(significant %in% c("Yes*", "Yes**")) %>%
-  select(variable, season, mean_value, units, change_per_year, 
-         percent_change_2017_2022, slope_p, kendall_p, significant)
+  select(variable, season, mean_value, units, #change_per_year, #percent_change_2017_2022
+         spearman_rho, spearman_p, slope_p, kendall_p, significant)
 
 if (nrow(significant_trends) > 0) {
   print(significant_trends)
@@ -2809,63 +2809,37 @@ cat("- Negative slope/change = decreasing trend\n")
 cat("- change_per_year = average annual change\n")
 cat("- percent_change = total change from 2017 to 2022\n")
 ```
-
-
-
-
-
+#Make table of all stats results 
 ```{r}
-library(ggpmisc)
+# Combine all results
+all_results <- rbind(gf_ta_results, ta_results, gf_ts_results, ts_results, 
+                     swc_results, vpd_results, rh_results, h_results, 
+                     le_results, g_results)
 
-p_VPD_with_stats <- ggplot(seasonal_summary_all, aes(x = year, y = VPD_mean, color = year_factor)) +
-  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
-  geom_point(size = 2.5) +
-  geom_errorbar(aes(ymin = VPD_mean - VPD_se, 
-                    ymax = VPD_mean + VPD_se),
-                width = 0.2, linewidth = 0.8) +
-  
-  # Add trend line
-  geom_smooth(aes(group = season), method = "lm", se = TRUE, 
-              color = "black", linewidth = 0.8, alpha = 0.2) +
-  
-  # Add only slope, R², and p-value (no full equation)
-  stat_poly_eq(aes(label = paste("Slope ==", 
-                                   after_stat(sprintf("%.3f", coef.ls[[1]][[2]])),
-                                   "~~~R^2 ==", 
-                                   after_stat(sprintf("%.2f", r.squared)),
-                                   "~~~italic(p) ==",
-                                   after_stat(sprintf("%.3f", p.value)),
-                                   sep = "~")),
-               formula = y ~ x, 
-               parse = TRUE,
-               size = 3,
-               color = "black") +
-  
-  facet_wrap(~ season, ncol = 3) +
-  
-  scale_color_manual(
-    values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
-               "2020" = "#d62728", "2021" = "#9467bd", "2022" = "#8c564b"),
-    name = "Year"
-  ) +
-  
-  scale_x_continuous(breaks = 2017:2022) +
-  
-  labs(x = "Year", y = "VPD (hPa)") +
-  theme_bw() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
-    axis.text.y = element_text(face = "bold"),
-    axis.title = element_text(face = "bold"),
-    strip.text = element_text(face = "bold"),
-    legend.position = "none"
-  )
+# View the complete table
+print(all_results)
 
-p_VPD_with_stats
+# Select specific columns for cleaner presentation
+supp_table <- all_results %>%
+  select(variable, season, n_years, mean_value, units,
+         slope, slope_se, slope_p, 
+         adj_r_squared,
+         kendall_tau, kendall_p,
+         spearman_rho, spearman_p,
+         shapiro_p, normal, significant) %>%
+  arrange(variable, season)
+
+supp_table
+
+# Export to CSV
+write.csv(supp_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_met_trends_statistics.csv", row.names = FALSE)
+
+
 ```
 
 
-#pairwise comparisons of years using daily avg data 
+
+#pairwise comparisons of years using daily avg data - might not work well due to potential autocorrelation - coding help from Claude
 ```{r}
 # Pairwise Year Comparisons Using Daily Averages
 # Tests if specific years differ from each other within each season
@@ -3229,7 +3203,7 @@ cat("- difference: Actual value difference from mean (in original units)\n")
 cat("- This approach is more conservative than pairwise comparisons\n")
 ```
 #Checking linear trends of variables that showed sig slopes per lm and/or kendall's tau (which is VPD, RH, possibly SWC)
-#### note that here it's using an intercept based off of year = 0, when our first year is 2017...so the b/y-intercept here is wrong 
+#### note that here it's using an intercept based off of year = 0, when our first year is 2017...so the b/y-intercept here is wrong - use "year_c" to re-center onto 2017 as starting reference point
 
 ### LM - VPD
 ```{r}
@@ -3795,7 +3769,7 @@ bptest(SWC_lm_winter) #p=0.35, ok
 
 library(ggpmisc)  # For adding equation and stats to plots
 
-# Example for VPD which showed significant trends in all seasons
+# VPD - Shows trends in all seasons 
 p_VPD_with_stats <- ggplot(seasonal_summary_all, aes(x = year_c, y = VPD_mean, color = year_factor)) +
   geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
   geom_point(size = 2.5) +
@@ -3818,7 +3792,7 @@ p_VPD_with_stats <- ggplot(seasonal_summary_all, aes(x = year_c, y = VPD_mean, c
                                            p.value.label, "))"))),
                formula = y ~ x,
                parse = TRUE,
-               size = 3,
+               size = 4,
                color = "black") +
   
   facet_wrap(~ season, ncol = 3) +
@@ -3844,12 +3818,115 @@ p_VPD_with_stats <- ggplot(seasonal_summary_all, aes(x = year_c, y = VPD_mean, c
 
 p_VPD_with_stats
 ```
+#RH with stats 
 
-#Plotting vars with sig linear trends over the years
 ```{r}
+# VPD - Shows trends in all seasons 
+p_RH_with_stats <- ggplot(seasonal_summary_all, aes(x = year_c, y = RH_mean, color = year_factor)) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  geom_point(size = 2.5) +
+  geom_errorbar(aes(ymin = RH_mean - RH_se, 
+                    ymax = RH_mean + RH_se),
+                width = 0.2, linewidth = 0.8) +
+  
+  # Add trend line
+  geom_smooth(aes(group = season), method = "lm", se = TRUE, 
+              color = "black", linewidth = 0.8, alpha = 0.2) +
+  
+  # Add R² and p-value
+  # stat_poly_eq(aes(label = paste(after_stat(eq.label),
+  #                                  after_stat(rr.label),
+  #                                  after_stat(p.value.label),
+  #                                  sep = "~~~")),
+  stat_poly_eq(aes(label = after_stat(paste("atop(", 
+                                           eq.label, ",", 
+                                           "atop(", adj.rr.label, ",", 
+                                           p.value.label, "))"))),
+               formula = y ~ x,
+               parse = TRUE,
+               size = 4,
+               color = "black") +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(
+    values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
+               "2020" = "#d62728", "2021" = "#9467bd", "2022" = "#8c564b"),
+    name = "Year"
+  ) +
+  
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(x = "Year", y = "RH (%)") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
 
-  # Example for VPD which showed significant trends in all seasons
- p_VPD_lm<- ggplot(seasonal_summary_all, aes(x = year, y = VPD_mean, color = year_factor)) +
+
+p_RH_with_stats
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Manual annotations of stats for each panel 
+#VPD - Annotating each panel - code from Claude 
+```{r}
+#Best way to add unique text to each panel in the facet_wrapped figure is to create a dataframe with the info you want to add to each panel 
+
+# Create a dataframe with statistics for each season
+vpd_stats <- data.frame(
+  season = c("Fall Senescence", "Growing Season", "Winter"),
+  r2 = c(0.92, 0.83, 0.74),  # Replace with your actual adj R² values - Fall, Growing, Winter 
+  slope = c(0.60, 0.81, 0.96),  # Replace with your actual slopes - Fall, Growing, Winter 
+  p_value = c(0.001, 0.007, 0.039),  # Replace with your actual p-values - Fall, Growing, Winter 
+  kendall_p = c(0.02, 0.02, 0.02),
+  kendall_tau = c(0.87, 0.87, 1.00),
+  x = c(2017, 2017, 2017),  # x position for text
+  y = c(10, 10, 10)  # y position for text - adjust based on your data range
+)
+
+# Create labels
+vpd_stats <- vpd_stats %>%
+  mutate(label = paste0("R² = ", round(r2, 2), "\n",
+                        "Slope = ", round(slope, 2), "\n",
+                        "LM_p = ", format.pval(p_value, digits = 3), "\n",
+                        "Kendall_tau =", round(kendall_tau, 2), "\n",
+                        "Kendall_p =", format.pval(kendall_p, digits = 3)))
+
+# Add to plot
+p_VPD_lm <- ggplot(seasonal_summary_all, aes(x = year, y = VPD_mean, color = year_factor)) +
   geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
   geom_point(size = 2.5) +
   geom_errorbar(aes(ymin = VPD_mean - VPD_se, 
@@ -3860,7 +3937,12 @@ p_VPD_with_stats
   geom_smooth(aes(group = season), method = "lm", se = TRUE, 
               color = "black", linewidth = 0.8, alpha = 0.2) +
   
-
+  # Add manual annotations
+  geom_text(data = vpd_stats, 
+            aes(x = x, y = y, label = label),
+            color = "black", size = 3, hjust = 0, vjust = 1,
+            inherit.aes = FALSE) +
+  
   facet_wrap(~ season, ncol = 3) +
   
   scale_color_manual(
@@ -3879,13 +3961,86 @@ p_VPD_with_stats
     axis.title = element_text(face = "bold"),
     strip.text = element_text(face = "bold"),
     legend.position = "none"
-  ) + 
- # Annotations
-  annotate("text", x = 2018, y = 8, label = "R² = 0.58", size = 3) +
-  annotate("text", x = 2018, y = 7.6,label = "Slope = 0.81", size = 3) 
+  )
 
 p_VPD_lm
-  
+```
+#Save figure 
 
+```{r}
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/VPD_trends_stats.png", p_VPD_lm, 
+        width = 7, height = 5, dpi = 600)
 ```
 
+#RH - Annotating each panel - code from Claude 
+```{r}
+#Best way to add unique text to each panel in the facet_wrapped figure is to create a dataframe with the info you want to add to each panel 
+
+# Create a dataframe with statistics for each season
+rh_stats <- data.frame(
+  season = c("Fall Senescence", "Growing Season", "Winter"),
+  r2 = c(0.87, 0.97, 0.89),  # Replace with your actual adj R² values - Fall, Growing, Winter 
+  slope = c(-7.93, -6.66, -8.34),  # Replace with your actual slopes - Fall, Growing, Winter 
+  p_value = c(0.0042, 0.0003, 0.01),  # Replace with your actual p-values - Fall, Growing, Winter 
+  kendall_p = c(0.017, 0.003, 0.017),
+  kendall_tau = c(-0.87, -1.00, -1.00),
+  x = c(2019.5, 2019.5, 2019.5),  # x position for text
+  y = c(90, 90, 90)  # y position for text - adjust based on your data range
+)
+
+# Create labels
+rh_stats <- rh_stats %>%
+  mutate(label = paste0("R² = ", round(r2, 2), "\n",
+                        "Slope = ", round(slope, 2), "\n",
+                        "LM_p = ", format.pval(p_value, digits = 3), "\n",
+                        "Kendall_tau =", round(kendall_tau, 2), "\n",
+                        "Kendall_p =", format.pval(kendall_p, digits = 3)))
+
+# Add to plot
+p_rh_lm <- ggplot(seasonal_summary_all, aes(x = year, y = RH_mean, color = year_factor)) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  geom_point(size = 2.5) +
+  geom_errorbar(aes(ymin = RH_mean - RH_se, 
+                    ymax = RH_mean + RH_se),
+                width = 0.2, linewidth = 0.8) +
+  
+  # Add trend line
+  geom_smooth(aes(group = season), method = "lm", se = TRUE, 
+              color = "black", linewidth = 0.8, alpha = 0.2) +
+  
+  # Add manual annotations
+  geom_text(data = rh_stats, 
+            aes(x = x, y = y, label = label),
+            color = "black", size = 3, hjust = 0, vjust = 1,
+            inherit.aes = FALSE) +
+  
+  facet_wrap(~ season, ncol = 3) +
+  
+  scale_color_manual(
+    values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
+               "2020" = "#d62728", "2021" = "#9467bd", "2022" = "#8c564b"),
+    name = "Year"
+  ) +
+  
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(x = "Year", y = "RH (%)") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+p_rh_lm
+```
+#Save figure 
+
+```{r}
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/RH_trends_stats.png", p_rh_lm, 
+        width = 7, height = 5, dpi = 600)
+```
