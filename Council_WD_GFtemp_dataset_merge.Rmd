@@ -1,0 +1,81 @@
+---
+title: "Council_WD_GFtemp_merge" #Merging datatset ".2" with the different wind direction classifications with ".3" which has gapfilled air and soil temp 
+
+output: html_document
+date: "2025-10-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+
+```{r}
+#needs continuous day variable - daily avg, calculated in processing steps, this ".2" version has the two wind direction classifications 
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+#needs continuous day variable - daily avg, calculated in processing steps - this ".3" version has gap-filled soil and air temp (but not the two WD classifications, which is not important to use here)
+
+df_avg2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.3.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+```
+
+
+
+
+```{r}
+library(dplyr)
+
+df_avg$date <- as.POSIXct(df_avg$date, format = "%Y-%m-%d")
+
+df_avg2$date <- as.POSIXct(df_avg2$date, format = "%Y-%m-%d")
+
+library(dplyr)
+
+df_merged <- df_avg %>%
+  left_join(
+    df_avg2 %>% select(date, TS_3_gapfilled, TS_3_gapfilled_flag, TA_gapfilled, TA_gapfilled_flag),
+    by = "date"
+  )
+
+#check the merge
+summary(df_avg2$FC)
+summary(df_merged$FC)
+
+```
+# Save dataset with the two wind classifications and the GF air and soil temp 
+```{r}
+
+# Export to CSV
+write.csv(x = df_merged,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.4.csv',quote = F,row.names = F)
+
+
+
+```
+
