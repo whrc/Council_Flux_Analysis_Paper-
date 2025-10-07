@@ -1,0 +1,1249 @@
+---
+title: "Council_Seasonal_Delineations" # Seasonal Delineations - finding seasonal boundaries 
+output: html_document
+date: "2025-10-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Winter = first of 4 consecutive days where TA is below 0
+Summer = first of 4 consecutive days where NEE is negative (uptake)
+Fall = NEE is pos (emission) but TA is above 0 (not yet freezing)
+
+Notes:
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+#Load data
+
+```{r}
+#using the ".2" version to reflect the updated SWC used in RF - these should have seasons added already to each DOY, also includes TA_ERA5 and TS_ERA5. 
+
+#The original without any added columns post-AMF processing, with added columns removed for reference:
+# library(dplyr)
+# 
+# df_clean <- df %>%
+#   select(-TA_ERA5, -TS_ERA5, -date, -FC_night, -FC_night_F, -year, -DOY, -season)
+# 
+# write.csv(x = df_clean,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AMF_gapfilled_clean_2017_2023.2.csv',quote = F,row.names = F)
+
+
+
+#HH daataset
+
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+#needs continuous day variable - daily avg, calculated in processing steps - this ".4" version has gap-filled soil and air temp + the 2 wind direction classifications 
+df_avg2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.4.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+```
+
+#Make sure you have a DOY column 
+```{r}
+# library(lubridate)
+# #if as date or in posixct
+# df_avg2 <- df_avg2 %>%
+#   mutate(DOY = yday(date))
+# 
+# #if date is character
+# df_avg2 <- df_avg2 %>%
+#   mutate(date = as.Date(date, format = "%Y-%m-%d"),
+#          DOY = yday(date))
+
+
+```
+
+
+
+
+#Creates data frames of each year containing the daily averages of each value- useful for focusing on one year at a time
+```{r}
+#create dataframes for each year for the data you have so you can look at annual trends 
+
+#map out the timestamp of the daily avg dataset
+df_avg2$date <- as.POSIXct(df_avg2$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
+
+df_avg_2017 <- df_avg2 %>% filter(year == "2017") 
+df_avg_2018 <- df_avg2 %>% filter(year == "2018") 
+df_avg_2019 <- df_avg2 %>% filter(year == "2019") 
+df_avg_2020 <- df_avg2 %>% filter(year == "2020") 
+df_avg_2021 <- df_avg2 %>% filter(year == "2021") 
+df_avg_2022 <- df_avg2 %>% filter(year == "2022") 
+df_avg_2023 <- df_avg2 %>% filter(year == "2023") 
+
+#for HH data (doesn't have the gapfilled temps or two WD classifications*)
+# df <- df %>%
+#   mutate(year = format(date, "%Y"))
+# 
+# df_2017 <- df %>% filter(year == "2017") 
+# df_2018 <- df %>% filter(year == "2018") 
+# df_2019 <- df %>% filter(year == "2019") 
+# df_2020 <- df %>% filter(year == "2020") 
+# df_2021 <- df %>% filter(year == "2021") 
+# df_2022 <- df %>% filter(year == "2022") 
+# df_2023 <- df %>% filter(year == "2023") 
+
+
+```
+
+```{r}
+#Explore seasonal delineations for each year here
+
+#ggplot of PPFD ratio 
+
+#Photosynthetic photon flux density, incoming / outgoing --> if ratio is closer to 1, it indicates more reflectance from snow; if ratio is closer to 0, it's less reflectance and likely vegetation / no snow 
+  
+ggplot(data = df_avg_2023) +
+  theme_bw() +
+  geom_line(aes(x = DOY, y = (PPFD_OUT*500) / PPFD_IN), color = 'pink') +
+    geom_vline(xintercept = 136)+ #end of winter - 3+ days of air temp above 0 & low PPFD ratio -- lag in ground temp likely is 0 curtain period  
+  #geom_vline(xintercept = 162)+ #end of snowmelt --> Council does not seem to have snowmelt variable
+  geom_vline(xintercept = 248)+ #end of growing season --> FC_F < 0 for 3 days 
+  geom_vline(xintercept = 286)+ #end of Fall Senescence / start of winter --> it's 272 for 3+ days of ground temp below 0; it's 268 -272 for 3+ days of air temperature <0 
+  geom_hline(yintercept=0)+ #makes a black line at y=0 to indicate sink vs source
+  #scale_x_continuous(limits = c(0, 366))+ #whole year
+  scale_x_continuous(limits = c(100, 366))+
+  labs(title = "2023")
+
+#PAR shows up after 100 DOY -- since we multiplied PPFD ratio by 500 to get it to show up on the scale, low around 200 = summer, and high ratio  around 500 and up means snow 
+
+
+
+#ggplot of air temp, ground temp, and FC_F
+
+ggplot(data = df_avg_2017) +
+  theme_bw() +
+  geom_line(aes(x = DOY, y = TS_3_1_1), color = 'red') + #ground temp at 15cm in "tussock"
+  geom_line(aes(x = DOY, y = TA), color = 'orange') + #air temp
+ geom_line(aes(x = DOY, y = (FC_F*15)), color = 'darkblue') + #CO2 flux
+ scale_y_continuous(name = expression('Biomet Vars & FC'), limits = c(-30,20)) +
+  geom_vline(xintercept = 102)+ #end of winter - 3+ days of air temp above 0 & low PPFD ratio -- lag in ground temp likely is 0 curtain period  
+  #geom_vline(xintercept = 162)+ #end of snowmelt --> Council does not seem to have snowmelt variable
+  geom_vline(xintercept = 259)+ #end of growing season --> FC_F < 0 for 3 days 
+  geom_vline(xintercept = 280)+ #end of Fall Senescence / start of winter -->  3+ days of ground temp below 0; it's 268 -272 for 3+ days of air temperature <0 
+  geom_hline(yintercept=0)+ #makes a black line at y=0 to indicate sink vs source
+  #scale_x_continuous(limits = c(0, 366)) #whole year
+  scale_x_continuous(limits = c(100, 366)) +#zooming in on DOY ranges 
+  #geom_line(aes(x = DOY, y = D_SNOW/2), color = 'purple') + #dataset doesn't seem to have snow 
+labs(title = "2017")
+#these look wonky, may have to clean more to get this to look better**
+
+```
+
+
+# Cleaned up seasonal delineations - swap out years 
+
+```{r}
+#Used this to explore where the seasonal delineations may lie -- code for actual figures in the chunks below 
+
+ggplot(data = df_avg_2023) +
+  theme_bw() +
+  
+# Map color inside aes() to include in the legend
+  geom_line(aes(x = DOY, y = TS_3_1_1, color = 'Ground Temp')) + # ground temp at 15cm in "tussock"
+  geom_line(aes(x = DOY, y = TA, color = 'Air Temp')) + # air temp
+  geom_line(aes(x = DOY, y = (FC_F*15), color = 'CO2 Flux * 15')) + # CO2 flux
+  
+  #diff in air and soil temp above 0 could be snowmelt, compare to PAR data 
+  
+# Y-axis label and limits
+  scale_y_continuous(name = expression('Biomet Vars & FC'), limits = c(-30, 20)) +
+  
+# Vertical and horizontal reference lines for each year 2017-2022
+  
+   #2017
+  # geom_vline(xintercept = 127) + # end of winter - 3+ days of air temp above 0
+  # geom_vline(xintercept = 258) + # end of growing season - FC_F < 0 for 3 days 
+  # geom_vline(xintercept = 289) + # end of Fall Senescence / start of winter  -->  3+ days of air temperature < 0
+  
+    #2018
+  # geom_vline(xintercept = 150) + # end of winter - 3+ days of air temp above 0 - p
+  # geom_vline(xintercept = 256) + # end of growing season - FC_F < 0 for 3 days
+  # geom_vline(xintercept = 299) + # end of Fall Senescence / start of winter  --> 3+ days of air temperature < 0
+  
+   #2021
+  # geom_vline(xintercept = 143) + # end of winter - 3+ days of air temp above 0 - p
+  # geom_vline(xintercept = 253) + # end of growing season - FC_F < 0 for 3 days
+  # geom_vline(xintercept = 284) + # end of Fall Senescence / start of winter  --> 3+ days of air temperature < 0
+  
+  # #2020
+  # geom_vline(xintercept = 130) + # end of winter - 3+ days of air temp above 0 - p
+  # geom_vline(xintercept = 249) + # end of growing season - FC_F < 0 for 3 days
+  # geom_vline(xintercept = 286) + # end of Fall Senescence / start of winter  --> 3+ days of air temperature < 0
+  
+ #2021
+ # geom_vline(xintercept = 143) + # end of winter - 3+ days of air temp above 0
+ # geom_vline(xintercept = 259) + # end of growing season - FC_F < 0 for 3 days
+ # geom_vline(xintercept = 288) + # end of Fall Senescence / start of winter  --> 272 for 3+ days of air temperature < 0
+  
+# #2022
+#  geom_vline(xintercept = 137) + # end of winter - 3+ days of air temp above 0
+#  geom_vline(xintercept = 259) + # end of growing season - FC_F < 0 for 3 days
+#  geom_vline(xintercept = 280) + # end of Fall Senescence / start of winter  --> 272 for 3+ days of air temperature < 0
+  
+  # #2023
+ geom_vline(xintercept = 156) + # end of winter - 3+ days of air temp above 0
+ geom_vline(xintercept = 239) + # end of growing season - FC_F < 0 for 3 days
+ geom_vline(xintercept = 280) + # end of Fall Senescence / start of winter  --> 272 for 3+ days of air temperature < 0
+  
+  
+  geom_hline(yintercept = 0) + # horizontal line at y = 0
+  
+  # X-axis limits 
+  scale_x_continuous(limits = c(100, 366)) + #(zoomed into specific time)
+  #scale_x_continuous(limits = c(0, 366)) #whole year
+  
+  # Define manual color scale for legend
+  scale_color_manual(values = c('Ground Temp' = 'red', 
+                                'Air Temp' = 'orange', 
+                                'CO2 Flux * 15' = 'darkblue')) +
+  
+  # Add labels and title
+  labs(color = "Variables")+ # This adds the title for the legend
+labs(title = "2023")
+```
+
+####Seasonal Plots with temp and NEE for each year
+
+Definition of seasons: first of 4 consecutive days of FC_F <0 (negative) for growing season, first of 4 consecutive days of pos NEE for end of growing season, and first of four consecutive days of air temperature <0 for winter. Gaps are senescence and spring - no snowmelt data for Council  
+
+#2017 seasonal delineations 
+```{r}
+#checking the dataset for each year to find the seasonal delineations (first of 4 consecutive days)
+
+df_avg_2017_check <- df_avg_2017 %>%
+  select(date, FC_F, TA, TA_gapfilled, TS_3_1_1, TS_3_gapfilled, DOY, season)
+
+#first day of summer: DOY 131, 5/11
+#first day of Winter: DOY 290, 10/17 
+#first day of Fall: DOY 258, 9/15  
+
+# potential start of spring? DOY 102, 4/12 - TA_gf above 0 for 4 days 
+
+# Definition of 2017 seasons into the daily average dataframe 
+df_avg_2017 <- df_avg_2017 %>%
+  mutate(
+      season = case_when(
+      (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+
+
+#add to HH df
+df_2017 <- df_2017 %>%
+  mutate(
+      season = case_when(
+      (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+
+```
+
+####2017 Seasonal plot
+```{r}
+#2017
+
+# colnames(df_avg_2017)[colnames(df_avg_2017) == "date"] <- "day"
+# 
+# df_avg_2017$date <- as.POSIXct(df_avg_2017$date)
+# 
+# df_avg_2017$date <- as.POSIXct(df_avg_2017$date, format = "%Y-%m-%d")
+
+
+## Plot with legend- 
+seasonal_timeseries_2017_plot <- ggplot(data = df_avg_2017) +
+  theme_bw() +
+  
+  # horizontal line at y = 0
+  geom_hline(yintercept=0, colour = "black")+
+  
+  #lines for soil and air temperature
+  geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature"), linewidth = 0.8) + #divided to scale
+  geom_line(aes(x = date, y = TA/15, colour = "Air Temperature"), linewidth = 0.8) +
+  geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
+  geom_line(aes(x = date, y = TS_ERA5/15, colour = "ERA5 Soil Temperature"), linetype = "dashed")+
+
+  
+   # NEE (converting from umol/m2/s to gC/m2/day)
+  geom_point(aes(x = date, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE"))+
+  
+  # NEE and temp axis scales
+  scale_y_continuous(
+  name = expression(NEE~(gCO[2]-C~m^-2~d^-1)), limits =c(-4,3),
+  sec.axis = sec_axis(~ . * 15, name = expression("Temperature ("*degree*"C)"))) +
+  
+  
+  # color legend for the lines
+  scale_color_manual(
+    name = "",
+    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3", "ERA5 Air Temperature" = "darkgreen", "ERA5 Soil Temperature" = "blue"))+ 
+  
+  # vertical lines for specific events
+  geom_vline(xintercept = as.POSIXct("2017-05-10"))+ #end of winter, DOY 126 
+  geom_vline(xintercept =  as.POSIXct("2017-09-14"))+ #end of growing season, DOY 258
+  geom_vline(xintercept =  as.POSIXct("2017-10-17")) + #end of Fall Senescence, DOY 289
+  
+# Labels for each vertical line within figure 
+annotate("text", size = 3, x = as.POSIXct("2017-02-05"), y = -4, label = "Winter", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2017-07-06"), y = -4, label = "Growing Season", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2017-10-10"), y = -4, label = "Senescence", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2017-12-15"), y = -4, label = "Winter", color = "black") +
+
+       theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))+
+  
+    #Title for the plot 
+  labs(title = "Seasonal Trends: 2017", x = "Date") +
+  
+  #remove legend for stacking figures into one fit
+  theme(legend.position = "none")
+
+seasonal_timeseries_2017_plot
+
+ # ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_timeseries_2017_plot.2.png", seasonal_timeseries_2017_plot, 
+ #       width = 8, height = 5, dpi = 600)
+
+```
+
+
+#2018 Seasonal delineations 
+```{r}
+#checking the dataset for each year to find the seasonal delineations (first of 4 consecutive days)
+
+df_avg_2018_check <- df_avg_2018 %>%
+  select(date, FC_F, TA, TA_gapfilled, TS_3_1_1, TS_3_gapfilled, DOY, season)
+
+#first day of summer: DOY 151, 5/31 
+#first day of Winter: DOY 300, 10/27
+#first day of Fall: DOY 257, 9/14   
+
+# potential start of spring? DOY 127, 5/7 
+
+
+
+# Add seasonal delineations to the daily average dataframe 
+
+df_avg_2018 <- df_avg_2018 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 257 & DOY <= 299) ~ 'Fall Senescence',
+      (DOY >= 151 & DOY <= 256) ~ 'Growing Season',
+      (DOY >= 300 | DOY <= 150) ~ 'Winter', 
+      TRUE ~ NA_character_
+    )
+  )
+
+
+#add to HH df
+df_2018 <- df_2018 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 257 & DOY <= 299) ~ 'Fall Senescence',
+      (DOY >= 151 & DOY <= 256) ~ 'Growing Season',
+      (DOY >= 300 | DOY <= 150) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+
+####2018 Seasonal Plot with NEE and temp 
+```{r}
+
+#2018
+# colnames(df_avg_2018)[colnames(df_avg_2018) == "date"] <- "day"
+# 
+# df_avg_2018$day <- as.POSIXct(df_avg_2018$day)
+
+## Plot with legend- use only for legend
+seasonal_timeseries_2018_plot <- ggplot(data = df_avg_2018) +
+  theme_bw() +
+  
+  # horizontal line at y = 0
+  geom_hline(yintercept=0, colour = "black")+
+  
+  #lines for soil and air temperature
+  geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature"), linewidth = 0.8) + #divided to scale
+  geom_line(aes(x = date, y = TA/15, colour = "Air Temperature"), linewidth = 0.8) +
+  geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
+  geom_line(aes(x = date, y = TS_ERA5/15, colour = "ERA5 Soil Temperature"), linetype = "dashed")+
+  
+   # NEE (converting from umol/m2/s to gC/m2/day)
+  geom_point(aes(x = date, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE"))+
+  
+  # NEE and temp axis scales
+  scale_y_continuous(
+  name = expression(NEE~(gCO[2]-C~m^-2~d^-1)), limits =c(-4,3),
+  sec.axis = sec_axis(~ . * 15, name = expression("Temperature ("*degree*"C)"))) +
+  
+  
+  # color legend for the lines
+  scale_color_manual(
+    name = "",
+    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3", "ERA5 Air Temperature" = "darkgreen", "ERA5 Soil Temperature" = "blue"))+
+  
+  # vertical lines for specific events
+  geom_vline(xintercept = as.POSIXct("2018-05-30"))+ #end of winter, DOY 150*
+  geom_vline(xintercept =  as.POSIXct("2018-09-13"))+ #end of growing season, DOY 256*
+  geom_vline(xintercept =  as.POSIXct("2018-10-26")) + #end of Fall Senescence, DOY 299*
+  
+# Labels for each vertical line within figure 
+annotate("text", size = 3, x = as.POSIXct("2018-03-01"), y = -4, label = "Winter", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2018-07-19"), y = -4, label = "Growing Season", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2018-10-8"), y = -4, label = "Senescence", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2018-12-15"), y = -4, label = "Winter", color = "black") +
+  
+       theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))+
+
+    #Title for the plot 
+   labs(title = "Seasonal Trends: 2018", x = "Date")  +
+   #remove legend for stacking figures into one fit
+  theme(legend.position = "none")
+
+seasonal_timeseries_2018_plot
+
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_timeseries_2018_plot.2.png", seasonal_timeseries_2018_plot,
+#        width = 8, height = 5, dpi = 600)
+
+```
+
+# 2019 Seasonal delineations 
+```{r}
+
+#checking the dataset for each year to find the seasonal delineations (first of 4 consecutive days)
+
+df_avg_2019_check <- df_avg_2019 %>%
+  select(date, FC_F, TA, TA_gapfilled, TS_3_1_1, TS_3_gapfilled, DOY, season)
+
+#first day of summer: DOY 144, 5/24
+#first day of Winter: DOY 284, 10/11
+#first day of Fall: DOY 243, 8/31
+
+# potential start of spring? DOY 119, 4/29 
+
+
+
+# Add seasonal delineations to the daily average dataframe 
+
+df_avg_2019 <- df_avg_2019 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 243 & DOY <= 283) ~ 'Fall Senescence',
+      (DOY >= 144 & DOY <= 242) ~ 'Growing Season',
+      (DOY >= 284 | DOY <= 143) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+
+
+#Add seasons to half-hourly df 
+df_2019 <- df_2019 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 243 & DOY <= 283) ~ 'Fall Senescence',
+      (DOY >= 144 & DOY <= 242) ~ 'Growing Season',
+      (DOY >= 284 | DOY <= 143) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+
+```
+
+
+####2019 Seasonal Plot with NEE and temp 
+```{r}
+#2019 --> didn't add ERA5 here as the temp data is nearly complete 
+# colnames(df_avg_2019)[colnames(df_avg_2019) == "date"] <- "day"
+# df_avg_2019$day <- as.POSIXct(df_avg_2019$day)
+
+## Plot with legend- use only for legend
+seasonal_timeseries_2019_plot <- ggplot(data = df_avg_2019) +
+  theme_bw() +
+  
+  # horizontal line at y = 0
+  geom_hline(yintercept=0, colour = "black")+
+  
+  #lines for soil and air temperature
+  geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature"), linewidth = 0.8) + #divided to scale
+  geom_line(aes(x = date, y = TA/15, colour = "Air Temperature"), linewidth = 0.8) +
+  geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
+  geom_line(aes(x = date, y = TS_ERA5/15, colour = "ERA5 Soil Temperature"), linetype = "dashed")+
+  
+  
+  # NEE (converting from umol/m2/s to gC/m2/day)
+  geom_point(aes(x = date, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE"))+
+  
+  # NEE and temp axis scales
+  scale_y_continuous(
+  name = expression(NEE~(gCO[2]-C~m^-2~d^-1)), limits =c(-4,3),
+  sec.axis = sec_axis(~ . * 15, name = expression("Temperature ("*degree*"C)"))) +
+  
+  
+  # color legend for the lines
+  scale_color_manual(
+    name = "",
+    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3","ERA5 Air Temperature" = "darkgreen", "ERA5 Soil Temperature" = "blue"))+
+  
+  # vertical lines for specific events
+  geom_vline(xintercept = as.POSIXct("2019-05-23"))+ #end of winter, DOY 143* 
+  geom_vline(xintercept =  as.POSIXct("2019-08-30"))+ #end of growing season,DOY 242* 
+  geom_vline(xintercept =  as.POSIXct("2019-10-10")) + #end of Fall Senescence, DOY 283*
+
+  
+# Labels for each vertical line within figure 
+annotate("text", size = 3, x = as.POSIXct("2019-03-05"), y = -4, label = "Winter", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2019-07-11"), y = -4, label = "Growing Season", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2019-10-09"), y = -4, label = "Senescence", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2019-12-16"), y = -4, label = "Winter", color = "black") +
+  
+      theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))+
+
+    #Title for the plot 
+  labs(title = "Seasonal Trends: 2019", x = "Date") +
+   #remove legend for stacking figures into one fit
+  theme(legend.position = "none")
+
+
+
+seasonal_timeseries_2019_plot
+
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_timeseries_2019_plot.2.png", seasonal_timeseries_2019_plot,
+#        width = 8, height = 5, dpi = 600)
+
+```
+
+
+
+# 2020 seasonal delineations 
+*see notes here on fall senescence - little bit of an judgement call made here 
+
+```{r}
+
+#checking the dataset for each year to find the seasonal delineations (first of 4 consecutive days)
+
+df_avg_2020_check <- df_avg_2020 %>%
+  select(date, FC_F, TA, TA_gapfilled, TS_3_1_1, TS_3_gapfilled, DOY, season)
+
+#first day of summer: DOY 135, 5/14
+#first day of Winter: DOY 300, 10/26
+#first day of Fall: DOY 249, 9/5   --> DOY 231, 8/18 technically based on the 4 consecutive days rule, but then there's a burst up uptake again with on and off uptake/emission until DOY 249, 9/5...so going to choose that because it also fits better in the figure, seems more like the true seasonal shift * 
+
+# potential start of spring? DOY 121, 4/30 
+
+
+# Add seasonal delineations to the daily average dataframe 
+
+df_avg_2020 <- df_avg_2020 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 249 & DOY <= 299) ~ 'Fall Senescence',
+      (DOY >= 135 & DOY <= 248) ~ 'Growing Season',
+      (DOY >= 300 | DOY <= 134) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+
+
+#add into HH df
+df_2020 <- df_2020 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 249 & DOY <= 299) ~ 'Fall Senescence',
+      (DOY >= 135 & DOY <= 248) ~ 'Growing Season',
+      (DOY >= 300 | DOY <= 134) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+
+```
+
+####2020 Seasonal Plot with NEE and temp 
+```{r}
+#2020
+# colnames(df_avg_2020)[colnames(df_avg_2020) == "date"] <- "day"
+# 
+# df_avg_2020$day <- as.POSIXct(df_avg_2020$day)
+
+## Plot with legend- use only for legend
+seasonal_timeseries_2020_plot <- ggplot(data = df_avg_2020) +
+  theme_bw() +
+  
+  # horizontal line at y = 0
+  geom_hline(yintercept=0, colour = "black")+
+  
+  #lines for soil and air temperature
+  #lines for soil and air temperature
+  geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature"), linewidth = 0.8) + #divided to scale
+  geom_line(aes(x = date, y = TA/15, colour = "Air Temperature"), linewidth = 0.8) +
+  geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
+  geom_line(aes(x = date, y = TS_ERA5/15, colour = "ERA5 Soil Temperature"), linetype = "dashed")+
+  
+   # NEE (converting from umol/m2/s to gC/m2/day)
+  geom_point(aes(x = date, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE"))+
+  
+  # NEE and temp axis scales
+  scale_y_continuous(
+  name = expression(NEE~(gCO[2]-C~m^-2~d^-1)), limits =c(-4,3),
+  sec.axis = sec_axis(~ . * 15, name = expression("Temperature ("*degree*"C)"))) +
+  
+  
+  # color legend for the lines
+  scale_color_manual(
+    name = "",
+    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3", "ERA5 Air Temperature" = "darkgreen", "ERA5 Soil Temperature" = "blue"))+
+  
+  # vertical lines for specific events
+  geom_vline(xintercept = as.POSIXct("2020-05-13"))+ #end of winter, DOY 134*
+  geom_vline(xintercept =  as.POSIXct("2020-09-04"))+ #end of growing season, DOY 248*
+  geom_vline(xintercept =  as.POSIXct("2020-10-25")) + #end of Fall Senescence, DOY 299*
+  
+  
+# # Labels for each vertical line within figure 
+annotate("text", size = 3, x = as.POSIXct("2020-03-01"), y = -4, label = "Winter", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2020-07-10"), y = -4, label = "Growing Season", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2020-10-10"), y = -4, label = "Senescence", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2020-12-15"), y = -4, label = "Winter", color = "black") +
+
+       theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))+
+  
+    #Title for the plot 
+   labs(title = "Seasonal Trends: 2020", x = "Date") +
+   #remove legend for stacking figures into one fit
+  theme(legend.position = "none")
+
+seasonal_timeseries_2020_plot
+
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_timeseries_2020_plot.2.png", seasonal_timeseries_2020_plot,
+#        width = 8, height = 5, dpi = 600)
+
+```
+# 2021 seasonal delineations 
+*had to make a judgement call on end of fall / start of winter due to a blip in warm air temp 
+```{r}
+
+#checking the dataset for each year to find the seasonal delineations (first of 4 consecutive days)
+
+df_avg_2021_check <- df_avg_2021 %>%
+  select(date, FC_F, TA, TA_gapfilled, TS_3_1_1, TS_3_gapfilled, DOY, season)
+
+#first day of summer: DOY 142, 5/22
+#first day of Winter: DOY 270, 9/27--> but there are temp fluctuations, with a warm spell until DOY 282, 10/9... have to make a judgement call here and use the visuals to see what makes the most sense 
+#first day of Fall: DOY 255, 9/12 
+
+# potential start of spring? DOY 126, 5/6 
+
+
+# Add seasonal delineations to the daily average dataframe 
+
+df_avg_2021 <- df_avg_2021 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 255 & DOY <= 281) ~ 'Fall Senescence',
+      (DOY >= 142 & DOY <= 254) ~ 'Growing Season',
+      (DOY >= 282 | DOY <= 141) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+
+
+#add to HH df
+df_2021 <- df_2021 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 255 & DOY <= 281) ~ 'Fall Senescence',
+      (DOY >= 142 & DOY <= 254) ~ 'Growing Season',
+      (DOY >= 282 | DOY <= 141) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+  
+```
+
+####2021 Seasonal Plot with NEE and temp 
+```{r}
+#2021
+# colnames(df_avg_2021)[colnames(df_avg_2021) == "date"] <- "day"
+# 
+# df_avg_2021$day <- as.POSIXct(df_avg_2021$day)
+
+## Plot with legend- use only for legend
+seasonal_timeseries_2021_plot <- ggplot(data = df_avg_2021) +
+  theme_bw() +
+  
+  # horizontal line at y = 0
+  geom_hline(yintercept=0, colour = "black")+
+  
+  #lines for soil and air temperature
+  geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature"), linewidth = 0.8) + #divided to scale
+  geom_line(aes(x = date, y = TA/15, colour = "Air Temperature"), linewidth = 0.8) +
+  geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
+  geom_line(aes(x = date, y = TS_ERA5/15, colour = "ERA5 Soil Temperature"), linetype = "dashed")+
+  
+   # NEE (converting from umol/m2/s to gC/m2/day)
+  geom_point(aes(x = date, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE"))+
+  
+  # NEE and temp axis scales
+  scale_y_continuous(
+  name = expression(NEE~(gCO[2]-C~m^-2~d^-1)), limits =c(-4,3),
+  sec.axis = sec_axis(~ . * 15, name = expression("Temperature ("*degree*"C)"))) +
+  
+  
+  # color legend for the lines
+  scale_color_manual(
+    name = "",
+    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3", "ERA5 Air Temperature" = "darkgreen", "ERA5 Soil Temperature" = "blue"))+
+  
+  # vertical lines for specific events
+  geom_vline(xintercept = as.POSIXct("2021-05-21"))+ #end of winter, DOY 141 
+  geom_vline(xintercept =  as.POSIXct("2021-09-11"))+ #end of growing season, DOY 254
+  geom_vline(xintercept =  as.POSIXct("2021-10-09")) + #end of Fall Senescence, DOY 282
+
+  
+# Labels for each vertical line within figure 
+annotate("text", size = 3, x = as.POSIXct("2021-03-01"), y = -4, label = "Winter", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2021-07-10"), y = -4, label = "Growing Season", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2021-10-10"), y = -4, label = "Senescence", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2021-12-15"), y = -4, label = "Winter", color = "black") +
+  
+       theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))+
+
+
+  
+    #Title for the plot 
+   labs(title = "Seasonal Trends: 2021", x = "Date") +
+   #remove legend for stacking figures into one fit
+  theme(legend.position = "none")
+
+seasonal_timeseries_2021_plot
+
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_timeseries_2021_plot.2.png", seasonal_timeseries_2021_plot,
+#        width = 8, height = 5, dpi = 600)
+
+```
+# 2022 seasonal delineations 
+
+```{r}
+#checking the dataset for each year to find the seasonal delineations (first of 4 consecutive days)
+
+df_avg_2022_check <- df_avg_2022 %>%
+  select(date, FC_F, TA, TA_gapfilled, TS_3_1_1, TS_3_gapfilled, DOY, season)
+
+#first day of summer: DOY 143, 5/23
+#first day of Winter: DOY 281, 10/8
+#first day of Fall: DOY 250, 9/7
+
+# potential start of spring? DOY 102, 4/12
+
+# Add seasonal delineations to the daily average dataframe 
+
+df_avg_2022 <- df_avg_2022 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 250 & DOY <= 280) ~ 'Fall Senescence',
+      (DOY >= 143 & DOY <= 249) ~ 'Growing Season',
+      (DOY >= 281 | DOY <= 142) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+
+
+
+#Add to HH df
+df_2022 <- df_2022 %>%
+  mutate(
+       season = case_when(
+      (DOY >= 250 & DOY <= 280) ~ 'Fall Senescence',
+      (DOY >= 143 & DOY <= 249) ~ 'Growing Season',
+      (DOY >= 281 | DOY <= 142) ~ 'Winter',
+      TRUE ~ NA_character_
+    )
+  )
+
+```
+
+
+
+####2022 Seasonal Plot with NEE and temp 
+```{r}
+#2022
+# colnames(df_avg_2022)[colnames(df_avg_2022) == "date"] <- "day"
+# 
+# df_avg_2022$day <- as.POSIXct(df_avg_2022$day)
+
+## Plot with legend- use only for legend
+seasonal_timeseries_2022_plot <- ggplot(data = df_avg_2022) +
+  theme_bw() +
+  
+  # horizontal line at y = 0
+  geom_hline(yintercept=0, colour = "black")+
+  
+  #lines for soil and air temperature
+  geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature"), linewidth = 0.8) + #divided to scale
+  geom_line(aes(x = date, y = TA/15, colour = "Air Temperature"), linewidth = 0.8) +
+  geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
+  geom_line(aes(x = date, y = TS_ERA5/15, colour = "ERA5 Soil Temperature"), linetype = "dashed")+
+  
+   # NEE (converting from umol/m2/s to gC/m2/day)
+  geom_point(aes(x = date, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE"))+
+  
+  # NEE and temp axis scales
+  scale_y_continuous(
+  name = expression(NEE~(gCO[2]-C~m^-2~d^-1)), limits =c(-4,3),
+  sec.axis = sec_axis(~ . * 15, name = expression("Temperature ("*degree*"C)"))) +
+  
+  
+  # color legend for the lines
+  scale_color_manual(
+    name = "",
+    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3", "ERA5 Air Temperature" = "darkgreen", "ERA5 Soil Temperature" = "blue"))+
+  
+  # vertical lines for specific events
+  geom_vline(xintercept = as.POSIXct("2022-05-22"))+ #end of winter, DOY 142 
+  geom_vline(xintercept =  as.POSIXct("2022-09-06"))+ #end of growing season, DOY 249
+  geom_vline(xintercept =  as.POSIXct("2022-10-7")) + #end of Fall Senescence, DOY 280*
+
+# Labels for each vertical line within figure 
+annotate("text", size = 3, x = as.POSIXct("2022-03-01"), y = -4, label = "Winter", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2022-07-10"), y = -4, label = "Growing Season", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2022-10-07"), y = -4, label = "Senescence", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2022-12-15"), y = -4, label = "Winter", color = "black") +
+  
+       theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))+
+
+
+  
+    #Title for the plot 
+   labs(title = "Seasonal Trends: 2022", x = "Date") 
+  
+
+seasonal_timeseries_2022_plot
+
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_timeseries_2022_plot.2.png", seasonal_timeseries_2022_plot,
+#        width = 8, height = 5, dpi = 600)
+
+```
+
+# 2023 seasonal delineations - incomplete due to incomplete data 
+
+```{r}
+
+#checking the dataset for each year to find the seasonal delineations (first of 4 consecutive days)
+
+df_avg_2023_check <- df_avg_2023 %>%
+  select(date, FC_F, TA, TA_gapfilled, TS_3_1_1, TS_3_gapfilled, DOY, season)
+
+#first day of summer: DOY 157, 6/6
+#first day of Winter: DOY 
+#first day of Fall: DOY 234, 8/22
+
+
+
+# Add seasonal delineations to the daily average dataframe 
+
+#don't think data is complete enough to calc this 2023 year's budget 
+
+
+# df_avg_2023 <- df_avg_2023 %>%
+#   mutate(
+#        season = case_when(
+#       (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
+#       (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
+#       (DOY >= 289 | DOY <= 144) ~ 'Winter',
+#       TRUE ~ NA_character_
+#     )
+#   )
+
+```
+
+####2023 Seasonal Plot with NEE and temp 
+```{r}
+#2023
+# colnames(df_avg_2023)[colnames(df_avg_2023) == "date"] <- "day"
+# 
+# df_avg_2023$day <- as.POSIXct(df_avg_2023$day)
+
+## Plot with legend- use only for legend
+seasonal_timeseries_2023_plot <- ggplot(data = df_avg_2023) +
+  theme_bw() +
+  
+  # horizontal line at y = 0
+  geom_hline(yintercept=0, colour = "black")+
+  
+  #lines for soil and air temperature
+  geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature"), linewidth = 0.8) + #divided to scale
+  geom_line(aes(x = date, y = TA/15, colour = "Air Temperature"), linewidth = 0.8) +
+  geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
+  geom_line(aes(x = date, y = TS_ERA5/15, colour = "ERA5 Soil Temperature"), linetype = "dashed")+
+  
+   # NEE (converting from umol/m2/s to gC/m2/day)
+  geom_point(aes(x = date, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE"))+
+  
+  # NEE and temp axis scales
+  scale_y_continuous(
+  name = expression(NEE~(gCO[2]-C~m^-2~d^-1)), limits =c(-4,3),
+  sec.axis = sec_axis(~ . * 15, name = expression("Temperature ("*degree*"C)"))) +
+  
+  
+  # color legend for the lines
+  scale_color_manual(
+    name = "",
+    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3", "ERA5 Air Temperature" = "darkgreen", "ERA5 Soil Temperature" = "blue"))+
+  
+  # vertical lines for specific events
+  geom_vline(xintercept = as.POSIXct("2023-06-06"))+ #end of winter, DOY 157 
+  geom_vline(xintercept =  as.POSIXct("2023-08-24"))+ #end of growing season-->not enough to estimate (?)
+  #geom_vline(xintercept =  as.POSIXct("2023-10-7")) + #end of Fall Senescence, not enough to estimate 
+     #geom_vline(xintercept =  as.POSIXct("2023-06-12"))+ #end of snowmelt, DOY 163
+  
+# Labels for each vertical line within figure 
+annotate("text", size = 3, x = as.POSIXct("2023-03-01"), y = -4, label = "Winter", color = "black") +
+annotate("text", size = 3, x = as.POSIXct("2023-07-10"), y = -4, label = "Growing Season", color = "black") +
+#annotate("text", size = 3, x = as.POSIXct("2023-08-24"), y = -4, label = "Senescence", color = "black") +
+# annotate("text", size = 3, x = as.POSIXct("2023-12-15"), y = -4, label = "Winter", color = "black") +
+ annotate("text", size = 3, x = as.POSIXct("2023-09-15"), y = -3, label = "End of Data (9/1/2023)", color = "black", angle = 90)+
+  
+       theme(axis.text = element_text(size = 12, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5))+
+  
+    #Title for the plot 
+   labs(title = "Seasonal Trends: 2023", x = "Date") 
+
+seasonal_timeseries_2023_plot
+
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_timeseries_2023_plot.2.png", seasonal_timeseries_2023_plot, 
+#        width = 8, height = 5, dpi = 600)
+
+```
+
+#Save individual plots
+```{r}
+ggsave(
+  filename = "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_timeseries_2023_plot.2.pngseasonalC_2017_plot.png",  # File name and extension
+  plot = seasonalC_2019_plot,        # The plot to save (default is the last plot created)
+  width = 20,                 # Width in inches
+  height = 15,                # Height in inches
+  dpi = 600,                 # Resolution in dots per inch
+  units = "cm"               # Units for width and height (can be "in", "cm", or "mm")
+)
+
+#ggsave("my_plot.pdf", width = 8, height = 6, dpi = 300, units = "in")
+```
+
+
+
+#Arrange timeseries figures into a grid to save as single figure
+```{r}
+# Install if you don't have it
+ #install.packages("patchwork")
+library(patchwork)
+
+# Arrange plots in two columns (3 rows x 2 columns) 
+combined_plot2 <- (seasonal_timeseries_2017_plot + seasonal_timeseries_2018_plot) /
+                 (seasonal_timeseries_2019_plot + seasonal_timeseries_2020_plot) /
+                 (seasonal_timeseries_2021_plot + seasonal_timeseries_2022_plot) +
+                 plot_layout(guides = "collect") # Collects all legends into one -- need to ensure the legends are exactly the same among all figures you're trying to group 
+
+# Add a common title if desired
+combined_plot2 <- combined_plot2 & 
+  plot_annotation(
+    title = "seasonal Flux Timeseries (2017-2022)",
+   theme = theme(plot.title = element_text(size = 20, face = "bold", hjust = 0.5))
+  ) &
+  
+  # Increase legend text size, key size, and spacing
+  theme(
+    base_size = 20,
+    #legend.title = element_text(size = 14),    # Increase legend title size
+    legend.text = element_text(size = 14, face = "bold"),     # Increase legend text size
+    legend.key.size = unit(2, "cm"),         # Increase the size of the legend keys/symbols - doesn't seem to work
+    legend.key.width = unit(3, "cm"),        # Make keys wider for line symbols - doesn't work
+    legend.key.height = unit(3, "cm"),       # Control height separately - doesnt work
+    legend.spacing = unit(0.1, "cm"),          # Add more spacing between legend items
+    legend.margin = margin(10, 10, 10, 10),     # Add margin around the legend
+    legend.position = "bottom",
+    legend.box = "horizontal",
+  
+  ) 
+  
+
+combined_plot2
+
+# # Then save it
+ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/combined_seasonal_timeseries2.png", combined_plot2, width = 20, height = 20, dpi = 600)
+
+
+
+```
+
+
+#MOSNTER Seasonal plot 2017 - 2023 
+```{r}
+#Plot of all years 
+
+## Plot with legend- use only for legend
+Monster_plot <- ggplot(data = df_avg) +
+  theme_bw(base_size = 20) + #makes all element text size 20
+  
+  # horizontal line at y = 0
+  geom_hline(yintercept=0, colour = "black")+
+  
+  #lines for soil and air temperature
+  geom_line(aes(x = date, y = TS_3_1_1/15, colour = "15cm Soil Temperature")) + #divided to scale
+  geom_line(aes(x = date, y = TA/15, colour = "Air Temperature")) +
+  geom_line(aes(x = date, y = TA_ERA5/15, colour = "ERA5 Air Temperature"), linetype = "dashed")+
+    geom_line(aes(x = date, y = TS_ERA5/15, colour = "ERA5 Soil Temperature"), linetype = "dashed")+
+  
+   # NEE (converting from umol/m2/s to gC/m2/day)
+  geom_point(aes(x = date, y = FC_F*60*60*24*(1/1000000)*12, colour = "NEE_GF"), shape = 1) +
+  geom_point(aes(x= date, y = FC*60*60*24*(1/1000000)*12, colour = "NEE")) +
+  
+  # NEE and temp axis scales
+  scale_y_continuous(
+  name = expression(NEE~(gCO[2]-C~m^-2~d^-1)), limits =c(-4,3),
+  sec.axis = sec_axis(~ . * 15, name = expression("Temperature ("*degree*"C)"))) +
+  
+  
+  # Define x-axis with limits and yearly breaks
+  scale_x_datetime(
+    limits = c(as.POSIXct("2017-01-01"), as.POSIXct("2023-09-05")),
+    date_breaks = "1 year",
+    date_labels = "%Y",
+     expand = c(0.01, 0) # 0,0 Removes extra space at the boundaries, 0.01 adds just a tiny bit of padding 
+  ) +
+  
+  
+  # color legend for the lines
+  scale_color_manual(
+    name = "",
+    values = c("15cm Soil Temperature" = "darkblue", "Air Temperature" = "salmon", "NEE" = "turquoise3", "NEE_GF" = "turquoise3", "ERA5 Air Temperature" = "darkgreen", "ERA5 Soil Temperature" = "blue"))+
+  
+       theme(axis.text = element_text(size = 20, face = "bold"),
+        axis.title = element_text(size = 20, face = "bold"),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5))+
+
+
+    #Title for the plot 
+   labs(title = "Seasonal Trends: 2017 - 2023", x = "Date") 
+
+Monster_plot
+```
+
+```{r}
+#with FC_F
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/monster_plot.2.png", Monster_plot, 
+       width = 60, height = 17, units = "cm", dpi = 600)
+
+#with gap-filling differentiated from measured observations
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/monster_plot.2.GF.png", Monster_plot, 
+       width = 40, height = 17, units = "cm", dpi = 600)
+
+```
+
+
+
+
+#Add Seasonal delineations to df and df_avg2 
+```{r}
+# # add year column if not already present
+# df <- df %>%
+#   mutate(year = format(date, "%Y"))
+# 
+# # Create DOY for df (half-hourly data)
+# df$DOY <- yday(df$date)
+
+
+# Create seasonal assignments using both year and DOY
+df<- df %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 151 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 300 | DOY <= 150) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 243 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 144 & DOY <= 242) ~ 'Growing Season',
+      year == "2019" & (DOY >= 284 | DOY <= 143) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 249 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 135 & DOY <= 248) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 134) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 255 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 254) ~ 'Growing Season',
+      year == "2021" &(DOY >= 282 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 250 & DOY <= 280) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 143 & DOY <= 249) ~ 'Growing Season',
+      year == "2022" & (DOY >= 281 | DOY <= 142) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+
+####################easona to daily avg dataset###########################
+
+# # add year column if not already present
+# df_avg <- df_avg %>%
+#   mutate(year = format(date, "%Y"))
+# 
+# 
+# # Create DOY For df_avg (daily data)
+# df_avg$DOY <- yday(df_avg$date)
+
+
+# Create seasonal assignments using both year and DOY
+df_avg2 <- df_avg2 %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 151 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 300 | DOY <= 150) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 243 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 144 & DOY <= 242) ~ 'Growing Season',
+      year == "2019" & (DOY >= 284 | DOY <= 143) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 249 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 135 & DOY <= 248) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 134) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 255 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 254) ~ 'Growing Season',
+      year == "2021" &(DOY >= 282 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 250 & DOY <= 280) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 143 & DOY <= 249) ~ 'Growing Season',
+      year == "2022" & (DOY >= 281 | DOY <= 142) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+
+#Save datasets 
+```{r}
+# Export to CSV - ".4" version has the GF temps and two WD classes
+write.csv(x = df_avg2,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.4.csv',quote = F,row.names = F)
+
+
+#save new HH df
+write.csv(x=df, file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv', quote = F, row.names = F)
+```
+
+
+#Additional met vars that might help with seasonal delineations - Council had a lot of missing light data / no snow data
+
+# Seasonal Delineations - finding seasonal boundaries 
+
+Plots ratio of par in/out, soil heat flux data, snow depth, air temp to identify seasonal trends, use these plots to explore delineations and then populate the cleaned up version for each year in the figures in the next chunk
+
+```{r}
+#Explore seasonal delineations for each year here
+
+#ggplot of PPFD ratio 
+
+#Photosynthetic photon flux density, incoming / outgoing --> if ratio is closer to 1, it indicates more reflectance from snow; if ratio is closer to 0, it's less reflectance and likely vegetation / no snow 
+  
+ggplot(data = df_avg_2023) +
+  theme_bw() +
+  geom_line(aes(x = DOY, y = (PPFD_OUT*500) / PPFD_IN), color = 'pink') +
+    geom_vline(xintercept = 136)+ #end of winter - 3+ days of air temp above 0 & low PPFD ratio -- lag in ground temp likely is 0 curtain period  
+  #geom_vline(xintercept = 162)+ #end of snowmelt --> Council does not seem to have snowmelt variable
+  geom_vline(xintercept = 248)+ #end of growing season --> FC_F < 0 for 3 days 
+  geom_vline(xintercept = 286)+ #end of Fall Senescence / start of winter --> it's 272 for 3+ days of ground temp below 0; it's 268 -272 for 3+ days of air temperature <0 
+  geom_hline(yintercept=0)+ #makes a black line at y=0 to indicate sink vs source
+  #scale_x_continuous(limits = c(0, 366))+ #whole year
+  scale_x_continuous(limits = c(100, 366))+
+  labs(title = "2023")
+#PAR shows up after 100 DOY -- since we multiplied PPFD ratio by 500 to get it to show up on the scale, low around 200 = summer, and high ratio  around 500 and up means snow 
+
+
+
+#ggplot of air temp, ground temp, and FC_F
+
+ggplot(data = df_avg_2017) +
+  theme_bw() +
+  geom_line(aes(x = DOY, y = TS_3_1_1), color = 'red') + #ground temp at 15cm in "tussock"
+  geom_line(aes(x = DOY, y = TA), color = 'orange') + #air temp
+ geom_line(aes(x = DOY, y = (FC_F*15)), color = 'darkblue') + #CO2 flux
+ scale_y_continuous(name = expression('Biomet Vars & FC'), limits = c(-30,20)) +
+  geom_vline(xintercept = 102)+ #end of winter - 3+ days of air temp above 0 & low PPFD ratio -- lag in ground temp likely is 0 curtain period  
+  #geom_vline(xintercept = 162)+ #end of snowmelt --> Council does not seem to have snowmelt variable
+  geom_vline(xintercept = 259)+ #end of growing season --> FC_F < 0 for 3 days 
+  geom_vline(xintercept = 280)+ #end of Fall Senescence / start of winter -->  3+ days of ground temp below 0; it's 268 -272 for 3+ days of air temperature <0 
+  geom_hline(yintercept=0)+ #makes a black line at y=0 to indicate sink vs source
+  #scale_x_continuous(limits = c(0, 366)) #whole year
+  scale_x_continuous(limits = c(100, 366)) +#zooming in on DOY ranges 
+  #geom_line(aes(x = DOY, y = D_SNOW/2), color = 'purple') + #dataset doesn't seem to have snow 
+labs(title = "2017")
+#these look wonky, may have to clean more to get this to look better**
+
+```
