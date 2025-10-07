@@ -40,55 +40,65 @@ Sys.setenv(TZ='UTC')
 ```{r}
 #changed to "council_gapfilled_clean_2017_2023_for analysis.2.csv" --> .2 indicates updated dataset with SWC_3 tussock; ".3" indicates columns for ERA5.mod-gapfilled air and soil temp  
 
-#half-hourly dataframe --> gapfilled 
-df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
-
-
-#daily avg dataframe --> gapfilled 
-df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+# #half-hourly dataframe --> gapfilled 
+# df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+# 
+# 
+# #daily avg dataframe --> gapfilled 
+# df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 
 #with gapfilled soil and air temp columns 
 
-#half-hourly dataframe --> gapfilled 
+# #half-hourly dataframe --> gapfilled - but doesn't have corrected seasons, need to correct 
 df2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.3.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 
-#daily avg dataframe --> gapfilled 
-df_avg2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.3.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+#daily avg dataframe --> gapfilled - updated seasons 10.6.'25
+df_avg2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.4.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#Add corrected seasonal delineations to df2 with the temp gf columns 
+df2 <- df2 %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 151 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 300 | DOY <= 150) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 243 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 144 & DOY <= 242) ~ 'Growing Season',
+      year == "2019" & (DOY >= 284 | DOY <= 143) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 249 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 135 & DOY <= 248) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 134) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 255 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 254) ~ 'Growing Season',
+      year == "2021" &(DOY >= 282 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 250 & DOY <= 280) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 143 & DOY <= 249) ~ 'Growing Season',
+      year == "2022" & (DOY >= 281 | DOY <= 142) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
 
 
-#join df_avg and df_avg2 as df_avg has the new wind cardinal directions, and df_avg 2 has the gapfilled TS_3 and SWC_3 
-library(dplyr)
-
-df_avg2  <- df_avg2 %>%
-  left_join(df_avg %>% select(date, WD_modal2, WD_cardinal2), by = "date") #only adding the two rows that are new, the new wind direction classifications 
-
-
-
-#check the merge worked properly 
-summary(df_avg$SWC_3_1_1)
-summary(df_avg2$SWC_3_1_1)
-
-summary(df_avg$TS_3_gapfilled)
-summary(df_avg2$TS_3_gapfilled)
-
-
-# #make sure timestamp is correct and in POSIXct (it should be already)
-# summary(df_avg$date)
-# 
-# #make sure date is in POSIXct --> should return "POSIXct"
-# class(df$date)
-# class(df_avg$date) #these were in class "date", not POSIXct
-# 
-# #formatting into POSIXct
-# df$date <- as.POSIXct(df$date, format = "%Y-%m-%d", tz = "UTC")
-# df_avg$date <- as.POSIXct(df_avg$date, format = "%Y-%m-%d", tz = "UTC")
-# 
-# 
-# df$TIMESTAMP = df$TIMESTAMP_END
-# df_avg$TIMESTAMP = df_avg$TIMESTAMP_END
-
+df_2022 <- df2 %>%
+  filter(year == "2022")
 
 ```
 
@@ -98,7 +108,7 @@ summary(df_avg2$TS_3_gapfilled)
 library(dplyr)
 library(lubridate)
 
-annual_temps <- df_avg %>%
+annual_temps <- df_avg2 %>%
   mutate(year = year(date)) %>%      # extract the calendar year
   filter(year >= 2017, year <= 2022) %>%  
   group_by(year) %>%                 
@@ -350,11 +360,11 @@ print(seasonal_budgets)
 install.packages("writexl")
 library(writexl)
 
-write_xlsx(seasonal_budgets, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets.xlsx")
+write_xlsx(seasonal_budgets, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets2.xlsx")
 
 #Write table to CSV
 # base R, no additional packages needed)
-write.csv(seasonal_budgets, "seasonal_budgets.csv", row.names = FALSE)
+# write.csv(seasonal_budgets, "seasonal_budgets.csv", row.names = FALSE)
 
 
 # Create a new table with combined mean ± SE format
@@ -449,9 +459,10 @@ seasonal_budgets_formatted2 <- seasonal_budgets_formatted %>%
 # Check the result
 print(seasonal_budgets_formatted2)
 
+```
 
 # Save to Excel
-
+```{r}
 #annual 
 write_xlsx(annual_budgets_formatted2, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_budgets_formatted2.xlsx")
 
@@ -459,9 +470,6 @@ write_xlsx(annual_budgets_formatted2, "C:/Users/kkent/Documents/Github Flux Netw
 write_xlsx(seasonal_budgets_formatted2, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets_formatted3.xlsx")
 
 
-#checking 
-average_annual_temp <- mean(df_avg2$TA_gapfilled)
-print(average_annual_temp)
 
 ```
 
@@ -2832,7 +2840,7 @@ supp_table <- all_results %>%
 supp_table
 
 # Export to CSV
-write.csv(supp_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_met_trends_statistics.csv", row.names = FALSE)
+write.csv(supp_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_met_trends_statisticscsv", row.names = FALSE)
 
 
 ```
@@ -3218,7 +3226,7 @@ seasonal_summary_all <- seasonal_summary_all %>%
 #want to use "year" (numeric) here, not year_factor 
 vpd_lm = lm(formula = seasonal_summary_all$VPD_mean ~ seasonal_summary_all$year, na.rm = TRUE)
 summary(vpd_lm) 
-#Results: slope = 0.81, R2=0.579, p = 0.00023
+#Results: slope = 0.81, R2=0.58, p = 0.00022
 
 #Growing season 
 vpd_lm_summer <- lm(VPD_mean ~ year,
@@ -3226,21 +3234,21 @@ vpd_lm_summer <- lm(VPD_mean ~ year,
                 subset = season == "Growing Season")
 
 summary(vpd_lm_summer)
-#Results: slope = 0.81, R2 = 0.83, p = 0.0068 *SIG
+#Results: slope = 0.81, R2 = 0.84, p = 0.0065 *SIG
 
 #Fall
 vpd_lm_fall <- lm(VPD_mean ~ year,
                 data = seasonal_summary_all,
                 subset = season == "Fall Senescence")
 
-summary(vpd_lm_fall) #slope = 0.6, R2 = 0.923, p = 0.0014 *SIG
+summary(vpd_lm_fall) #slope = 0.6, R2 = 0.9458, p = 0.000715 *SIG
 
 #Winter  - 2021 winter is missing VPD 
 vpd_lm_winter <- lm(VPD_mean ~ year,
                 data = seasonal_summary_all,
                 subset = season == "Winter", na.rm = TRUE)
 
-summary(vpd_lm_winter) # slope = 0.96, R2 = 0.738, p = 0.0393 *SIG
+summary(vpd_lm_winter) # slope = 0.91, R2 = 0.749, p = 0.0367 *SIG
 ```
 
 #LM - RH 
@@ -3250,7 +3258,7 @@ summary(vpd_lm_winter) # slope = 0.96, R2 = 0.738, p = 0.0393 *SIG
 #Across all seasons and years 
 rh_lm = lm(formula = seasonal_summary_all$RH_mean ~ seasonal_summary_all$year, na.rm = TRUE)
 summary(rh_lm) 
-#Results: slope = -7.269, R2 = 0.618, p = 0.000109 *SIG
+#Results: slope = -7.092, R2 = 0.621, p = 0.000104 *SIG
 
 #Growing season 
 rh_lm_summer <- lm(RH_mean ~ year,
@@ -3258,21 +3266,21 @@ rh_lm_summer <- lm(RH_mean ~ year,
                 subset = season == "Growing Season")
 
 summary(rh_lm_summer)
-#Results: slope = -6.66, R2 = 0.966, p = 0.000272 *SIG
+#Results: slope = -6.59, R2 = 0.959, p = 0.00039 *SIG
 
 #Fall
 rh_lm_fall <- lm(RH_mean ~ year,
                 data = seasonal_summary_all,
                 subset = season == "Fall Senescence")
 
-summary(rh_lm_fall) #slope = -7.93, R2 = 0.869, p = 0.00422 *SIG
+summary(rh_lm_fall) #slope = -7.51, R2 = 0.97, p = 0.000204 *SIG
 
 #Winter
 rh_lm_winter <- lm(RH_mean ~ year,
                 data = seasonal_summary_all,
                 subset = season == "Winter", na.rm = TRUE)
 
-summary(rh_lm_winter) # slope = -8.336, R2 = 0.889, p = 0.0104 *SIG
+summary(rh_lm_winter) # slope = -8.379, R2 = 0.894, p = 0.00973 *SIG 
 ```
 
 #LM - SWC
@@ -3283,7 +3291,7 @@ summary(rh_lm_winter) # slope = -8.336, R2 = 0.889, p = 0.0104 *SIG
 #Across all seasons and years 
 SWC_lm = lm(formula = seasonal_summary_all$SWC_3_mean ~ seasonal_summary_all$year)
 summary(SWC_lm) 
-#Results: slope = -3.342, R2 = 0.076, p = 0.140 - not sig 
+#Results: slope = -3.299, R2 = 0.0757, p = 0.141 - not sig 
 
 #Growing season 
 SWC_lm_summer <- lm(SWC_3_mean ~ year,
@@ -3291,21 +3299,21 @@ SWC_lm_summer <- lm(SWC_3_mean ~ year,
                 subset = season == "Growing Season")
 
 summary(SWC_lm_summer)
-#Results: slope = -1.984, R2 = 0.578, p = 0.0486 *sig but borderline 
+#Results: slope = -1.967, R2 = 0.578, p = 0.0487 *sig but borderline 
 
 #Fall
 SWC_lm_fall <- lm(SWC_3_mean ~ year,
                 data = seasonal_summary_all,
                 subset = season == "Fall Senescence")
 
-summary(SWC_lm_fall) #slope = -0.7986, R2 = -0.023 (???), p = 0.401  - not sig 
+summary(SWC_lm_fall) #slope = -0.748, R2 = -0.0379 (???), p = 0.417  - not sig 
 
 #Winter
 SWC_lm_winter <- lm(SWC_3_mean ~ year,
                 data = seasonal_summary_all,
                 subset = season == "Winter")
 
-summary(SWC_lm_winter) # slope = -7.243, R2 = 0.573, p = 0.04994
+summary(SWC_lm_winter) # slope = -7.218, R2 = 0.572, p = 0.050 - not sig 
 ```
 
 #LM - Air T
@@ -3317,7 +3325,7 @@ summary(SWC_lm_winter) # slope = -7.243, R2 = 0.573, p = 0.04994
 #Across all seasons and years 
 TA_lm = lm(formula = seasonal_summary_all$TA_mean ~ seasonal_summary_all$year)
 summary(TA_lm) 
-#Results: slope = -0.313, R2 = -0.05, p = 0.8 - not sig 
+#Results: slope = -0.295, R2 = -0.0586, p = 0.812 - not sig 
 
 #Growing season 
 TA_lm_summer <- lm(TA_mean ~ year,
@@ -3325,21 +3333,21 @@ TA_lm_summer <- lm(TA_mean ~ year,
                 subset = season == "Growing Season")
 
 summary(TA_lm_summer)
-#Results: slope = -0.211, R2 = -0.057, p = 0.44 - not sig 
+#Results: slope = -0.202, R2 = -0.043, p = 0.423 - not sig 
 
 #Fall
 TA_lm_fall <- lm(TA_mean ~ year,
                 data = seasonal_summary_all,
                 subset = season == "Fall Senescence")
 
-summary(TA_lm_fall) #slope = -0.146, R2=-0.22, p = 0.8 - not sig  
+summary(TA_lm_fall) #slope = -0.102, R2=-0.235, p = 0.838 - not sig  
 
 #Winter
 TA_lm_winter <- lm(TA_mean ~ year,
                 data = seasonal_summary_all,
                 subset = season == "Winter")
 
-summary(TA_lm_winter) # slope = -0.58, R2 = 0.08, p = 0.29 - not sig 
+summary(TA_lm_winter) # slope = -0.58, R2 = 0.10, p = 0.29 - not sig 
 ```
 
 # LM - TS_3
@@ -3351,7 +3359,7 @@ summary(TA_lm_winter) # slope = -0.58, R2 = 0.08, p = 0.29 - not sig
 #Across all seasons and years 
 TS_lm = lm(formula = seasonal_summary_all$TS_3_mean ~ seasonal_summary_all$year)
 summary(TS_lm) 
-#Results: slope = -0.056, R2 = -0.061, p = 0.9 - not sig 
+#Results: slope = -0.044, R2 = -0.062, p = 0.938 - not sig 
 
 #Growing season 
 TS_lm_summer <- lm(TS_3_mean ~ year,
@@ -3359,21 +3367,21 @@ TS_lm_summer <- lm(TS_3_mean ~ year,
                 subset = season == "Growing Season")
 
 summary(TS_lm_summer)
-#Results: slope = 0.208, R2 = -0.125, p = 0.5 - not sig 
+#Results: slope = 0.213, R2 = -0.114, p = 0.52 - not sig 
 
 #Fall
 TS_lm_fall <- lm(TS_3_mean ~ year,
                 data = seasonal_summary_all,
                 subset = season == "Fall Senescence")
 
-summary(TS_lm_fall) #slope = 0.0047, R2 = -0.25, p = 0.99 - not sig 
+summary(TS_lm_fall) #slope = 0.00367, R2 = -0.247, p = 0.928 - not sig 
 
 #Winter
 TS_lm_winter <- lm(TS_3_mean ~ year,
                 data = seasonal_summary_all,
                 subset = season == "Winter")
 
-summary(TS_lm_winter) # slope = -0.38, R2 = 0.626, p = 0.0374 - *SIG* (but was borderline in kendall-tau)
+summary(TS_lm_winter) # slope = -0.38, R2 = 0.645, p = 0.0336 - *SIG* (but was borderline in kendall-tau)
 
 
 ```
@@ -3403,7 +3411,7 @@ qqline(residuals, col = "red")
 
 # Formal test
 shapiro_test <- shapiro.test(residuals)
-print(shapiro_test) #p=0.87 
+print(shapiro_test) #p=0.896 
 
 
 # Plot residuals vs. predictor
@@ -3423,7 +3431,7 @@ plot(TS_lm_winter, which = 3)
 
 #Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
 library(lmtest)
-bptest(TS_lm_winter) #p=0.08, ok 
+bptest(TS_lm_winter) #p=0.11, ok 
 
 
 ```
@@ -3458,7 +3466,7 @@ qqline(residuals, col = "red")
 
 # Formal test
 shapiro_test <- shapiro.test(residuals)
-print(shapiro_test) #p=0.207 - ok 
+print(shapiro_test) #p=0.18 - ok 
 
 
 # Plot residuals vs. predictor
@@ -3478,7 +3486,7 @@ plot(rh_lm_winter, which = 3)
 
 #Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
 library(lmtest)
-bptest(rh_lm_winter) #p=0.0.484 -ok 
+bptest(rh_lm_winter) #p=0.0.475 -ok 
 
 
 #================================================================================
@@ -3503,7 +3511,7 @@ qqline(residuals, col = "red")
 
 # Formal test
 shapiro_test <- shapiro.test(residuals)
-print(shapiro_test) #p=0.817 - ok
+print(shapiro_test) #p=0.837 - ok
 
 
 # Plot residuals vs. predictor
@@ -3523,7 +3531,7 @@ plot(rh_lm_summer , which = 3)
 
 #Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
 library(lmtest)
-bptest(rh_lm_summer ) #p=0.04 - NOT OK ** 
+bptest(rh_lm_summer ) #p=0.047 - NOT OK ** 
 
 
 #================================================================================
@@ -3548,7 +3556,7 @@ qqline(residuals, col = "red")
 
 # Formal test
 shapiro_test <- shapiro.test(residuals)
-print(shapiro_test) #p=0.146 - ok but QQ plot does NOT look ok
+print(shapiro_test) #p=0.88 - ok but QQ plot does NOT look ok
 
 
 # Plot residuals vs. predictor
@@ -3568,7 +3576,7 @@ plot(rh_lm_fall, which = 3)
 
 #Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
 library(lmtest)
-bptest(rh_lm_fall ) #p=0.09, ok, but the visuals don't look very good 
+bptest(rh_lm_fall ) #p=0.068, ok, but the visuals don't look very good 
 
 ```
 #VPD all seasons 
@@ -3599,7 +3607,7 @@ qqline(residuals, col = "red")
 
 # Formal test
 shapiro_test <- shapiro.test(residuals)
-print(shapiro_test) #p=0.722 - ok 
+print(shapiro_test) #p=0.725 - ok 
 
 
 # Plot residuals vs. predictor
@@ -3644,7 +3652,7 @@ qqline(residuals, col = "red")
 
 # Formal test
 shapiro_test <- shapiro.test(residuals)
-print(shapiro_test) #p=0.644 - ok
+print(shapiro_test) #p=0.72 - ok
 
 
 # Plot residuals vs. predictor
@@ -3664,7 +3672,7 @@ plot(vpd_lm_summer , which = 3)
 
 #Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
 library(lmtest)
-bptest(vpd_lm_summer ) #p=0.44 - ok 
+bptest(vpd_lm_summer ) #p=0.63 - ok 
 
 
 #================================================================================
@@ -3689,7 +3697,7 @@ qqline(residuals, col = "red")
 
 # Formal test
 shapiro_test <- shapiro.test(residuals)
-print(shapiro_test) #p=0.27
+print(shapiro_test) #p=0.92
 
 
 # Plot residuals vs. predictor
@@ -3709,7 +3717,7 @@ plot(vpd_lm_fall, which = 3)
 
 #Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
 library(lmtest)
-bptest(vpd_lm_fall ) #p = 0.5, ok 
+bptest(vpd_lm_fall ) #p = 0.68, ok 
 
 ```
 
@@ -3737,7 +3745,7 @@ qqline(residuals, col = "red")
 
 # Formal test
 shapiro_test <- shapiro.test(residuals)
-print(shapiro_test) #p=0.506 -ok 
+print(shapiro_test) #p=0.503 -ok 
 
 
 # Plot residuals vs. predictor
@@ -3757,7 +3765,7 @@ plot(SWC_lm_winter, which = 3)
 
 #Breusch-Pagan test - specifically tests if variance of residuals is constant - want a p > 0.05 for homogeneity of var
 library(lmtest)
-bptest(SWC_lm_winter) #p=0.35, ok 
+bptest(SWC_lm_winter) #p=0.36, ok 
 
 ```
 
@@ -3907,19 +3915,19 @@ p_RH_with_stats
 
 # Create a dataframe with statistics for each season
 vpd_stats <- data.frame(
-  season = c("Fall Senescence", "Growing Season", "Winter"),
-  r2 = c(0.92, 0.83, 0.74),  # Replace with your actual adj R² values - Fall, Growing, Winter 
-  slope = c(0.60, 0.81, 0.96),  # Replace with your actual slopes - Fall, Growing, Winter 
-  p_value = c(0.001, 0.007, 0.039),  # Replace with your actual p-values - Fall, Growing, Winter 
-  kendall_p = c(0.02, 0.02, 0.02),
-  kendall_tau = c(0.87, 0.87, 1.00),
+  season = c("Winter", "Growing Season", "Fall Senescence"), #order of labels for panels in facetwrap
+  r2 = c(0.75, 0.84, 0.95),  # Replace with your actual adj R² values - Fall, Growing, Winter 
+  slope = c(0.91, 0.81, 0.63),  # Replace with your actual slopes - Fall, Growing, Winter 
+  p_value = c(0.037, 0.007, 0.001),  # Replace with your actual p-values - Fall, Growing, Winter 
+  kendall_p = c(0.017, 0.017, 0.017),
+  kendall_tau = c(1.00, 0.87, 0.87),
   x = c(2017, 2017, 2017),  # x position for text
   y = c(10, 10, 10)  # y position for text - adjust based on your data range
 )
 
 # Create labels
 vpd_stats <- vpd_stats %>%
-  mutate(label = paste0("R² = ", round(r2, 2), "\n",
+  mutate(label = paste0("adj R² = ", round(r2, 2), "\n",
                         "Slope = ", round(slope, 2), "\n",
                         "LM_p = ", format.pval(p_value, digits = 3), "\n",
                         "Kendall_tau =", round(kendall_tau, 2), "\n",
@@ -3942,8 +3950,9 @@ p_VPD_lm <- ggplot(seasonal_summary_all, aes(x = year, y = VPD_mean, color = yea
             aes(x = x, y = y, label = label),
             color = "black", size = 3, hjust = 0, vjust = 1,
             inherit.aes = FALSE) +
+facet_wrap(~factor(season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3)+ #sets order of panels
   
-  facet_wrap(~ season, ncol = 3) +
+  #facet_wrap(~ season, ncol = 3) +
   
   scale_color_manual(
     values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
@@ -3979,23 +3988,23 @@ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper
 
 # Create a dataframe with statistics for each season
 rh_stats <- data.frame(
-  season = c("Fall Senescence", "Growing Season", "Winter"),
-  r2 = c(0.87, 0.97, 0.89),  # Replace with your actual adj R² values - Fall, Growing, Winter 
-  slope = c(-7.93, -6.66, -8.34),  # Replace with your actual slopes - Fall, Growing, Winter 
-  p_value = c(0.0042, 0.0003, 0.01),  # Replace with your actual p-values - Fall, Growing, Winter 
-  kendall_p = c(0.017, 0.003, 0.017),
-  kendall_tau = c(-0.87, -1.00, -1.00),
+  season = c("Winter", "Growing Season", "Fall Senescence"),
+  r2 = c(0.89, 0.96, 0.97),  # Replace with your actual adj R² values - Fall, Growing, Winter 
+  slope = c(-8.38, -6.59, -7.52),  # Replace with your actual slopes - Fall, Growing, Winter 
+  p_value = c(0.01, 0.0004, 0.0002),  # Replace with your actual p-values - Fall, Growing, Winter 
+  kendall_p = c(0.017, 0.003, 0.003),
+  kendall_tau = c(-1.00, -1.00, -1.00),
   x = c(2019.5, 2019.5, 2019.5),  # x position for text
   y = c(90, 90, 90)  # y position for text - adjust based on your data range
 )
 
 # Create labels
 rh_stats <- rh_stats %>%
-  mutate(label = paste0("R² = ", round(r2, 2), "\n",
+  mutate(label = paste0("adj R² = ", round(r2, 2), "\n",
                         "Slope = ", round(slope, 2), "\n",
-                        "LM_p = ", format.pval(p_value, digits = 3), "\n",
+                        "LM_p = ", format.pval(p_value, digits = 4, scientific = FALSE), "\n", 
                         "Kendall_tau =", round(kendall_tau, 2), "\n",
-                        "Kendall_p =", format.pval(kendall_p, digits = 3)))
+                        "Kendall_p =", format.pval(kendall_p, digits = 4)))
 
 # Add to plot
 p_rh_lm <- ggplot(seasonal_summary_all, aes(x = year, y = RH_mean, color = year_factor)) +
@@ -4015,7 +4024,9 @@ p_rh_lm <- ggplot(seasonal_summary_all, aes(x = year, y = RH_mean, color = year_
             color = "black", size = 3, hjust = 0, vjust = 1,
             inherit.aes = FALSE) +
   
-  facet_wrap(~ season, ncol = 3) +
+facet_wrap(~factor(season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3)+
+  
+  #facet_wrap(~ season, ncol = 3) +
   
   scale_color_manual(
     values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
