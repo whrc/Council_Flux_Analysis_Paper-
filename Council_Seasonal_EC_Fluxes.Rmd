@@ -650,7 +650,7 @@ ggplot(data = df)+
 
 # % data coverage vs missing 
 
-# Percent of data coverage vs no coverage for methane (observed daily avg FCH4) & FC  
+# Percent of data coverage vs no coverage for methane (observed daily avg FCH4) & FC  (by year and by winter)
 ```{r}
 # Load required libraries
 library(dplyr)
@@ -660,6 +660,7 @@ library(lubridate)
 fch4_coverage <- df_avg %>%
   mutate(year = year(date)) %>%
   filter(year >= 2017 & year <= 2023) %>%
+  filter(season == "Winter") %>% #comment out for whole year results 
   group_by(year) %>%
   summarise(
     total_days = n(),
@@ -681,6 +682,7 @@ print(fch4_coverage)
 fc_coverage <- df_avg %>%
   mutate(year = year(date)) %>%
   filter(year >= 2017 & year <= 2023) %>%
+  filter(season == "Winter") %>% #comment out for whole year results 
   group_by(year) %>%
   summarise(
     total_days = n(),
@@ -695,6 +697,9 @@ fc_coverage <- df_avg %>%
 # Display the results
 print("FC Data Coverage by Year:")
 print(fc_coverage)
+
+df_winter2017_FC <- df_avg %>%
+  filter(year == "2017" & season == "Winter")
 
 ```
 
