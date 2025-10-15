@@ -4698,7 +4698,7 @@ write_xlsx(supp_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flu
 
 
 
-#Trying to automate visuals that use the appropriate test (linear reg for slope, R2, p or mann-kendall for tau, sens-slope, and mk p)
+#Trying to automate visuals that use the appropriate test (linear reg for slope, R2, p or mann-kendall for tau, sens-slope, and mk p) - code from Claude 
 
 #this doesn't really work bc n=6, so everything is coming up as normal/homogeneity of var, when it may or may not be. Best to use non-parametric here but leaving this code becuase it's a good reference for automation 
 
