@@ -1,0 +1,2684 @@
+---
+title: "Regressing_MetVar_and_C_Fluxes"
+output: html_document
+date: "2025-10-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+```{r}
+
+#with gapfilled soil and air temp columns 
+
+# #half-hourly dataframe --> gapfilled - but doesn't have corrected seasons, need to correct 
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.3.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+#daily avg dataframe --> gapfilled - updated seasons 10.6.'25
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.4.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#Add corrected seasonal delineations to df with the temp gf columns 
+df2 <- df %>%
+  mutate(
+    season = case_when(
+      # 2017 seasons
+      year == "2017" & (DOY >= 258 & DOY <= 290) ~ 'Fall Senescence',
+      year == "2017" & (DOY >= 131 & DOY <= 257) ~ 'Growing Season',
+      year == "2017" & (DOY >= 291 | DOY <= 130) ~ 'Winter',
+      
+      # 2018 seasons
+      year == "2018" &  (DOY >= 257 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2018" & (DOY >= 151 & DOY <= 256) ~ 'Growing Season',
+      year == "2018" & (DOY >= 300 | DOY <= 150) ~ 'Winter',
+      
+      # 2019 seasons
+      year == "2019" & (DOY >= 243 & DOY <= 283) ~ 'Fall Senescence',
+      year == "2019" & (DOY >= 144 & DOY <= 242) ~ 'Growing Season',
+      year == "2019" & (DOY >= 284 | DOY <= 143) ~ 'Winter',
+      
+      # 2020 seasons
+      year == "2020" & (DOY >= 249 & DOY <= 299) ~ 'Fall Senescence',
+      year == "2020" & (DOY >= 135 & DOY <= 248) ~ 'Growing Season',
+      year == "2020" & (DOY >= 300 | DOY <= 134) ~ 'Winter',
+      
+      # 2021 seasons
+      year == "2021" & (DOY >= 255 & DOY <= 281) ~ 'Fall Senescence',
+      year == "2021" &(DOY >= 142 & DOY <= 254) ~ 'Growing Season',
+      year == "2021" &(DOY >= 282 | DOY <= 141) ~ 'Winter',
+      
+      # 2022 seasons
+      year == "2022" & (DOY >= 250 & DOY <= 280) ~ 'Fall Senescence',
+      year == "2022" & (DOY >= 143 & DOY <= 249) ~ 'Growing Season',
+      year == "2022" & (DOY >= 281 | DOY <= 142) ~ 'Winter',
+      
+      # not doing one for 2023 ** incomplete year 
+      TRUE ~ NA_character_
+    )
+  )
+
+
+df_2022 <- df2 %>%
+  filter(year == "2022")
+
+```
+
+
+#Remove NAs and used complete cases of WD, season, FC, FCH4
+
+```{r}
+
+#Since there are some days where there are FC measurements but not FCH4 measurements, and vice versa, make separate datasets for FC and FCH4 with complete cases 
+#make complete cases for FC and FCH4
+
+df_avg_FC <- df_avg %>% filter(complete.cases(FC, season))
+df_avg_FCH4 <- df_avg %>% filter(complete.cases(FCH4, season))
+
+#double checking NAs
+sum(is.na(df_avg_FCH4$season))
+
+df_2017 <- df_avg_FC %>%
+  filter(season == "Fall Senescence")
+
+
+```
+
+
+#Seasonal averages for each year, facetwrapped by season 
+
+##prepare seasonal summary dataset by year, set color for each year for consistency across figures 
+```{r}
+# Seasonal Trends Faceted by Season - All Variables
+
+library(ggplot2)
+library(dplyr)
+
+# Prepare seasonal summaries for all variables (2017-2022) - with complete cases FC 
+seasonal_means_FC <- df_avg_FC %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year, season) %>%
+  summarise(
+    # ERA5 GF Air temperature (gap-filled)
+    TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TA_gapfilled_se = sd(TA_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TA_gapfilled))),
+    
+    # measured Air temperature 
+    TA_mean = mean(TA, na.rm = TRUE),
+    TA_se = sd(TA, na.rm = TRUE) / sqrt(sum(!is.na(TA))),
+    
+    # ERA5 GF Soil temperature (gap-filled only)
+    TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled_se = sd(TS_3_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_gapfilled))),
+    
+    # Measured Soil temperature 
+    TS_3_mean = mean(TS_3_1_1, na.rm = TRUE),
+    TS_3_se = sd(TS_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_1_1))),
+    
+    # Soil moisture
+    SWC_3_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    SWC_3_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    
+    # VPD
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    
+    # RH - relative humidity 
+    RH_mean = mean(RH, na.rm = TRUE),
+    RH_se = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    
+    # Sensible heat
+    H_mean = mean(H, na.rm = TRUE),
+    H_se = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    
+    # Latent heat
+    LE_mean = mean(LE, na.rm = TRUE),
+    LE_se = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    
+    # Ground heat
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    G_se = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    
+    #Daily avg of HH flux - FC not gf
+    FC_daily_mean = mean(FC), #in units umol/m2/s
+    FC_se = sd(FC) / sqrt(sum(!is.na(FC))),
+    
+     #Daily avg of HH flux - FC_GF
+    FC_GF_mean = mean(FC_F), #in units umol/m2/s
+    FC_GF_se = sd(FC_F) / sqrt(sum(!is.na(FC_F))),
+    
+       #Budgets 
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12)), #g/m2
+ 
+    
+    
+    .groups = 'drop'
+  )
+
+# Define consistent year colors
+year_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+# Convert year to factor for consistent color mapping
+seasonal_means_FC$year_factor <- as.factor(seasonal_means_FC$year)
+
+#================= FCH4 ========================
+
+# Prepare seasonal summaries for all variables (2017-2022) - with complete cases FCH4
+seasonal_means_FCH4 <- df_avg_FCH4 %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year, season) %>%
+  summarise(
+    # ERA5 GF Air temperature (gap-filled)
+    TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TA_gapfilled_se = sd(TA_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TA_gapfilled))),
+    
+    # measured Air temperature 
+    TA_mean = mean(TA, na.rm = TRUE),
+    TA_se = sd(TA, na.rm = TRUE) / sqrt(sum(!is.na(TA))),
+    
+    # ERA5 GF Soil temperature (gap-filled only)
+    TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled_se = sd(TS_3_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_gapfilled))),
+    
+    # Measured Soil temperature 
+    TS_3_mean = mean(TS_3_1_1, na.rm = TRUE),
+    TS_3_se = sd(TS_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_1_1))),
+    
+    # Soil moisture
+    SWC_3_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    SWC_3_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    
+    # VPD
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    
+    # RH - relative humidity 
+    RH_mean = mean(RH, na.rm = TRUE),
+    RH_se = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    
+    # Sensible heat
+    H_mean = mean(H, na.rm = TRUE),
+    H_se = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    
+    # Latent heat
+    LE_mean = mean(LE, na.rm = TRUE),
+    LE_se = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    
+    # Ground heat
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    G_se = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    
+    #Daily avg of HH flux - FCH4 not gf
+    FCH4_daily_mean = mean(FCH4 * 1/1000), #in units umol/m2/s
+    FCH4_se = sd(FCH4 * 1/1000) / sqrt(sum(!is.na(FCH4))),
+    
+    #Daily avg of HH flux - FCH4 GF
+    FCH4_GF_mean = mean(FCH4_F * 1/1000), #in units umol/m2/s
+    FCH4_GF_se = sd(FCH4_F * 1/1000) / sqrt(sum(!is.na(FCH4_F))),
+   
+    
+       #Budgets 
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12)), #g/m2
+ 
+    
+    
+    .groups = 'drop'
+  )
+
+# Define consistent year colors
+year_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+# Convert year to factor for consistent color mapping
+seasonal_means_FCH4$year_factor <- as.factor(seasonal_means_FCH4$year)
+```
+
+
+#Plot fluxes - plot GF fluxes (uses the winter-adj calculated C fluxes and budgets*)
+
+#winter-adj dataset (calculated based on winter - growing season proportions)
+
+```{r}
+library(readxl)
+adj_C_budgets <- read_xlsx(path ="C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Seasonal_Cbudgets_Table_all_years_for_paper.xlsx", sheet = "R_template_adjWinterCdaily_flux" )
+
+
+# Reshape data for plotting
+adj_C_budgets_long<- adj_C_budgets %>%
+  pivot_longer(cols = c(Net_CH4_adj_dailyflux, Net_CO2_adj_dailyflux),
+               names_to = "flux_type",
+               values_to = "flux")
+
+# Convert year to factor for consistent color mapping
+adj_C_budgets$year_factor <- as.factor(adj_C_budgets$Year)
+adj_C_budgets$Season <- as.factor(adj_C_budgets$Season)
+
+```
+
+```{r}
+
+#== FC =================
+p_FC <- ggplot(adj_C_budgets) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = Net_CO2_adj_dailyflux, color = year_factor, group = Year), 
+             size = 3) +
+
+  # geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+  #             method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+ # facet_wrap(~ season, ncol = 3) +
+  facet_wrap(~factor(Season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3)+
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Daily Avg HH FC Flux by Season (2017-2022) - Winter Adj",
+       x = "Year", 
+       y = "umol/m2/day") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_FC
+
+#======== FCH4 ===================
+
+p_FCH4 <- ggplot(adj_C_budgets) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = Net_CH4_adj_dailyflux, color = year_factor, group = Year), 
+             size = 3) +
+
+  # geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+  #             method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+ # facet_wrap(~ season, ncol = 3) +
+  facet_wrap(~factor(Season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3)+
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Daily Avg HH FCH4 Flux by Season (2017-2022)- Winter Adj",
+       x = "Year", 
+       y = "nmol/m2/day") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_FCH4
+```
+
+
+#Temporal co-trends (do years with higher VPD also have higher fluxes, for example - year-to-year relationship)
+```{r}
+# TEMPORAL CO-TREND ANALYSIS
+# Testing if years with higher/lower met variables also have higher/lower fluxes
+# Uses seasonal means (n=6 years per season)
+
+library(dplyr)
+library(ggplot2)
+library(broom)
+
+# ============================================================================
+# PREPARE SEASONAL MEAN DATA
+# ============================================================================
+
+# # Calculate seasonal means for FCH4 and all met variables
+fch4_seasonal_means <- df_avg_FCH4 %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year, season) %>%
+  summarise(
+    FCH4_mean = mean(FCH4, na.rm = TRUE),
+    TA_gf_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TS_gf_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    RH_mean = mean(RH, na.rm = TRUE),
+    H_mean = mean(H, na.rm = TRUE),
+    LE_mean = mean(LE, na.rm = TRUE),
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  )
+# 
+# # Calculate seasonal means for FC and all met variables
+fc_seasonal_means <- df_avg_FC %>%
+  filter(year %in% 2017:2022) %>%
+  group_by(year, season) %>%
+  summarise(
+    FC_mean = mean(FC, na.rm = TRUE),
+    TA_gf_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TS_gf_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    RH_mean = mean(RH, na.rm = TRUE),
+    H_mean = mean(H, na.rm = TRUE),
+    LE_mean = mean(LE, na.rm = TRUE),
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# ============================================================================
+# FUNCTION: Analyze temporal co-trends
+# ============================================================================
+
+analyze_cotrend <- function(data, flux_var, met_var, flux_label, met_label, season_name) {
+  
+  # Filter to specific season
+  season_data <- data %>%
+    filter(season == season_name) %>%
+    select(year, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    filter(complete.cases(.))
+  
+  if(nrow(season_data) < 4) {
+    return(NULL)
+  }
+  
+  # Linear model
+  lm_model <- lm(flux ~ met, data = season_data)
+  lm_summary <- summary(lm_model)
+  
+  # Test residuals normality
+  residuals_vals <- residuals(lm_model)
+  shapiro_p <- if(nrow(season_data) >= 3) shapiro.test(residuals_vals)$p.value else NA
+  
+  # Extract statistics
+  slope <- coef(lm_model)[2]
+  slope_p <- lm_summary$coefficients[2, 4]
+  r_squared <- lm_summary$r.squared
+  adj_r_squared <- lm_summary$adj.r.squared
+  
+  # Spearman correlation
+  spearman_test <- cor.test(season_data$met, season_data$flux, method = "spearman")
+  spearman_rho <- spearman_test$estimate
+  spearman_p <- spearman_test$p.value
+  
+  # Kendall's tau
+  kendall_test <- cor.test(season_data$met, season_data$flux, method = "kendall")
+  kendall_tau <- kendall_test$estimate
+  kendall_p <- kendall_test$p.value
+  
+  list(
+    season = season_name,
+    flux_var = flux_label,
+    met_var = met_label,
+    n = nrow(season_data),
+    slope = slope,
+    slope_p = slope_p,
+    r_squared = r_squared,
+    adj_r_squared = adj_r_squared,
+    shapiro_p = shapiro_p,
+    spearman_rho = spearman_rho,
+    spearman_p = spearman_p,
+    kendall_tau = kendall_tau,
+    kendall_p = kendall_p,
+    model = lm_model,
+    data = season_data
+  )
+}
+
+# ============================================================================
+# RUN CO-TREND ANALYSES
+# ============================================================================
+
+cat("============================================================\n")
+cat("TEMPORAL CO-TREND ANALYSIS (2017-2022)\n")
+cat("Testing if inter-annual trends in fluxes correspond to\n")
+cat("inter-annual trends in meteorological variables\n")
+cat("Using seasonal means (n=6 years per season)\n")
+cat("============================================================\n\n")
+
+# Define met variables
+met_vars <- list(
+  list(var = "TA_gf_mean", label = "Air Temp GF"),
+  list(var = "TS_gf_mean", label = "Soil Temp GF"),
+  list(var = "SWC_mean", label = "Soil Moisture"),
+  list(var = "VPD_mean", label = "VPD"),
+  list(var = "RH_mean", label = "RH"),
+  list(var = "H_mean", label = "Sensible Heat"),
+  list(var = "LE_mean", label = "Latent Heat"),
+  list(var = "G_mean", label = "Soil Heat Flux")
+)
+
+seasons <- c("Winter", "Growing Season", "Fall Senescence")
+
+# FCH4 co-trends
+fch4_cotrend_results <- list()
+for(season in seasons) {
+  for(met in met_vars) {
+    result <- analyze_cotrend(
+      fch4_seasonal_means, "FCH4_mean", met$var,
+      "FCH4", met$label, season
+    )
+    if(!is.null(result)) {
+      fch4_cotrend_results[[paste(season, met$label, sep = "_")]] <- result
+    }
+  }
+}
+
+# FC co-trends
+fc_cotrend_results <- list()
+for(season in seasons) {
+  for(met in met_vars) {
+    result <- analyze_cotrend(
+      fc_seasonal_means, "FC_mean", met$var,
+      "FC", met$label, season
+    )
+    if(!is.null(result)) {
+      fc_cotrend_results[[paste(season, met$label, sep = "_")]] <- result
+    }
+  }
+}
+
+# ============================================================================
+# CREATE SUMMARY TABLE
+# ============================================================================
+
+create_cotrend_summary <- function(results_list, flux_name) {
+  
+  summary_df <- data.frame()
+  
+  for(result in results_list) {
+    if(!is.null(result)) {
+      summary_df <- rbind(summary_df, data.frame(
+        flux = flux_name,
+        season = result$season,
+        met_variable = result$met_var,
+        n = result$n,
+        slope = round(result$slope, 4),
+        slope_p = round(result$slope_p, 4),
+        adj_r2 = round(result$adj_r_squared, 3),
+        kendall_tau = round(result$kendall_tau, 3),
+        kendall_p = round(result$kendall_p, 4),
+        spearman_rho = round(result$spearman_rho, 3),
+        spearman_p = round(result$spearman_p, 4),
+        residuals_normal = ifelse(!is.na(result$shapiro_p) && result$shapiro_p > 0.05, "Yes", "No"),
+        significant = case_when(
+          !is.na(result$shapiro_p) && result$shapiro_p > 0.05 && result$slope_p < 0.05 ~ "Yes (LM)",
+          result$kendall_p < 0.05 ~ "Yes (Kendall)",
+          TRUE ~ "No"
+        )
+      ))
+    }
+  }
+  
+  return(summary_df)
+}
+
+# Create summary tables
+fch4_cotrend_summary <- create_cotrend_summary(fch4_cotrend_results, "FCH4")
+fc_cotrend_summary <- create_cotrend_summary(fc_cotrend_results, "FC")
+
+# Combine
+all_cotrend_summary <- rbind(fch4_cotrend_summary, fc_cotrend_summary)
+
+# Print all results
+cat("\n============================================================\n")
+cat("SUMMARY: ALL TEMPORAL CO-TRENDS\n")
+cat("============================================================\n\n")
+
+print(all_cotrend_summary)
+
+# Significant co-trends
+cat("\n\n============================================================\n")
+cat("SIGNIFICANT TEMPORAL CO-TRENDS (p < 0.05)\n")
+cat("============================================================\n\n")
+
+significant_cotrends <- all_cotrend_summary %>%
+  filter(significant != "No") %>%
+  arrange(flux, season, met_variable)
+
+if(nrow(significant_cotrends) > 0) {
+  print(significant_cotrends)
+  
+  cat("\n\nInterpretation:\n")
+  cat("- These relationships show inter-annual co-variation\n")
+  cat("- Positive slope: Years with higher met variable had higher flux\n")
+  cat("- Negative slope: Years with higher met variable had lower flux\n")
+
+  
+} else {
+  cat("No significant temporal co-trends detected at p < 0.05\n")
+}
+
+# Export
+# write.csv(all_cotrend_summary, "flux_meteorology_cotrends_summary.csv", row.names = FALSE)
+# 
+# cat("\n\nSummary table exported to 'flux_meteorology_cotrends_summary.csv'\n")
+
+# # Save for visualization
+# saveRDS(list(fch4 = fch4_cotrend_results, fc = fc_cotrend_results), 
+#         "flux_met_cotrend_results.rds")
+
+# ============================================================================
+# CROSS-REFERENCE WITH KNOWN MET TRENDS
+# ============================================================================
+
+cat("\n\n============================================================\n")
+cat("CROSS-REFERENCE: MET VARIABLES WITH KNOWN TEMPORAL TRENDS from previous Met Analysis\n")
+cat("============================================================\n\n")
+
+cat("Variables with significant temporal trends (2017-2022):\n")
+cat("  - VPD: INCREASING in all seasons\n")
+cat("  - RH: DECREASING in all seasons\n")
+
+
+cat("If fluxes show significant co-trends with these variables,\n")
+cat("it suggests the changing climate conditions are driving flux changes.\n\n")
+
+# Highlight key co-trends
+key_vars <- c("VPD", "RH", "Soil Moisture")
+key_cotrends <- significant_cotrends %>%
+  filter(met_variable %in% key_vars)
+
+if(nrow(key_cotrends) > 0) {
+  cat("*** KEY FINDING: Fluxes co-vary with changing climate conditions ***\n\n")
+  print(key_cotrends)
+} else {
+  cat("Fluxes do not show significant co-trends with changing VPD, RH, or soil moisture\n")
+}
+
+cat("\n\nAnalysis complete.\n")
+
+
+#NOTE: since n is very low (n = 6, or 5), tests assessing assumptions of normality, homog of var are very weak. Better to side with the non-parametric approach. If both agree, great - if they disagree, go with the kendall test or spearman corr. So in this case, two relationships came out sig in lm, but were not sig in kendall's test or spearman corr, so I'm considering them not sig * 
+```
+
+
+
+
+#Within-season relationships (on days when x var is higher, are fluxes also higher?)
+
+
+```{r}
+# REGRESSION ANALYSIS: Carbon Fluxes vs Meteorological Variables
+# Testing if temporal trends in met variables correspond to trends in C fluxes
+# Analysis by season for 2017-2022
+
+library(dplyr)
+library(ggplot2)
+library(broom)
+
+# ============================================================================
+# FUNCTION: Analyze flux-meteorology relationships by season
+# ============================================================================
+
+analyze_flux_met_relationship <- function(data, flux_var, met_var, 
+                                         flux_label, met_label, 
+                                         season_name, met_units) {
+  
+  # Filter to specific season and years
+  season_data <- data %>%
+    filter(year %in% 2017:2022, season == season_name) %>%
+    select(year, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    filter(complete.cases(.))
+  
+  if(nrow(season_data) < 10) {
+    cat("\nInsufficient data for", season_name, "-", met_label, "\n")
+    return(NULL)
+  }
+  
+  # Fit linear model: flux ~ meteorological variable
+  lm_model <- lm(flux ~ met, data = season_data)
+  lm_summary <- summary(lm_model)
+  
+  # Test residuals for normality
+  residuals_vals <- residuals(lm_model)
+  shapiro_p <- shapiro.test(residuals_vals)$p.value
+  
+  # Extract statistics
+  slope <- coef(lm_model)[2]
+  slope_se <- lm_summary$coefficients[2, 2]
+  slope_p <- lm_summary$coefficients[2, 4]
+  r_squared <- lm_summary$r.squared
+  adj_r_squared <- lm_summary$adj.r.squared
+  
+  # Spearman correlation as non-parametric alternative
+  spearman_test <- cor.test(season_data$met, season_data$flux, method = "spearman")
+  spearman_rho <- spearman_test$estimate
+  spearman_p <- spearman_test$p.value
+  
+    # Kendall's tau
+  kendall_test <- cor.test(season_data$met, season_data$flux, method = "kendall")
+  kendall_tau <- kendall_test$estimate
+  kendall_p <- kendall_test$p.value
+  
+  #Results
+  list(
+    season = season_name,
+    flux_var = flux_label,
+    met_var = met_label,
+    n = nrow(season_data),
+    slope = slope,
+    slope_p = slope_p,
+    r_squared = r_squared,
+    adj_r_squared = adj_r_squared,
+    shapiro_p = shapiro_p,
+    spearman_rho = spearman_rho,
+    spearman_p = spearman_p,
+    kendall_tau = kendall_tau,
+    kendall_p = kendall_p,
+    model = lm_model,
+    data = season_data
+  )
+}
+
+# ============================================================================
+# FUNCTION: Run analysis for all met variables
+# ============================================================================
+
+run_comprehensive_analysis <- function(data, flux_var, flux_label, flux_units) {
+  
+  # Define meteorological variables to test
+  met_vars <- list(
+    list(var = "TA_gapfilled", label = "Air Temp GF", units = "°C"),
+    list(var = "TS_3_gapfilled", label = "Soil Temp GF", units = "°C"),
+    list(var = "SWC_3_1_1", label = "Soil Moisture", units = "%"),
+    list(var = "VPD", label = "VPD", units = "hPa"),
+    list(var = "RH", label = "Relative Humidity", units = "%"),
+    list(var = "H", label = "Sensible Heat", units = "W/m²"),
+    list(var = "LE", label = "Latent Heat", units = "W/m²"),
+    list(var = "G_1_1_1", label = "Soil Heat Flux", units = "W/m²")
+  )
+  
+  seasons <- c("Winter", "Growing Season", "Fall Senescence")
+  
+  results_list <- list()
+  
+  for(season in seasons) {
+    for(met in met_vars) {
+      result <- analyze_flux_met_relationship(
+        data, flux_var, met$var, 
+        flux_label, met$label, 
+        season, met$units
+      )
+      
+      if(!is.null(result)) {
+        results_list[[paste(season, met$label, sep = "_")]] <- result
+      }
+    }
+  }
+  
+  return(results_list)
+}
+
+# ============================================================================
+# RUN ANALYSES
+# ============================================================================
+
+cat("============================================================\n")
+cat("CARBON FLUX vs METEOROLOGICAL VARIABLE REGRESSIONS\n")
+cat("Testing relationships within each season (2017-2022)\n")
+cat("============================================================\n\n")
+
+# Analyze FCH4
+cat("\n--- ANALYZING CH4 FLUX ---\n")
+fch4_results <- run_comprehensive_analysis(
+  df_avg_FCH4, "FCH4", "CH₄ Flux", "nmol/m²/s"
+)
+
+# Analyze FC (NEE)
+cat("\n--- ANALYZING CO2 FLUX (NEE) ---\n")
+fc_results <- run_comprehensive_analysis(
+  df_avg_FC, "FC", "CO₂ Flux", "µmol/m²/s"
+)
+
+# ============================================================================
+# CREATE SUMMARY TABLE
+# ============================================================================
+
+create_summary_table <- function(results_list, flux_name) {
+  
+  summary_df <- data.frame()
+  
+  for(result in results_list) {
+    if(!is.null(result)) {
+      summary_df <- rbind(summary_df, data.frame(
+        flux = flux_name,
+        season = result$season,
+        met_variable = result$met_var,
+        n = result$n,
+        slope = round(result$slope, 4),
+        slope_p = round(result$slope_p, 4),
+        adj_r2 = round(result$adj_r_squared, 3),
+        kendall_tau = round(result$kendall_tau, 3),
+        kendall_p = round(result$kendall_p, 4),
+        spearman_rho = round(result$spearman_rho, 3),
+        spearman_p = round(result$spearman_p, 4),
+        residuals_normal = ifelse(!is.na(result$shapiro_p) && result$shapiro_p > 0.05, "Yes", "No"),
+        significant = case_when(
+          !is.na(result$shapiro_p) && result$shapiro_p > 0.05 && result$slope_p < 0.05 ~ "Yes (LM)",
+          result$kendall_p < 0.05 ~ "Yes (Kendall)",
+          TRUE ~ "No"
+        )
+      ))
+    }
+  }
+  
+  return(summary_df)
+}
+
+# Create summary tables
+fch4_summary <- create_summary_table(fch4_results, "FCH4")
+fc_summary <- create_summary_table(fc_results, "FC")
+
+# Combine
+all_summary <- rbind(fch4_summary, fc_summary)
+
+# Print results
+cat("\n\n============================================================\n")
+cat("SUMMARY: ALL FLUX-METEOROLOGY RELATIONSHIPS\n")
+cat("============================================================\n\n")
+
+print(all_summary)
+
+# Highlight significant relationships
+cat("\n\n============================================================\n")
+cat("SIGNIFICANT RELATIONSHIPS (p < 0.05)\n")
+cat("============================================================\n\n")
+
+significant_results <- all_summary %>%
+  filter(significant != "No") %>%
+  arrange(flux, season, met_variable)
+
+if(nrow(significant_results) > 0) {
+  print(significant_results)
+  
+  cat("\n\nInterpretation:\n")
+  cat("- Positive slope: Flux increases as met variable increases\n")
+  cat("- Negative slope: Flux decreases as met variable increases\n")
+  cat("- Strong relationships (|rho| or R² > 0.5) indicate important drivers\n")
+  
+} else {
+  cat("No significant relationships detected at p < 0.05\n")
+}
+
+# Export summary table
+ write.csv(all_summary, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/flux_meteorology_regression_summary.csv", row.names = FALSE)
+# 
+# cat("\n\nSummary table exported to 'flux_meteorology_regression_summary.csv'\n")
+
+# ============================================================================
+# STORE RESULTS FOR VISUALIZATION
+# ============================================================================
+
+# # Save results for plotting
+# saveRDS(list(fch4 = fch4_results, fc = fc_results), 
+#         "flux_met_regression_results.rds")
+
+
+
+#basically ALL relationships significant - this points to autocorrelation. Can try to avg by week, or month, to reduce autocorr...
+
+ #checking / testing 
+print(all_summary)
+lm_test <- lm(FC ~ RH, data = df_avg_FC %>% filter(season == "Winter"))
+summary(lm_test)
+```
+
+#Autocorr checks
+```{r}
+#test by flux and season - yep, all autocorr
+df_avg_FCH4_fall <- df_avg_FCH4 %>%
+  filter(season == "Fall Senescence")
+#autocorrelation - want everything below the blue dotted line 
+acf(df_avg_FCH4_fall$FCH4, na.action = na.omit, main = "Autocorrelation of variable")
+#partial autocorr - removes effect of intermediate lags, still want everything below blue dotted line 
+pacf(df_avg_FCH4_fall$FCH4, na.action = na.omit, main = "Partial Autocorrelation")
+
+
+#test in dataset overall 
+
+#autocorrelation - want everything below the blue dotted line 
+acf(df_avg_FC$FC, na.action = na.omit, main = "Autocorrelation of variable")
+#partial autocorr - removes effect of intermediate lags, still want everything below blue dotted line 
+pacf(df_avg_FC$FC, na.action = na.omit, main = "Partial Autocorrelation")
+
+
+#autocorrelation - want everything below the blue dotted line 
+acf(df_avg_FCH4$FCH4, na.action = na.omit, main = "Autocorrelation of variable")
+#partial autocorr - removes effect of intermediate lags, still want everything below blue dotted line 
+pacf(df_avg_FCH4$FCH4, na.action = na.omit, main = "Partial Autocorrelation")
+
+
+#Results: yep severely autocorrelated 
+
+
+#Ljung-Box test for timeseries models / data -- if p<0.05, there is autocorr and residuals are not independent 
+Box.test(df_avg_FC$FC, lag = 20, type = "Ljung-Box") #p<0.001
+Box.test(df_avg_FCH4$FCH4, lag = 20, type = "Ljung-Box") #p<0.001
+
+#Durbin watson test for when a model has been fitted - checks if residuals are autocorrelated - DW = 2 = no autocorr, DW < 2 = pos autocorr, DW > 2 = neg autocorr
+install.packages("lmtest")   
+library(lmtest)
+lm_test<- lm(FCH4 ~ VPD, data = df_avg_FCH4_winter)
+dwtest(lm_test)
+acf(residuals(lm_test), main = "ACF of model residuals")
+
+
+```
+
+
+#Weekly avg data to try to reduce autocorr 
+```{r}
+# REGRESSION ANALYSIS: Carbon Fluxes vs Meteorological Variables
+# Testing if temporal trends in met variables correspond to trends in C fluxes
+# Analysis by season for 2017-2022
+# USING WEEKLY AVG  to reduce autocorrelation
+
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(lubridate)
+
+# ============================================================================
+# CREATE WEEKLY AVG DATA
+# ============================================================================
+
+cat("============================================================\n")
+cat("Creating weekly averaged data to reduce autocorrelation...\n")
+cat("============================================================\n\n")
+
+# Avg FCH4 data by week
+df_weekly_FCH4 <- df_avg_FCH4 %>%
+  filter(year %in% 2017:2022) %>%
+  mutate(week = week(date)) %>%
+  group_by(year, season, week) %>%
+  summarise(
+    n_days = n(),
+    FCH4 = mean(FCH4, na.rm = TRUE),
+    TA_gapfilled = mean(TA_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_3_1_1 = mean(SWC_3_1_1, na.rm = TRUE),
+    VPD = mean(VPD, na.rm = TRUE),
+    RH = mean(RH, na.rm = TRUE),
+    H = mean(H, na.rm = TRUE),
+    LE = mean(LE, na.rm = TRUE),
+    G_1_1_1 = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  filter(n_days >= 3)  # Only keep weeks with at least 3 days of data
+
+# Avg FC data by week
+df_weekly_FC <- df_avg_FC %>%
+  filter(year %in% 2017:2022) %>%
+  mutate(week = week(date)) %>%
+  group_by(year, season, week) %>%
+  summarise(
+    n_days = n(),
+    FC = mean(FC, na.rm = TRUE),
+    TA_gapfilled = mean(TA_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_3_1_1 = mean(SWC_3_1_1, na.rm = TRUE),
+    VPD = mean(VPD, na.rm = TRUE),
+    RH = mean(RH, na.rm = TRUE),
+    H = mean(H, na.rm = TRUE),
+    LE = mean(LE, na.rm = TRUE),
+    G_1_1_1 = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  filter(n_days >= 3)
+
+cat("Weekly aggregation complete.\n")
+cat("FCH4 weekly data: n =", nrow(df_weekly_FCH4), "weeks\n")
+cat("FC weekly data: n =", nrow(df_weekly_FC), "weeks\n\n")
+
+# ============================================================================
+# FUNCTION: Analyze flux-meteorology relationships by season (WEEKLY DATA)
+# ============================================================================
+
+analyze_flux_met_relationship <- function(data, flux_var, met_var, 
+                                         flux_label, met_label, 
+                                         season_name, met_units) {
+  
+  # Filter to specific season and years
+  season_data <- data %>%
+    filter(year %in% 2017:2022, season == season_name) %>%
+    select(year, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    filter(complete.cases(.))
+  
+  if(nrow(season_data) < 10) {
+    cat("\nInsufficient data for", season_name, "-", met_label, "\n")
+    return(NULL)
+  }
+  
+  # Fit linear model: flux ~ meteorological variable
+  lm_model <- lm(flux ~ met, data = season_data)
+  lm_summary <- summary(lm_model)
+  
+  # Test residuals for normality
+  residuals_vals <- residuals(lm_model)
+  shapiro_p <- shapiro.test(residuals_vals)$p.value
+  
+  # Extract statistics
+  slope <- coef(lm_model)[2]
+  slope_se <- lm_summary$coefficients[2, 2]
+  slope_p <- lm_summary$coefficients[2, 4]
+  r_squared <- lm_summary$r.squared
+  adj_r_squared <- lm_summary$adj.r.squared
+  
+  # Spearman correlation as non-parametric alternative
+  spearman_test <- cor.test(season_data$met, season_data$flux, method = "spearman")
+  spearman_rho <- spearman_test$estimate
+  spearman_p <- spearman_test$p.value
+  
+  # Kendall's tau
+  kendall_test <- cor.test(season_data$met, season_data$flux, method = "kendall")
+  kendall_tau <- kendall_test$estimate
+  kendall_p <- kendall_test$p.value
+  
+  #Results
+  list(
+    season = season_name,
+    flux_var = flux_label,
+    met_var = met_label,
+    n = nrow(season_data),
+    slope = slope,
+    slope_p = slope_p,
+    r_squared = r_squared,
+    adj_r_squared = adj_r_squared,
+    shapiro_p = shapiro_p,
+    spearman_rho = spearman_rho,
+    spearman_p = spearman_p,
+    kendall_tau = kendall_tau,
+    kendall_p = kendall_p,
+    model = lm_model,
+    data = season_data
+  )
+}
+
+# ============================================================================
+# FUNCTION: Run analysis for all met variables
+# ============================================================================
+
+run_comprehensive_analysis <- function(data, flux_var, flux_label, flux_units) {
+  
+  # Define meteorological variables to test
+  met_vars <- list(
+    list(var = "TA_gapfilled", label = "Air Temp", units = "°C"),
+    list(var = "TS_3_gapfilled", label = "Soil Temp", units = "°C"),
+    list(var = "SWC_3_1_1", label = "Soil Moisture", units = "%"),
+    list(var = "VPD", label = "VPD", units = "hPa"),
+    list(var = "RH", label = "Relative Humidity", units = "%"),
+    list(var = "H", label = "Sensible Heat", units = "W/m²"),
+    list(var = "LE", label = "Latent Heat", units = "W/m²"),
+    list(var = "G_1_1_1", label = "Soil Heat Flux", units = "W/m²")
+  )
+  
+  seasons <- c("Winter", "Growing Season", "Fall Senescence")
+  
+  results_list <- list()
+  
+  for(season in seasons) {
+    for(met in met_vars) {
+      result <- analyze_flux_met_relationship(
+        data, flux_var, met$var, 
+        flux_label, met$label, 
+        season, met$units
+      )
+      
+      if(!is.null(result)) {
+        results_list[[paste(season, met$label, sep = "_")]] <- result
+      }
+    }
+  }
+  
+  return(results_list)
+}
+
+# ============================================================================
+# RUN ANALYSES
+# ============================================================================
+
+cat("============================================================\n")
+cat("CARBON FLUX vs METEOROLOGICAL VARIABLE REGRESSIONS\n")
+cat("Testing relationships within each season (2017-2022)\n")
+cat("USING WEEKLY AVG DATA (reduced autocorrelation)\n")
+cat("============================================================\n\n")
+
+# Analyze FCH4
+cat("\n--- ANALYZING CH4 FLUX (WEEKLY MEANS) ---\n")
+fch4_results <- run_comprehensive_analysis(
+  df_weekly_FCH4, "FCH4", "CH₄ Flux", "nmol/m²/s"
+)
+
+# Analyze FC (NEE)
+cat("\n--- ANALYZING CO2 FLUX (WEEKLY MEANS) ---\n")
+fc_results <- run_comprehensive_analysis(
+  df_weekly_FC, "FC", "CO₂ Flux", "µmol/m²/s"
+)
+
+# ============================================================================
+# CREATE SUMMARY TABLE
+# ============================================================================
+
+create_summary_table <- function(results_list, flux_name) {
+  
+  summary_df <- data.frame()
+  
+  for(result in results_list) {
+    if(!is.null(result)) {
+      summary_df <- rbind(summary_df, data.frame(
+        flux = flux_name,
+        season = result$season,
+        met_variable = result$met_var,
+        n = result$n,
+        slope = round(result$slope, 4),
+        slope_p = round(result$slope_p, 4),
+        adj_r2 = round(result$adj_r_squared, 3),
+        kendall_tau = round(result$kendall_tau, 3),
+        kendall_p = round(result$kendall_p, 4),
+        spearman_rho = round(result$spearman_rho, 3),
+        spearman_p = round(result$spearman_p, 4),
+        residuals_normal = ifelse(!is.na(result$shapiro_p) && result$shapiro_p > 0.05, "Yes", "No"),
+        significant = case_when(
+          !is.na(result$shapiro_p) && result$shapiro_p > 0.05 && result$slope_p < 0.05 ~ "Yes (LM)",
+          result$kendall_p < 0.05 ~ "Yes (Kendall)",
+          TRUE ~ "No"
+        )
+      ))
+    }
+  }
+  
+  return(summary_df)
+}
+
+# Create summary tables
+fch4_summary <- create_summary_table(fch4_results, "FCH4")
+fc_summary <- create_summary_table(fc_results, "FC")
+
+# Combine
+all_summary <- rbind(fch4_summary, fc_summary)
+
+# Print results
+cat("\n\n============================================================\n")
+cat("SUMMARY: ALL FLUX-METEOROLOGY RELATIONSHIPS\n")
+cat("============================================================\n\n")
+
+print(all_summary)
+
+# Highlight significant relationships
+cat("\n\n============================================================\n")
+cat("SIGNIFICANT RELATIONSHIPS (p < 0.05)\n")
+cat("============================================================\n\n")
+
+significant_results <- all_summary %>%
+  filter(significant != "No") %>%
+  arrange(flux, season, met_variable)
+
+if(nrow(significant_results) > 0) {
+  print(significant_results)
+  
+  cat("\n\nInterpretation:\n")
+  cat("- Positive slope: Flux increases as met variable increases\n")
+  cat("- Negative slope: Flux decreases as met variable increases\n")
+  cat("- Strong relationships (adj_r2 > 0.5) indicate important drivers\n")
+  cat("- Moderate relationships (adj_r2 = 0.3-0.5) may be meaningful\n")
+  cat("- Weak relationships (adj_r2 < 0.3) should be interpreted cautiously\n")
+  
+  # Highlight strong relationships
+  strong_relationships <- significant_results %>%
+    filter(adj_r2 > 0.3)
+  
+  if(nrow(strong_relationships) > 0) {
+    cat("\n*** STRONG RELATIONSHIPS (R² > 0.3) ***\n")
+    print(strong_relationships)
+  }
+  
+} else {
+  cat("No significant relationships detected at p < 0.05\n")
+}
+
+# Compare sample sizes
+cat("\n\n============================================================\n")
+cat("SAMPLE SIZE COMPARISON\n")
+cat("============================================================\n")
+cat("Weekly aggregation reduces autocorrelation by averaging\n")
+cat("consecutive days, resulting in fewer but more independent\n")
+cat("observations per season.\n\n")
+
+for(season in c("Winter", "Growing Season", "Fall Senescence")) {
+  n_weekly_fch4 <- sum(all_summary$flux == "FCH4" & 
+                       all_summary$season == season, na.rm = TRUE)
+  n_weekly_fc <- sum(all_summary$flux == "FC" & 
+                     all_summary$season == season, na.rm = TRUE)
+  
+  if(n_weekly_fch4 > 0 || n_weekly_fc > 0) {
+    cat(season, ":\n")
+    if(n_weekly_fch4 > 0) {
+      cat("  FCH4: ~", 
+          round(mean(all_summary$n[all_summary$flux == "FCH4" & 
+                                   all_summary$season == season], na.rm = TRUE)), 
+          "weeks\n")
+    }
+    if(n_weekly_fc > 0) {
+      cat("  FC: ~", 
+          round(mean(all_summary$n[all_summary$flux == "FC" & 
+                                   all_summary$season == season], na.rm = TRUE)), 
+          "weeks\n")
+    }
+  }
+}
+
+cat("\nCompare this to daily data which would have n = 100-200+\n")
+
+# Export summary table
+write.csv(all_summary, "flux_meteorology_regression_summary.csv", row.names = FALSE)
+
+cat("\n\nSummary table exported to 'flux_meteorology_regression_summary.csv'\n")
+
+# ============================================================================
+# STORE RESULTS FOR VISUALIZATION
+# ============================================================================
+
+# Save results for plotting
+saveRDS(list(fch4 = fch4_results, fc = fc_results), 
+        "flux_met_regression_results.rds")
+
+cat("\nDetailed results saved for visualization.\n")
+cat("Use these to create scatterplots of significant relationships.\n")
+
+
+#Still most relationships are sig, suggesting autocorr 
+```
+
+#Autocorr checks - weekly avg
+```{r}
+#autocorrelation - want everything below the blue dotted line 
+acf(df_weekly_FC$FC, na.action = na.omit, main = "Autocorrelation of variable")
+#partial autocorr - removes effect of intermediate lags, still want everything below blue dotted line 
+pacf(df_weekly_FC$FC, na.action = na.omit, main = "Partial Autocorrelation")
+
+
+#autocorrelation - want everything below the blue dotted line 
+acf(df_weekly_FCH4$FCH4, na.action = na.omit, main = "Autocorrelation of variable")
+#partial autocorr - removes effect of intermediate lags, still want everything below blue dotted line 
+pacf(df_weekly_FCH4$FCH4, na.action = na.omit, main = "Partial Autocorrelation")
+
+
+#Results: yep severely autocorrelated 
+
+
+#Ljung-Box test for timeseries models / data -- if p<0.05, there is autocorr and residuals are not independent 
+Box.test(df_weekly_FC$FC, lag = 20, type = "Ljung-Box") #p<0.001
+Box.test(df_weekly_FCH4$FCH4, lag = 20, type = "Ljung-Box") #p<0.001
+
+#Durbin watson test for when a model has been fitted - checks if residuals are autocorrelated - DW = 2 = no autocorr, DW < 2 = pos autocorr, DW > 2 = neg autocorr
+install.packages("lmtest")   
+library(lmtest)
+df_weekly_FCH4_winter <- df_weekly_FCH4 %>%
+  filter(season == "Winter")
+
+lm_test<- lm(FCH4 ~ VPD, data = df_weekly_FCH4_winter)
+dwtest(lm_test)
+acf(residuals(lm_test), main = "ACF of model residuals")
+
+
+```
+#Monthly avg - dropping the group by season, simply regressing against month so not to confound results since certain months are partially in different seasons 
+```{r}
+# REGRESSION ANALYSIS: Carbon Fluxes vs Meteorological Variables
+# Testing if temporal trends in met variables correspond to trends in C fluxes
+# Analysis by season for 2017-2022
+# USING MONTHLY AVG to reduce autocorrelation
+
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(lubridate)
+
+# ============================================================================
+# CREATE MONTHLY AVG DATA
+# ============================================================================
+
+cat("============================================================\n")
+cat("Creating monthly avg data to reduce autocorrelation...\n")
+cat("============================================================\n\n")
+
+# AVG FCH4 data by month (ignore season boundaries)
+df_monthly_FCH4 <- df_avg_FCH4 %>%
+  filter(year %in% 2017:2022) %>%
+  mutate(
+    year_month = format(date, "%Y-%m"),
+    month = month(date)
+  ) %>%
+  group_by(year, month, year_month) %>%
+  summarise(
+    n_days = n(),
+    FCH4 = mean(FCH4, na.rm = TRUE),
+    TA_gapfilled = mean(TA_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_3_1_1 = mean(SWC_3_1_1, na.rm = TRUE),
+    VPD = mean(VPD, na.rm = TRUE),
+    RH = mean(RH, na.rm = TRUE),
+    H = mean(H, na.rm = TRUE),
+    LE = mean(LE, na.rm = TRUE),
+    G_1_1_1 = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  filter(n_days >= 5)  # Only keep months with at least 5 days of data
+
+# AVG FC data by month (ignore season boundaries)
+df_monthly_FC <- df_avg_FC %>%
+  filter(year %in% 2017:2022) %>%
+  mutate(
+    year_month = format(date, "%Y-%m"),
+    month = month(date)
+  ) %>%
+  group_by(year, month, year_month) %>%
+  summarise(
+    n_days = n(),
+    FC = mean(FC, na.rm = TRUE),
+    TA_gapfilled = mean(TA_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_3_1_1 = mean(SWC_3_1_1, na.rm = TRUE),
+    VPD = mean(VPD, na.rm = TRUE),
+    RH = mean(RH, na.rm = TRUE),
+    H = mean(H, na.rm = TRUE),
+    LE = mean(LE, na.rm = TRUE),
+    G_1_1_1 = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  filter(n_days >= 5)
+
+cat("Monthly aggregation complete.\n")
+cat("FCH4 monthly data: n =", nrow(df_monthly_FCH4), "months\n")
+cat("FC monthly data: n =", nrow(df_monthly_FC), "months\n\n")
+
+# ============================================================================
+# FUNCTION: Analyze flux-meteorology relationships by season (MONTHLY DATA)
+# ============================================================================
+
+analyze_flux_met_relationship <- function(data, flux_var, met_var, 
+                                         flux_label, met_label, met_units) {
+  
+  # Use all data (no season filtering)
+  analysis_data <- data %>%
+    select(year, month, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    filter(complete.cases(.))
+  
+  if(nrow(analysis_data) < 10) {
+    cat("\nInsufficient data for", met_label, "\n")
+    return(NULL)
+  }
+  
+  # Fit linear model: flux ~ meteorological variable
+  lm_model <- lm(flux ~ met, data = analysis_data)
+  lm_summary <- summary(lm_model)
+  
+  # Test residuals for normality
+  residuals_vals <- residuals(lm_model)
+  shapiro_p <- shapiro.test(residuals_vals)$p.value
+  
+  # Extract statistics
+  slope <- coef(lm_model)[2]
+  slope_se <- lm_summary$coefficients[2, 2]
+  slope_p <- lm_summary$coefficients[2, 4]
+  r_squared <- lm_summary$r.squared
+  adj_r_squared <- lm_summary$adj.r.squared
+  
+  # Spearman correlation as non-parametric alternative
+  spearman_test <- cor.test(analysis_data$met, analysis_data$flux, method = "spearman")
+  spearman_rho <- spearman_test$estimate
+  spearman_p <- spearman_test$p.value
+  
+  # Kendall's tau for cross-validation
+  kendall_test <- cor.test(analysis_data$met, analysis_data$flux, method = "kendall")
+  kendall_tau <- kendall_test$estimate
+  kendall_p <- kendall_test$p.value
+  
+  # Return results
+  list(
+    flux_var = flux_label,
+    met_var = met_label,
+    n = nrow(analysis_data),
+    slope = slope,
+    slope_se = slope_se,
+    slope_p = slope_p,
+    r_squared = r_squared,
+    adj_r_squared = adj_r_squared,
+    shapiro_p = shapiro_p,
+    kendall_tau = kendall_tau,
+    kendall_p = kendall_p,
+    spearman_rho = spearman_rho,
+    spearman_p = spearman_p,
+    model = lm_model,
+    data = analysis_data
+  )
+}
+
+# ============================================================================
+# FUNCTION: Run analysis for all met variables
+# ============================================================================
+
+run_comprehensive_analysis <- function(data, flux_var, flux_label, flux_units) {
+  
+  # Define meteorological variables to test
+  met_vars <- list(
+    list(var = "TA_gapfilled", label = "Air Temp", units = "°C"),
+    list(var = "TS_3_gapfilled", label = "Soil Temp", units = "°C"),
+    list(var = "SWC_3_1_1", label = "Soil Moisture", units = "%"),
+    list(var = "VPD", label = "VPD", units = "hPa"),
+    list(var = "RH", label = "Relative Humidity", units = "%"),
+    list(var = "H", label = "Sensible Heat", units = "W/m²"),
+    list(var = "LE", label = "Latent Heat", units = "W/m²"),
+    list(var = "G_1_1_1", label = "Soil Heat Flux", units = "W/m²")
+  )
+  
+  results_list <- list()
+  
+  for(met in met_vars) {
+    result <- analyze_flux_met_relationship(
+      data, flux_var, met$var, 
+      flux_label, met$label, met$units
+    )
+    
+    if(!is.null(result)) {
+      results_list[[met$label]] <- result
+    }
+  }
+  
+  return(results_list)
+}
+
+# ============================================================================
+# RUN ANALYSES
+# ============================================================================
+
+cat("============================================================\n")
+cat("CARBON FLUX vs METEOROLOGICAL VARIABLE REGRESSIONS\n")
+cat("Testing relationships across all months (2017-2022)\n")
+cat("USING MONTHLY AVG DATA (no season boundaries)\n")
+cat("============================================================\n\n")
+
+# Analyze FCH4
+cat("\n--- ANALYZING CH4 FLUX (MONTHLY MEANS) ---\n")
+fch4_results <- run_comprehensive_analysis(
+  df_monthly_FCH4, "FCH4", "CH₄ Flux", "nmol/m²/s"
+)
+
+# Analyze FC (NEE)
+cat("\n--- ANALYZING CO2 FLUX (MONTHLY MEANS) ---\n")
+fc_results <- run_comprehensive_analysis(
+  df_monthly_FC, "FC", "CO₂ Flux", "µmol/m²/s"
+)
+
+# ============================================================================
+# CREATE SUMMARY TABLE
+# ============================================================================
+
+create_summary_table <- function(results_list, flux_name) {
+  
+  summary_df <- data.frame()
+  
+  for(result in results_list) {
+    if(!is.null(result)) {
+      summary_df <- rbind(summary_df, data.frame(
+        flux = flux_name,
+        met_variable = result$met_var,
+        n = result$n,
+        slope = round(result$slope, 4),
+        slope_p = round(result$slope_p, 4),
+        adj_r2 = round(result$adj_r_squared, 3),
+        kendall_tau = round(result$kendall_tau, 3),
+        kendall_p = round(result$kendall_p, 4),
+        spearman_rho = round(result$spearman_rho, 3),
+        spearman_p = round(result$spearman_p, 4),
+        residuals_normal = ifelse(result$shapiro_p > 0.05, "Yes", "No"),
+        significant = ifelse(
+          result$shapiro_p > 0.05,
+          ifelse(result$slope_p < 0.05, "Yes (LM)", "No"),
+          ifelse(result$kendall_p < 0.05, "Yes (Kendall)", "No")
+        )
+      ))
+    }
+  }
+  
+  return(summary_df)
+}
+
+# Create summary tables
+fch4_summary <- create_summary_table(fch4_results, "FCH4")
+fc_summary <- create_summary_table(fc_results, "FC")
+
+# Combine
+all_summary <- rbind(fch4_summary, fc_summary)
+
+# Print results
+cat("\n\n============================================================\n")
+cat("SUMMARY: ALL FLUX-METEOROLOGY RELATIONSHIPS\n")
+cat("============================================================\n\n")
+
+print(all_summary)
+
+# Highlight significant relationships
+cat("\n\n============================================================\n")
+cat("SIGNIFICANT RELATIONSHIPS (p < 0.05)\n")
+cat("============================================================\n\n")
+
+significant_results <- all_summary %>%
+  filter(significant != "No") %>%
+  arrange(flux, met_variable)
+
+if(nrow(significant_results) > 0) {
+  print(significant_results)
+  
+  cat("\n\nInterpretation:\n")
+  cat("- Positive slope: Flux increases as met variable increases\n")
+  cat("- Negative slope: Flux decreases as met variable increases\n")
+  cat("- Strong relationships (adj_r2 > 0.5) indicate important drivers\n")
+  cat("- Moderate relationships (adj_r2 = 0.3-0.5) may be meaningful\n")
+  cat("- Weak relationships (adj_r2 < 0.3) should be interpreted cautiously\n")
+  
+  # Highlight strong relationships
+  strong_relationships <- significant_results %>%
+    filter(adj_r2 > 0.3)
+  
+  if(nrow(strong_relationships) > 0) {
+    cat("\n*** STRONG RELATIONSHIPS (R² > 0.3) ***\n")
+    print(strong_relationships)
+  }
+  
+} else {
+  cat("No significant relationships detected at p < 0.05\n")
+}
+
+# Compare sample sizes
+cat("\n\n============================================================\n")
+cat("SAMPLE SIZE SUMMARY\n")
+cat("============================================================\n")
+cat("Monthly aggregation across all months (ignoring season boundaries)\n")
+cat("provides maximum independence between observations.\n\n")
+
+cat("FCH4: n =", unique(fch4_summary$n), "months\n")
+cat("FC: n =", unique(fc_summary$n), "months\n\n")
+
+cat("Comparison:\n")
+cat("  Daily data: n = 100-200+ (high autocorrelation)\n")
+cat("  Weekly data: n = 15-30 (moderate autocorrelation)\n")
+cat("  Monthly data: n = 30-60 (low autocorrelation)\n\n")
+
+cat("With monthly aggregation across the full year, relationships\n")
+cat("represent year-round mechanistic drivers of fluxes.\n")
+
+# # Export summary table
+ # write.csv(all_summary, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/monthly_flux_met_regression_summary.csv", row.names = FALSE)
+
+cat("\n\nSummary table exported to 'flux_meteorology_regression_summary.csv'\n")
+
+# ============================================================================
+# STORE RESULTS FOR VISUALIZATION
+# ============================================================================
+
+# # Save results for plotting
+# saveRDS(list(fch4 = fch4_results, fc = fc_results), 
+#         "flux_met_regression_results.rds")
+
+cat("\nDetailed results saved for visualization.\n")
+cat("Use these to create scatterplots of significant relationships.\n")
+
+all_summary
+significant_results
+```
+
+
+#Autocorr checks - monthly avg
+```{r}
+#autocorrelation - want everything below the blue dotted line 
+acf(df_monthly_FC$FC, na.action = na.omit, main = "Autocorrelation of variable")
+#partial autocorr - removes effect of intermediate lags, still want everything below blue dotted line 
+pacf(df_monthly_FC$FC, na.action = na.omit, main = "Partial Autocorrelation")
+
+
+#autocorrelation - want everything below the blue dotted line 
+acf(df_monthly_FCH4$FCH4, na.action = na.omit, main = "Autocorrelation of variable")
+#partial autocorr - removes effect of intermediate lags, still want everything below blue dotted line 
+pacf(df_monthly_FCH4$FCH4, na.action = na.omit, main = "Partial Autocorrelation")
+
+
+#Results: yes there is autocorr
+
+
+#Ljung-Box test for timeseries models / data -- if p<0.05, there is autocorr and residuals are not independent 
+Box.test(df_monthly_FC$FC, lag = 20, type = "Ljung-Box") #p<0.001
+Box.test(df_monthly_FCH4$FCH4, lag = 20, type = "Ljung-Box") #p<0.001
+
+#Durbin watson test for when a model has been fitted - checks if residuals are autocorrelated - DW = 2 = no autocorr, DW < 2 = pos autocorr, DW > 2 = neg autocorr
+install.packages("lmtest")   
+library(lmtest)
+
+lm_test<- lm(FC ~ VPD, data = df_monthly_FC)
+dwtest(lm_test)
+acf(residuals(lm_test), main = "ACF of model residuals")
+
+#FCH4 - SWC = autocorr 
+#FC - TS 3 = ok 
+#FC - TA gf = ok per dwtest, but some lines breach dotted line 
+#FC - LE = ok
+#FC - RH = autocorr
+# FC - H = ok 
+#FC - G = ok
+#FC - VPD = autocorr 
+
+
+
+```
+#Automating DW-test for autocorrelation - if autocorrelation detected, use the non-parametric stats results * 
+```{r}
+# REGRESSION ANALYSIS: Carbon Fluxes vs Meteorological Variables
+# Testing if temporal trends in met variables correspond to trends in C fluxes
+# Analysis by season for 2017-2022
+# USING MONTHLY AVG to reduce autocorrelation
+
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(lubridate)
+library(lmtest)  # For Durbin-Watson test
+
+# ============================================================================
+# CREATE MONTHLY AVG DATA
+# ============================================================================
+
+cat("============================================================\n")
+cat("Creating monthly avg data to reduce autocorrelation...\n")
+cat("============================================================\n\n")
+
+# AVG FCH4 data by month (ignore season boundaries)
+df_monthly_FCH4 <- df_avg_FCH4 %>%
+  filter(year %in% 2017:2022) %>%
+  mutate(
+    year_month = format(date, "%Y-%m"),
+    month = month(date)
+  ) %>%
+  group_by(year, month, year_month) %>%
+  summarise(
+    n_days = n(),
+    FCH4 = mean(FCH4, na.rm = TRUE),
+    TA_gapfilled = mean(TA_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_3_1_1 = mean(SWC_3_1_1, na.rm = TRUE),
+    VPD = mean(VPD, na.rm = TRUE),
+    RH = mean(RH, na.rm = TRUE),
+    H = mean(H, na.rm = TRUE),
+    LE = mean(LE, na.rm = TRUE),
+    G_1_1_1 = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  filter(n_days >= 5)  # Only keep months with at least 5 days of data
+
+# avg FC data by month (ignore season boundaries)
+df_monthly_FC <- df_avg_FC %>%
+  filter(year %in% 2017:2022) %>%
+  mutate(
+    year_month = format(date, "%Y-%m"),
+    month = month(date)
+  ) %>%
+  group_by(year, month, year_month) %>%
+  summarise(
+    n_days = n(),
+    FC = mean(FC, na.rm = TRUE),
+    TA_gapfilled = mean(TA_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_3_1_1 = mean(SWC_3_1_1, na.rm = TRUE),
+    VPD = mean(VPD, na.rm = TRUE),
+    RH = mean(RH, na.rm = TRUE),
+    H = mean(H, na.rm = TRUE),
+    LE = mean(LE, na.rm = TRUE),
+    G_1_1_1 = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  filter(n_days >= 5)
+
+cat("Monthly aggregation complete.\n")
+cat("FCH4 monthly data: n =", nrow(df_monthly_FCH4), "months\n")
+cat("FC monthly data: n =", nrow(df_monthly_FC), "months\n\n")
+
+# ============================================================================
+# FUNCTION: Analyze flux-meteorology relationships by season (MONTHLY DATA)
+# ============================================================================
+
+analyze_flux_met_relationship <- function(data, flux_var, met_var, 
+                                         flux_label, met_label, met_units) {
+  
+  # Use all data (no season filtering)
+  analysis_data <- data %>%
+    select(year, month, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    filter(complete.cases(.))
+  
+  if(nrow(analysis_data) < 10) {
+    cat("\nInsufficient data for", met_label, "\n")
+    return(NULL)
+  }
+  
+  # Fit linear model: flux ~ meteorological variable
+  lm_model <- lm(flux ~ met, data = analysis_data)
+  lm_summary <- summary(lm_model)
+  
+  # Test residuals for normality
+  residuals_vals <- residuals(lm_model)
+  shapiro_p <- shapiro.test(residuals_vals)$p.value
+  
+  # Durbin-Watson test for autocorrelation
+  dw_test <- dwtest(lm_model)
+  dw_statistic <- dw_test$statistic
+  dw_p <- dw_test$p.value
+  autocorr_detected <- dw_p < 0.05  # TRUE if autocorrelation present
+  
+  # Extract statistics
+  slope <- coef(lm_model)[2]
+  slope_se <- lm_summary$coefficients[2, 2]
+  slope_p <- lm_summary$coefficients[2, 4]
+  r_squared <- lm_summary$r.squared
+  adj_r_squared <- lm_summary$adj.r.squared
+  
+  # Spearman correlation as non-parametric alternative
+  spearman_test <- cor.test(analysis_data$met, analysis_data$flux, method = "spearman")
+  spearman_rho <- spearman_test$estimate
+  spearman_p <- spearman_test$p.value
+  
+  # Kendall's tau for cross-validation
+  kendall_test <- cor.test(analysis_data$met, analysis_data$flux, method = "kendall")
+  kendall_tau <- kendall_test$estimate
+  kendall_p <- kendall_test$p.value
+  
+  # Return results
+  list(
+    flux_var = flux_label,
+    met_var = met_label,
+    n = nrow(analysis_data),
+    slope = slope,
+    slope_se = slope_se,
+    slope_p = slope_p,
+    r_squared = r_squared,
+    adj_r_squared = adj_r_squared,
+    shapiro_p = shapiro_p,
+    dw_statistic = dw_statistic,
+    dw_p = dw_p,
+    autocorr_detected = autocorr_detected,
+    kendall_tau = kendall_tau,
+    kendall_p = kendall_p,
+    spearman_rho = spearman_rho,
+    spearman_p = spearman_p,
+    model = lm_model,
+    data = analysis_data
+  )
+}
+
+# ============================================================================
+# FUNCTION: Run analysis for all met variables
+# ============================================================================
+
+run_comprehensive_analysis <- function(data, flux_var, flux_label, flux_units) {
+  
+  # Define meteorological variables to test
+  met_vars <- list(
+    list(var = "TA_gapfilled", label = "Air Temp", units = "°C"),
+    list(var = "TS_3_gapfilled", label = "Soil Temp", units = "°C"),
+    list(var = "SWC_3_1_1", label = "Soil Moisture", units = "%"),
+    list(var = "VPD", label = "VPD", units = "hPa"),
+    list(var = "RH", label = "Relative Humidity", units = "%"),
+    list(var = "H", label = "Sensible Heat", units = "W/m²"),
+    list(var = "LE", label = "Latent Heat", units = "W/m²"),
+    list(var = "G_1_1_1", label = "Soil Heat Flux", units = "W/m²")
+  )
+  
+  results_list <- list()
+  
+  for(met in met_vars) {
+    result <- analyze_flux_met_relationship(
+      data, flux_var, met$var, 
+      flux_label, met$label, met$units
+    )
+    
+    if(!is.null(result)) {
+      results_list[[met$label]] <- result
+    }
+  }
+  
+  return(results_list)
+}
+
+# ============================================================================
+# RUN ANALYSES
+# ============================================================================
+
+cat("============================================================\n")
+cat("CARBON FLUX vs METEOROLOGICAL VARIABLE REGRESSIONS\n")
+cat("Testing relationships across all months (2017-2022)\n")
+cat("USING MONTHLY avgD DATA (no season boundaries)\n")
+cat("============================================================\n\n")
+
+# Analyze FCH4
+cat("\n--- ANALYZING CH4 FLUX (MONTHLY MEANS) ---\n")
+fch4_results <- run_comprehensive_analysis(
+  df_monthly_FCH4, "FCH4", "CH₄ Flux", "nmol/m²/s"
+)
+
+# Analyze FC (NEE)
+cat("\n--- ANALYZING CO2 FLUX (MONTHLY MEANS) ---\n")
+fc_results <- run_comprehensive_analysis(
+  df_monthly_FC, "FC", "CO₂ Flux", "µmol/m²/s"
+)
+
+# ============================================================================
+# CREATE SUMMARY TABLE
+# ============================================================================
+
+create_summary_table <- function(results_list, flux_name) {
+  
+  summary_df <- data.frame()
+  
+  for(result in results_list) {
+    if(!is.null(result)) {
+      summary_df <- rbind(summary_df, data.frame(
+        flux = flux_name,
+        met_variable = result$met_var,
+        n = result$n,
+        slope = round(result$slope, 4),
+        slope_p = round(result$slope_p, 4),
+        adj_r2 = round(result$adj_r_squared, 3),
+        dw_statistic = round(result$dw_statistic, 3),
+        dw_p = round(result$dw_p, 4),
+        autocorr = ifelse(result$autocorr_detected, "Yes", "No"),
+        kendall_tau = round(result$kendall_tau, 3),
+        kendall_p = round(result$kendall_p, 4),
+        spearman_rho = round(result$spearman_rho, 3),
+        spearman_p = round(result$spearman_p, 4),
+        residuals_normal = ifelse(result$shapiro_p > 0.05, "Yes", "No"),
+        # Determine which test to trust
+        recommended_test = case_when(
+          result$autocorr_detected ~ "Use Kendall/Spearman only",
+          result$shapiro_p <= 0.05 ~ "Use Kendall/Spearman only",
+          TRUE ~ "LM valid"
+        ),
+        significant = case_when(
+          result$autocorr_detected & result$kendall_p < 0.05 ~ "Yes (Kendall)*",
+          result$autocorr_detected & result$kendall_p >= 0.05 ~ "No",
+          result$shapiro_p > 0.05 & result$slope_p < 0.05 ~ "Yes (LM)",
+          result$kendall_p < 0.05 ~ "Yes (Kendall)",
+          TRUE ~ "No"
+        )
+      ))
+    }
+  }
+  
+  return(summary_df)
+}
+
+# Create summary tables
+fch4_summary <- create_summary_table(fch4_results, "FCH4")
+fc_summary <- create_summary_table(fc_results, "FC")
+
+# Combine
+all_summary <- rbind(fch4_summary, fc_summary)
+
+# Print results
+cat("\n\n============================================================\n")
+cat("SUMMARY: ALL FLUX-METEOROLOGY RELATIONSHIPS\n")
+cat("============================================================\n\n")
+
+print(all_summary)
+
+# Highlight significant relationships
+cat("\n\n============================================================\n")
+cat("SIGNIFICANT RELATIONSHIPS (p < 0.05)\n")
+cat("============================================================\n\n")
+
+significant_results <- all_summary %>%
+  filter(significant != "No") %>%
+  arrange(flux, met_variable)
+
+if(nrow(significant_results) > 0) {
+  print(significant_results)
+  
+  cat("\n\nInterpretation:\n")
+  cat("- Positive slope: Flux increases as met variable increases\n")
+  cat("- Negative slope: Flux decreases as met variable increases\n")
+  cat("- Strong relationships (adj_r2 > 0.5) indicate important drivers\n")
+  cat("- Moderate relationships (adj_r2 = 0.3-0.5) may be meaningful\n")
+  cat("- Weak relationships (adj_r2 < 0.3) should be interpreted cautiously\n")
+  
+  # Highlight strong relationships
+  strong_relationships <- significant_results %>%
+    filter(adj_r2 > 0.3)
+  
+  if(nrow(strong_relationships) > 0) {
+    cat("\n*** STRONG RELATIONSHIPS (R² > 0.3) ***\n")
+    print(strong_relationships)
+  }
+  
+} else {
+  cat("No significant relationships detected at p < 0.05\n")
+}
+
+# Compare sample sizes
+cat("\n\n============================================================\n")
+cat("SAMPLE SIZE SUMMARY\n")
+cat("============================================================\n")
+cat("Monthly aggregation across all months (ignoring season boundaries)\n")
+cat("provides maximum independence between observations.\n\n")
+
+cat("FCH4: n =", unique(fch4_summary$n), "months\n")
+cat("FC: n =", unique(fc_summary$n), "months\n\n")
+
+cat("Comparison:\n")
+cat("  Daily data: n = 100-200+ (high autocorrelation)\n")
+cat("  Weekly data: n = 15-30 (moderate autocorrelation)\n")
+cat("  Monthly data: n = 30-60 (low autocorrelation)\n\n")
+
+cat("With monthly aggregation across the full year, relationships\n")
+cat("represent year-round mechanistic drivers of fluxes.\n")
+
+# Export summary table
+#  write.csv(all_summary, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/monthly_flux_met_regression_summary.csv", row.names = FALSE)
+# 
+# cat("\n\nSummary table exported to 'flux_meteorology_regression_summary.csv'\n")
+
+# ============================================================================
+# STORE RESULTS FOR VISUALIZATION
+# ============================================================================
+
+# Save results for plotting
+saveRDS(list(fch4 = fch4_results, fc = fc_results),
+        "flux_met_regression_results.rds")
+
+cat("\nDetailed results saved for visualization.\n")
+cat("Use these to create scatterplots of significant relationships.\n")
+```
+
+#Monthly means - using GF fluxes here (used non-GF fluxes in the stats above)
+
+```{r}
+# Monthly means - FC 
+monthly_means_all <- df_avg %>%
+  filter(year %in% 2017:2022) %>%
+    mutate(
+    year_month = format(date, "%Y-%m"),
+    month = month(date)
+  ) %>%
+  group_by(year, month, year_month) %>%
+  summarise(
+    n_days = n(),
+    # ERA5 GF Air temperature (gap-filled)
+    TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TA_gapfilled_se = sd(TA_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TA_gapfilled))),
+    
+    # measured Air temperature 
+    TA_mean = mean(TA, na.rm = TRUE),
+    TA_se = sd(TA, na.rm = TRUE) / sqrt(sum(!is.na(TA))),
+    
+    # ERA5 GF Soil temperature (gap-filled only)
+    TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled_se = sd(TS_3_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_gapfilled))),
+    
+    # Measured Soil temperature 
+    TS_3_mean = mean(TS_3_1_1, na.rm = TRUE),
+    TS_3_se = sd(TS_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_1_1))),
+    
+    # Soil moisture
+    SWC_3_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    SWC_3_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    
+    # VPD
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    
+    # RH - relative humidity 
+    RH_mean = mean(RH, na.rm = TRUE),
+    RH_se = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    
+    # Sensible heat
+    H_mean = mean(H, na.rm = TRUE),
+    H_se = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    
+    # Latent heat
+    LE_mean = mean(LE, na.rm = TRUE),
+    LE_se = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    
+    # Ground heat
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    G_se = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    
+    #Daily avg of HH flux - FC not gf
+    FC_daily_mean = mean(FC, na.rm = TRUE), #in units umol/m2/s
+    FC_se = sd(FC, na.rm = TRUE) / sqrt(sum(!is.na(FC))),
+    
+     #Daily avg of HH flux - FC_GF
+    FC_GF_mean = mean(FC_F), #in units umol/m2/s
+    FC_GF_se = sd(FC_F) / sqrt(sum(!is.na(FC_F))),
+    
+    #Daily avg of HH flux - FC_GF
+    FCH4_GF_mean = mean(FCH4_F * 1/1000, na.rm = TRUE), #in units umol/m2/s
+    FCH4_GF_se = sd(FCH4_F * 1/1000, na.rm = TRUE) / sqrt(sum(!is.na(FC_F))),
+    
+    #Budgets 
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12)), #g/m2
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12)), #g/m2
+    
+    
+    .groups = 'drop'
+  )    %>%
+  filter(n_days >= 5)  # Only keep months with at least 5 days of data
+
+# Define consistent year colors
+year_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+# Convert year to factor for consistent color mapping
+monthly_means_all$year_factor <- as.factor(monthly_means_all$year)
+
+
+#extract month name for plotting 
+monthly_means_all <- monthly_means_all %>%
+  mutate(month_name = month.name[month])
+
+monthly_means_all$month_name <- as.factor(monthly_means_all$month_name)
+
+
+
+```
+
+#Visualize the monthly avgs 
+```{r}
+
+#== VPD =================
+p_VPD <- ggplot(monthly_means_all) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = month_name, y = VPD_mean, color = year_factor, group = month), 
+             size = 3) +
+  geom_errorbar(aes(x = month_name, ymin = VPD_mean - VPD_se,
+                    ymax = VPD_mean + VPD_se, color = year_factor),
+                width = 0.2) +
+  
+  scale_color_manual(values = year_colors) +
+
+  labs(title = "Trends by Season (2017-2022)",
+       x = "Month", 
+       y = "VPD") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "right"
+  )
+
+p_VPD
+```
+
+
+
+#Plot fluxes - plot GF fluxes 
+```{r}
+
+#== FC =================
+p_FC <- ggplot(monthly_means_FC) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = month, y = FC_GF_mean, color = year_factor, group = month), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = FC_GF_mean - FC_GF_se, 
+                    ymax = FC_GF_mean + FC_GF_se, color = year_factor),
+                width = 0.2) +
+  
+  # geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+  #             method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+ # facet_wrap(~ season, ncol = 3) +
+  facet_wrap(~factor(season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3)+
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "FC Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "umol/m2/day") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_FC
+
+#======== FCH4 ===================
+
+p_FCH4 <- ggplot(seasonal_means_FCH4) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = year, y = FCH4_GF_mean, color = year_factor, group = year), 
+             size = 3) +
+  geom_errorbar(aes(x = year, ymin = FCH4_GF_mean - FCH4_GF_se, 
+                    ymax = FCH4_GF_mean + FCH4_GF_se, color = year_factor),
+                width = 0.2) +
+  
+  # geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+  #             method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+ # facet_wrap(~ season, ncol = 3) +
+  facet_wrap(~factor(season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3)+
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "FCH4 Trends by Season (2017-2022)",
+       x = "Year", 
+       y = "umol/m2/day") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_FCH4
+```
+
+#streamlined visualization code
+
+#Adjusting text within figures
+```{r}
+# VISUALIZATION: Flux-Meteorology Relationships
+# Scatterplots showing monthly relationships across 2017-2022
+
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+
+# ============================================================================
+# FUNCTION: Create scatterplot for flux-met relationship
+# ============================================================================
+
+plot_flux_met_relationship <- function(data, flux_var, met_var, 
+                                       flux_label, met_label, 
+                                       flux_units, met_units,
+                                       slope, slope_p, adj_r2, 
+                                       kendall_tau, kendall_p,
+                                       autocorr, recommended_test,
+                                       text_position = "bottom-left") {  # Add parameter for text position
+  
+  # Prepare data
+  plot_data <- data %>%
+    select(year, month, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    filter(complete.cases(.))
+  
+  # Determine which statistics to display
+  if(autocorr == "Yes" || recommended_test == "Use Kendall/Spearman only") {
+    stats_label <- paste0("Slope = ", round(slope, 4),
+                         "\nτ = ", round(kendall_tau, 3), 
+                         ", p = ", format.pval(kendall_p, digits = 3),
+                         "\n(Autocorr detected - using Kendall)")
+    use_lm_line <- FALSE
+  } else {
+    stats_label <- paste0("Slope = ", round(slope, 4),
+                         "\nR² = ", round(adj_r2, 3), 
+                         ", p(LM) = ", format.pval(slope_p, digits = 3),
+                         "\nτ = ", round(kendall_tau, 3),
+                         ", p(K) = ", format.pval(kendall_p, digits = 3))
+    use_lm_line <- TRUE
+  }
+  
+  # Create base plot
+  p <- ggplot(plot_data, aes(x = met, y = flux)) +
+    
+    # Points colored by year
+    geom_point(aes(color = as.factor(year)), size = 3, alpha = 0.7) +
+    
+    # Add regression line
+    {if(use_lm_line) {
+      geom_smooth(method = "lm", se = TRUE, color = "black", 
+                 linewidth = 1, alpha = 0.2)
+    } else {
+      geom_smooth(method = "auto", se = TRUE, color = "black", #loess
+                 linewidth = 1, alpha = 0.2)
+    }} +
+    
+    # Add statistics annotation - position based on parameter
+    {if(text_position == "top-right") {
+      annotate("text", x = Inf, y = Inf, 
+               label = stats_label,
+               hjust = 1.1, vjust = 1.5, size = 3.5, fontface = "bold")
+    } else if(text_position == "top-left") {
+      annotate("text", x = -Inf, y = Inf, 
+               label = stats_label,
+               hjust = -0.1, vjust = 1.5, size = 3.5, fontface = "bold")
+    } else {
+      annotate("text", x = -Inf, y = -Inf, 
+               label = stats_label,
+               hjust = -0.1, vjust = -0.5, size = 3.5, fontface = "bold")
+    }} +
+    
+    # Labels (with proper subscript handling)
+    labs(x = paste0(met_label, " (", met_units, ")"),
+         y = if(flux_label == "CH₄ Flux") {
+           bquote("Monthly Mean CH"[4] ~ "Flux (" * .(flux_units) * ")")
+         } else if(flux_label == "CO₂ Flux") {
+           bquote("Monthly Mean CO"[2] ~ "Flux (" * .(flux_units) * ")")
+         } else {
+           paste0("Monthly Mean ", flux_label, " Flux (", flux_units, ")")
+         },
+         title = if(flux_label == "CH₄ Flux") {
+           bquote("Monthly Mean CH"[4] ~ "Flux vs" ~ .(met_label))
+         } else if(flux_label == "CO₂ Flux") {
+           bquote("Monthly Mean CO"[2] ~ "Flux vs" ~ .(met_label))
+         } else {
+           paste0("Monthly Mean ", flux_label, " Flux vs ", met_label)
+         },
+         color = "Year") +
+    
+    # Theme
+    theme_bw() +
+    theme(
+      plot.title = element_text(face = "bold", size = 12),
+      axis.title = element_text(face = "bold", size = 11),
+      axis.text = element_text(face = "bold", size = 9),
+      legend.position = "right",
+      legend.title = element_text(face = "bold"),
+      legend.text = element_text(size = 9)
+    ) +
+    
+    # Color scale for years
+    scale_color_manual(
+      values = c("2017" = "#E41A1C", "2018" = "#377EB8", 
+                 "2019" = "#4DAF4A", "2020" = "#984EA3", 
+                 "2021" = "#FF7F00", "2022" = "#A65628")
+    )
+  
+  return(p)
+}
+
+# ============================================================================
+# MANUAL SPECIFICATION: List your significant relationships here
+# ============================================================================
+
+# Based on your results, specify which relationships to plot
+# Format: list(flux = "FC" or "FCH4", met_var = "variable_name", met_label = "Display Name")
+
+significant_relationships <- list(
+  # FC relationships
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "TA_gapfilled", met_label = "Air Temp", 
+       met_units = "°C"),
+  
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "LE", met_label = "Latent Heat", 
+       met_units = "W/m²"),
+  
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "RH", met_label = "Relative Humidity", 
+       met_units = "%"),
+  
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "G_1_1_1", met_label = "Soil Heat Flux", 
+       met_units = "W/m²"),
+  
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "TS_3_gapfilled", met_label = "Soil Temp", 
+       met_units = "°C"),
+  
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "VPD", met_label = "VPD", 
+       met_units = "hPa"),
+  
+  # FCH4 relationships
+  list(flux = "FCH4", data = df_monthly_FCH4, flux_var = "FCH4", flux_label = "CH₄ Flux", 
+       flux_units = "nmol/m²/s", met_var = "SWC_3_1_1", met_label = "Soil Moisture", 
+       met_units = "%")
+)
+
+# ============================================================================
+# CREATE PLOTS FOR ALL SPECIFIED RELATIONSHIPS
+# ============================================================================
+
+cat("Creating visualizations for significant flux-meteorology relationships...\n\n")
+
+all_plots <- list()
+
+for(i in seq_along(significant_relationships)) {
+  rel <- significant_relationships[[i]]
+  
+  # Get the corresponding result object
+  if(rel$flux == "FCH4" && exists("fch4_results")) {
+    # Match met_label to result name
+    result <- fch4_results[[rel$met_label]]
+  } else if(rel$flux == "FC" && exists("fc_results")) {
+    result <- fc_results[[rel$met_label]]
+  } else {
+    cat("Skipping:", rel$flux, "vs", rel$met_label, "(results not found)\n")
+    next
+  }
+  
+  if(is.null(result)) {
+    cat("Skipping:", rel$flux, "vs", rel$met_label, "(result is NULL)\n")
+    next
+  }
+  
+  # Determine text position (move to top-left for FCH4 vs Soil Moisture)
+  text_pos <- if(rel$flux == "FCH4" && rel$met_label == "Soil Moisture") {
+    "top-left"
+  } else {
+    "bottom-left"
+  }
+  
+  # Create plot (with text position specified)
+  p <- plot_flux_met_relationship(
+    data = rel$data, 
+    flux_var = rel$flux_var, 
+    met_var = rel$met_var,
+    flux_label = rel$flux_label, 
+    met_label = rel$met_label, 
+    flux_units = rel$flux_units, 
+    met_units = rel$met_units,
+    slope = result$slope, 
+    slope_p = result$slope_p, 
+    adj_r2 = result$adj_r_squared,
+    kendall_tau = result$kendall_tau, 
+    kendall_p = result$kendall_p,
+    autocorr = ifelse(result$autocorr_detected, "Yes", "No"),
+    recommended_test = ifelse(result$autocorr_detected, "Use Kendall/Spearman only", "LM valid"),
+    text_position = text_pos
+  )
+  
+  all_plots[[paste(rel$flux, rel$met_label, sep = "_")]] <- p
+  
+  # Save individual plot
+  # filename <- paste0(rel$flux, "_vs_", gsub(" ", "_", rel$met_label), "_monthly.png")
+  # ggsave(filename, p, width = 8, height = 6, dpi = 300)
+  # cat("Saved:", filename, "\n")
+  
+  # Print plot to display
+  print(p)
+}
+
+# ============================================================================
+# CREATE MULTI-PANEL FIGURES
+# ============================================================================
+
+cat("\n\nCreating combined multi-panel figures...\n")
+
+# Separate FC and FCH4 plots
+fc_plot_list <- list()
+fch4_plot_list <- list()
+
+for(plot_name in names(all_plots)) {
+  if(grepl("^FC_", plot_name)) {
+    fc_plot_list[[plot_name]] <- all_plots[[plot_name]]
+  } else if(grepl("^FCH4_", plot_name)) {
+    fch4_plot_list[[plot_name]] <- all_plots[[plot_name]]
+  }
+}
+
+# Create FC combined figure (if multiple plots)
+if(length(fc_plot_list) > 1) {
+  n_fc <- length(fc_plot_list)
+  ncol_fc <- ifelse(n_fc <= 2, 2, 3)
+  nrow_fc <- ceiling(n_fc / ncol_fc)
+  
+  fc_combined <- do.call(grid.arrange, c(fc_plot_list, ncol = ncol_fc))
+  ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/FC_all_relationships_monthly.png", fc_combined,
+         width = 6 * ncol_fc, height = 5 * nrow_fc, dpi = 600)
+  cat("Saved: FC_all_relationships_monthly.png\n")
+}
+
+# Create FCH4 combined figure (if multiple plots)
+if(length(fch4_plot_list) > 1) {
+  n_fch4 <- length(fch4_plot_list)
+  ncol_fch4 <- ifelse(n_fch4 <= 2, 2, 3)
+  nrow_fch4 <- ceiling(n_fch4 / ncol_fch4)
+  
+  #fch4_combined <- do.call(grid.arrange, c(fch4_plot_list, ncol = ncol_fch4))
+  ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/FCH4_all_relationships_monthly.png", fch4_combined,
+         width = 6 * ncol_fch4, height = 5 * nrow_fch4, dpi = 300)
+  cat("Saved: FCH4_all_relationships_monthly.png\n")
+}
+
+cat("\n\nVisualization complete!\n")
+cat("- Individual plots saved for each significant relationship\n")
+cat("- Points colored by year to show temporal distribution\n")
+cat("- Regression line (LM) or smoother (if autocorrelation detected)\n")
+cat("- Statistics shown: R²/Kendall's τ and p-value\n")
+```
+```{r}
+# VISUALIZATION: Flux-Meteorology Relationships
+# Scatterplots showing monthly relationships across 2017-2022
+
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+
+# ============================================================================
+# FUNCTION: Create scatterplot for flux-met relationship
+# ============================================================================
+
+plot_flux_met_relationship <- function(data, flux_var, met_var, 
+                                       flux_label, met_label, 
+                                       flux_units, met_units,
+                                       slope, slope_p, adj_r2, 
+                                       kendall_tau, kendall_p,
+                                       autocorr, recommended_test,
+                                       text_position = "bottom-left") {  # Add parameter for text position
+  
+  # Prepare data
+  plot_data <- data %>%
+    select(year, month, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    filter(complete.cases(.))
+  
+  # Determine which statistics to display
+  if(autocorr == "Yes" || recommended_test == "Use Kendall/Spearman only") {
+    stats_label <- paste0("Slope = ", round(slope, 4),
+                         "\nτ = ", round(kendall_tau, 3), 
+                         ", p = ", format.pval(kendall_p, digits = 3),
+                         "\n(Autocorr detected - using Kendall)")
+    use_lm_line <- FALSE
+  } else {
+    stats_label <- paste0("Slope = ", round(slope, 4),
+                         "\nR² = ", round(adj_r2, 3), 
+                         ", p(LM) = ", format.pval(slope_p, digits = 3),
+                         "\nτ = ", round(kendall_tau, 3),
+                         ", p(K) = ", format.pval(kendall_p, digits = 3))
+    use_lm_line <- TRUE
+  }
+  
+  # Create base plot
+  p <- ggplot(plot_data, aes(x = met, y = flux)) +
+    
+    # Points colored by year
+    geom_point(aes(color = as.factor(year)), size = 3, alpha = 0.7) +
+    
+    # Add regression line
+    {if(use_lm_line) {
+      geom_smooth(method = "lm", se = TRUE, color = "black", 
+                 linewidth = 1, alpha = 0.2)
+    } else {
+      geom_smooth(method = "auto", se = TRUE, color = "black", #loess
+                 linewidth = 1, alpha = 0.2)
+    }} +
+    
+    # Add statistics annotation - position based on parameter
+    {if(text_position == "top-right") {
+      annotate("text", x = Inf, y = Inf, 
+               label = stats_label,
+               hjust = 1.1, vjust = 1.5, size = 3.5, fontface = "bold")
+    } else if(text_position == "top-left") {
+      annotate("text", x = -Inf, y = Inf, 
+               label = stats_label,
+               hjust = -0.1, vjust = 1.5, size = 3.5, fontface = "bold")
+    } else {
+      annotate("text", x = -Inf, y = -Inf, 
+               label = stats_label,
+               hjust = -0.1, vjust = -0.5, size = 3.5, fontface = "bold")
+    }} +
+    
+    # Labels (with proper subscript handling)
+    labs(x = paste0(met_label, " (", met_units, ")"),
+         y = if(flux_label == "CH₄ Flux") {
+           bquote("Monthly Mean CH"[4] ~ "Flux (" * .(flux_units) * ")")
+         } else if(flux_label == "CO₂ Flux") {
+           bquote("Monthly Mean CO"[2] ~ "Flux (" * .(flux_units) * ")")
+         } else {
+           paste0("Monthly Mean ", flux_label, " Flux (", flux_units, ")")
+         },
+         title = if(flux_label == "CH₄ Flux") {
+           bquote("Monthly Mean CH"[4] ~ "Flux vs" ~ .(met_label))
+         } else if(flux_label == "CO₂ Flux") {
+           bquote("Monthly Mean CO"[2] ~ "Flux vs" ~ .(met_label))
+         } else {
+           paste0("Monthly Mean ", flux_label, " Flux vs ", met_label)
+         },
+         color = "Year") +
+    
+    # Theme
+    theme_bw() +
+    theme(
+      plot.title = element_text(face = "bold", size = 12),
+      axis.title = element_text(face = "bold", size = 11),
+      axis.text = element_text(face = "bold", size = 9),
+      legend.position = "right",
+      legend.title = element_text(face = "bold"),
+      legend.text = element_text(size = 9)
+    ) +
+    
+    # Color scale for years
+    scale_color_manual(
+      values = c("2017" = "#E41A1C", "2018" = "#377EB8", 
+                 "2019" = "#4DAF4A", "2020" = "#984EA3", 
+                 "2021" = "#FF7F00", "2022" = "#A65628")
+    )
+  
+  return(p)
+}
+
+# ============================================================================
+# MANUAL SPECIFICATION: List your significant relationships here
+# ============================================================================
+
+# Based on your results, specify which relationships to plot
+# Format: list(flux = "FC" or "FCH4", met_var = "variable_name", met_label = "Display Name")
+
+significant_relationships <- list(
+  # FC relationships
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "TA_gapfilled", met_label = "Air Temp", 
+       met_units = "°C"),
+  
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "LE", met_label = "Latent Heat", 
+       met_units = "W/m²"),
+  
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "RH", met_label = "Relative Humidity", 
+       met_units = "%"),
+  
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "G_1_1_1", met_label = "Soil Heat Flux", 
+       met_units = "W/m²"),
+  
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "TS_3_gapfilled", met_label = "Soil Temp", 
+       met_units = "°C"),
+  
+  list(flux = "FC", data = df_monthly_FC, flux_var = "FC", flux_label = "CO₂ Flux", 
+       flux_units = "µmol/m²/s", met_var = "VPD", met_label = "VPD", 
+       met_units = "hPa"),
+  
+  # FCH4 relationships
+  list(flux = "FCH4", data = df_monthly_FCH4, flux_var = "FCH4", flux_label = "CH₄ Flux", 
+       flux_units = "nmol/m²/s", met_var = "SWC_3_1_1", met_label = "Soil Moisture", 
+       met_units = "%")
+)
+
+# ============================================================================
+# CREATE PLOTS FOR ALL SPECIFIED RELATIONSHIPS
+# ============================================================================
+
+cat("Creating visualizations for significant flux-meteorology relationships...\n\n")
+
+all_plots <- list()
+
+for(i in seq_along(significant_relationships)) {
+  rel <- significant_relationships[[i]]
+  
+  # Get the corresponding result object
+  if(rel$flux == "FCH4" && exists("fch4_results")) {
+    # Match met_label to result name
+    result <- fch4_results[[rel$met_label]]
+  } else if(rel$flux == "FC" && exists("fc_results")) {
+    result <- fc_results[[rel$met_label]]
+  } else {
+    cat("Skipping:", rel$flux, "vs", rel$met_label, "(results not found)\n")
+    next
+  }
+  
+  if(is.null(result)) {
+    cat("Skipping:", rel$flux, "vs", rel$met_label, "(result is NULL)\n")
+    next
+  }
+  
+  # Determine text position (move to top-left for FCH4 vs Soil Moisture)
+  text_pos <- if(rel$flux == "FCH4" && rel$met_label == "Soil Moisture") {
+    "top-left"
+  } else {
+    "bottom-left"
+  }
+  
+  # Create plot (with text position specified)
+  p <- plot_flux_met_relationship(
+    data = rel$data, 
+    flux_var = rel$flux_var, 
+    met_var = rel$met_var,
+    flux_label = rel$flux_label, 
+    met_label = rel$met_label, 
+    flux_units = rel$flux_units, 
+    met_units = rel$met_units,
+    slope = result$slope, 
+    slope_p = result$slope_p, 
+    adj_r2 = result$adj_r_squared,
+    kendall_tau = result$kendall_tau, 
+    kendall_p = result$kendall_p,
+    autocorr = ifelse(result$autocorr_detected, "Yes", "No"),
+    recommended_test = ifelse(result$autocorr_detected, "Use Kendall/Spearman only", "LM valid"),
+    text_position = text_pos
+  )
+  
+  all_plots[[paste(rel$flux, rel$met_label, sep = "_")]] <- p
+  
+  # Save individual plot
+  # filename <- paste0(rel$flux, "_vs_", gsub(" ", "_", rel$met_label), "_monthly.png")
+  # ggsave(filename, p, width = 8, height = 6, dpi = 300)
+  # cat("Saved:", filename, "\n")
+  
+  # Print plot to display
+  print(p)
+}
+
+# ============================================================================
+# CREATE MULTI-PANEL FIGURES
+# ============================================================================
+
+cat("\n\nCreating combined multi-panel figure...\n")
+
+# Separate FC and FCH4 plots
+fc_plot_list <- list()
+fch4_plot_list <- list()
+
+for(plot_name in names(all_plots)) {
+  if(grepl("^FC_", plot_name)) {
+    fc_plot_list[[plot_name]] <- all_plots[[plot_name]]
+  } else if(grepl("^FCH4_", plot_name)) {
+    fch4_plot_list[[plot_name]] <- all_plots[[plot_name]]
+  }
+}
+
+# Combine ALL plots (FC + FCH4) into one figure
+all_combined_plots <- c(fc_plot_list, fch4_plot_list)
+
+if(length(all_combined_plots) > 1) {
+  n_total <- length(all_combined_plots)
+  ncol_total <- 3
+  nrow_total <- ceiling(n_total / ncol_total)
+  
+  # Extract legend from first plot
+  library(gridExtra)
+  library(grid)
+  g <- ggplotGrob(all_combined_plots[[1]])
+  legend <- g$grobs[[which(sapply(g$grobs, function(x) x$name) == "guide-box")]]
+  
+  # Remove legend from all plots
+  plots_no_legend <- lapply(all_combined_plots, function(p) {
+    p + theme(legend.position = "none")
+  })
+  
+  # Add the legend as the last "plot" to fill the empty space
+  plots_with_legend_space <- c(plots_no_legend, list(legend))
+  
+  # Create combined plot with title
+  combined_figure <- grid.arrange(
+    grobs = plots_with_legend_space,
+    ncol = ncol_total,
+    top = grid::textGrob("Monthly Mean Flux Relationships with Monthly Mean Meteorological Variables", 
+                         gp = grid::gpar(fontsize = 16, fontface = "bold"))
+  )
+  
+  ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/All_flux_relationships_monthly.png", combined_figure, 
+         width = 6 * ncol_total, height = 5 * nrow_total, dpi = 600)
+  cat("Saved: All_flux_relationships_monthly.png\n")
+  cat("Combined", length(fc_plot_list), "CO₂ flux plots and", length(fch4_plot_list), "CH₄ flux plot(s)\n")
+}
+
+cat("\n\nVisualization complete!\n")
+cat("- Individual plots saved for each significant relationship\n")
+cat("- Points colored by year to show temporal distribution\n")
+cat("- Regression line (LM) or smoother (if autocorrelation detected)\n")
+cat("- Statistics shown: R²/Kendall's τ and p-value\n")
+```
+
+
+
+
