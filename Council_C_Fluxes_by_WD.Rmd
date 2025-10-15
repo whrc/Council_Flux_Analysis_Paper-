@@ -50,7 +50,7 @@ Sys.setenv(TZ='UTC')
 df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 #needs continuous day variable - daily avg, calculated in processing steps
-df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.4.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 ```
 
@@ -82,31 +82,22 @@ df2 <- df %>%
 
 ```{r}
 
-#Take out NAs and remove 2023 as it's missing a lot of data so I didn't do seasonal delineations
-df2 <- df2 %>% filter(complete.cases(season)) 
-df_avg2 <- df_avg %>% filter(complete.cases(season))
-
-sum(is.na(df_avg2$season))
-
 # Convert wind_direction_cardinal to an ordered factor so that WD appears in order 
 #HH
-df2$WD_cardinal2 <- factor(df2$WD_cardinal2, 
+df$WD_cardinal2 <- factor(df$WD_cardinal2, 
                                       levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))
 #df_avg
-df_avg2$WD_cardinal2 <- factor(df_avg2$WD_cardinal2, 
+df_avg$WD_cardinal2 <- factor(df_avg$WD_cardinal2, 
                                       levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))
 
 #Since there are some days where there are FC measurements but not FCH4 measurements, and vice versa, make separate datasets for FC and FCH4 with complete cases 
 #make complete cases for FC and FCH4
 
-#df2 <- df2 %>% filter(complete.cases(FC, FCH4)) #filters for BOTH, don't use here
-#df_avg2 <- df_avg2 %>% filter(complete.cases(FC, FCH4)) #filters for BOTH, don't use here
-
 df_avg_FC <- df_avg %>% filter(complete.cases(FC, season))
 df_avg_FCH4 <- df_avg %>% filter(complete.cases(FCH4, season))
 
 #double checking NAs
-sum(is.na(df_avg_FCH4$FC))
+sum(is.na(df_avg_FCH4$season))
 
 
 ```
@@ -823,7 +814,6 @@ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper
        width = 10, height = 7, dpi = 600)
 
 
-
 ```
 
 #CO2 flux by WD
@@ -1184,12 +1174,12 @@ library(quantreg)   # For quantile regression
 # Use the user's pre-cleaned datasets
 df_analysis_FCH4 <- df_avg_FCH4 %>%
   mutate(
-    # Convert to more manageable units
-    FCH4_umol = FCH4 / 1000,  # nmol to umol
-    # Create factors for analysis
-    WD_cardinal2 = factor(WD_cardinal2, levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")),
-    season = factor(season)
-  )
+#Convert to more manageable units
+  FCH4_umol = FCH4 / 1000,  # nmol to umol
+  # Create factors for analysis
+  WD_cardinal2 = factor(WD_cardinal2, levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")),
+  season = factor(season)
+)
 
 df_analysis_FC <- df_avg_FC %>%
   mutate(
@@ -1493,18 +1483,20 @@ for(result_name in names(all_results)) {
 }
 
 #summary of WD by season for each C flux
+# "FC observations: 775"
 # [1] "\nFCH4 observations by season and wind direction:"
 #                  
 #                     N  NE   E  SE   S  SW   W  NW
-#   Fall Senescence  15   3   1   4   2   4   0  50
-#   Growing Season   58  12   0  29  74  16   1 149
-#   Winter           30  14   0  15   2   2   2  96
+#   Fall Senescence  15   4   1   4   2   4   0  49
+#   Growing Season   59  11   0  29  74  16   1 149
+#   Winter           29  14   0  15   2   2   2  97
 # [1] "\nFC observations by season and wind direction:"
 #                  
 #                     N  NE   E  SE   S  SW   W  NW
-#   Fall Senescence  24   3   6  15   7   4   2  91
-#   Growing Season   69  13   3  47 116  21   1 176
-#   Winter           26  15   1  12   6   2   3 112
+#   Fall Senescence  24   4   8  16   7   4   2  91
+#   Growing Season   70  12   1  46 116  21   1 174
+#   Winter           25  15   1  12   6   2   3 114
+
 
 ```
 ####Dunn test to show which WD are diff
@@ -2068,6 +2060,22 @@ dunn_result <- dunnTest(FC ~ WD_cardinal2,
                        data = subset(test, season == "Growing Season"),
                        method = "bh")
 dunn_result #in the adj p, no sig diffs; in un-adj p, sig diffs are related to S, SE, SW winds vs others
+
+#checking winter pairs for letter assignment 
+
+test <- fc_winter %>%
+  filter(!WD_cardinal2 == "E" & !WD_cardinal2 == "W" & !WD_cardinal2 == "SW") #removing the WD with n<5
+
+
+kruskal.test(FC ~ WD_cardinal2, data = test) #p = < 0.001
+
+
+dunn_result <- dunnTest(FC ~ WD_cardinal2, 
+                       data = subset(test, season == "Winter"),
+                       method = "bh")
+dunn_result
+
+
 ```
 
 #Adding statistics to figures 
@@ -2614,7 +2622,8 @@ fc_letter_positions_updated <- df_avg_FC_with_n %>%
   left_join(fc_letter_data_updated, by = c("season", "WD_cardinal2")) %>%
   filter(!is.na(letters)) %>%
   mutate(
-    letter_y = pmax(max_y, q75) + 0.7  # Using your preferred spacing
+    letter_y = 2.5 #puts letters on same y-coord 
+      #pmax(max_y, q75) + 0.7  # Using your preferred spacing - puts letters just above box
   )
 
 # Updated FC plot
@@ -2627,6 +2636,8 @@ FC_by_WD_final_updated <- ggplot(df_avg_FC_with_n, aes(x = WD_cardinal2, y = FC,
            aes(x = WD_cardinal2, y = letter_y, label = letters),
            inherit.aes = FALSE,
            size = 5, fontface = "bold", color = "black") +
+  
+  expand_limits(y = max(df_avg_FC_with_n$FC, na.rm = TRUE) * 1.2) +
   
   geom_hline(yintercept = 0) +
   facet_wrap(~season) +
@@ -2652,7 +2663,7 @@ print(FC_by_WD_final_updated)
 ```
 #save figure with statistical lettering 
 ```{r}
-ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjFC_by_WD_seasons_stats.png", FC_by_WD_final_updated, 
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjFC_by_WD_seasons_stats2.png", FC_by_WD_final_updated, 
        width = 10, height = 7, dpi = 600)
 ```
 
@@ -2683,7 +2694,7 @@ df_avg_FCH4_fixed <- df_avg_FCH4 %>%
 fch4_letter_data_final <- data.frame(
   season = rep("Growing Season", 6),
   WD_cardinal2 = c("N", "NE", "SE", "S", "SW", "NW"),
-  letters = c("a", "ab", "c", "c", "c", "b"),
+       letters = c("a", "ab", "c", "c", "bc", "b"),
   stringsAsFactors = FALSE
 )
 
@@ -2702,7 +2713,8 @@ fch4_letter_positions_final <- df_avg_FCH4_fixed %>%
   left_join(fch4_letter_data_final, by = c("season", "WD_cardinal2")) %>%
   filter(!is.na(letters)) %>%
   mutate(
-    letter_y = pmax(max_y, q75) + 0.005
+    letter_y = 0.045
+    #letter_y = pmax(max_y, q75) + 0.005
   )
 
 print("FCH4 Letter positions (Growing Season only):")
@@ -2753,6 +2765,866 @@ cat("Transparency correctly applied to all directions with n < 5\n")
 ```
 #save figure with statistical lettering 
 ```{r}
-ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjFCH4_by_WD_seasons_stats.png", FCH4_by_WD_final, 
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjFCH4_by_WD_seasons_stats2.png", FCH4_by_WD_final, 
        width = 10, height = 7, dpi = 600)
+```
+
+#pairwise Dunn test to double check stats letter assignment 
+```{r}
+#checking winter pairs for letter assignment 
+
+test <- fch4_growing %>%
+  filter(!WD_cardinal2 == "E" & !WD_cardinal2 == "W") #removing the WD with n<5
+
+
+kruskal.test(FCH4 ~ WD_cardinal2, data = test) #p = < 0.001
+
+
+dunn_result <- dunnTest(FCH4 ~ WD_cardinal2, 
+                       data = subset(test, season == "Growing Season"),
+                       method = "bh")
+dunn_result
+
+dunn_result_table <- dunn_result$res %>%
+  mutate(
+    P.unadj = format(P.unadj, scientific = FALSE, digits = 4),
+    P.adj   = format(P.adj, scientific = FALSE, digits = 4)
+  )
+
+dunn_result_table
+
+```
+
+
+
+
+
+#Binning wind by landscape features at Council 
+
+SW, S, SW, = drainage channels / thermokarst
+N, NE = ponds and forested/riparian area 
+W = open tundra with some tree patches, also looks like drainage or thermokarsting areas 
+
+```{r}
+library(dplyr)
+
+ #create dataset with variables of interest - these datasets already have cc for FC and FCH4 
+landscape_FC <- df_avg_FC %>%
+  select(date, year, season, FC, GPP, RECO, WD_modal2, WD_cardinal2)
+
+
+landscape_FCH4 <- df_avg_FCH4 %>%
+  select(date, year, season, FCH4, WD_modal2, WD_cardinal2)
+
+
+#check
+sum(is.na(landscape_FC$FC))
+sum(is.na(landscape_FCH4$FCH4))
+```
+
+#### Assign landscape features to WD_cardinal2
+```{r}
+
+# Assign landscape feature based on cardinal directions & map of council tower location 
+
+#FC
+  landscape_FC <- landscape_FC %>%
+    mutate(
+    landscape_feature = case_when(
+      WD_cardinal2 == "N" | WD_cardinal2 == "NE" | WD_cardinal2 == "NW" ~ "Ponds, Riparian (N, NE, NW)", 
+      WD_cardinal2 == "S" | WD_cardinal2 == "SE" ~ "Drainage Channels (S, SE)", 
+      WD_cardinal2 == "W" | WD_cardinal2 == "SW" ~ "Tundra, Wet Lowlands (W, SW)", 
+      WD_cardinal2 == "E"  ~ "Tundra, Road (E)", 
+      
+      #TRUE ~ NA_character_ # Handle any missing or invalid values -- not needed in this case 
+    )
+  )
+
+
+#FCH4
+  landscape_FCH4 <- landscape_FCH4 %>%
+    mutate(
+    landscape_feature = case_when(
+      WD_cardinal2 == "N" | WD_cardinal2 == "NE" | WD_cardinal2 == "NW" ~ "Ponds, Riparian (N, NE, NW)", 
+      WD_cardinal2 == "S" | WD_cardinal2 == "SE" ~ "Drainage Channels (S, SE)", 
+      WD_cardinal2 == "W" | WD_cardinal2 == "SW" ~ "Tundra, Wet Lowlands (W, SW)", 
+      WD_cardinal2 == "E"  ~ "Tundra, Road (E)", 
+      
+      #TRUE ~ NA_character_ # Handle any missing or invalid values -- not needed in this case 
+    )
+  )
+```
+
+#Exploratory plots
+```{r}
+
+ggplot(landscape_FC, aes (x = landscape_feature, y = FC, fill = landscape_feature ))+
+  geom_boxplot()+
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 4) +
+  facet_wrap(~season) +
+  theme_bw()
+
+#nmol to umol 
+ggplot(landscape_FCH4, aes (x = landscape_feature, y = FCH4 * 1/1000, fill = landscape_feature ))+
+  geom_boxplot()+
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 4) +
+  facet_wrap(~season) +
+  theme_bw()+
+scale_fill_manual(name = "Landscape Feature",
+            values = c("Drainage Channels (S, SE)" = "cyan3", 
+                      "Ponds, Riparian (N, NE, NW)" = "royalblue", 
+                      "Tundra, Road (E)" = "brown", 
+                      "Tundra, Wet Lowlands (W, SW)" = "chartreuse4")
+  ) +
+  theme(
+  text = element_text(face = "bold") #makes ALL text within fig bold 
+)
+
+
+
+#levels(factor(landscape_FCH4$landscape_feature))
+
+```
+#Create factors for analysis
+```{r}
+#FC
+df_analysis_FC.2 <- landscape_FC %>%
+  mutate(
+    # Create factors for analysis
+    landscape_feature = factor(landscape_feature, levels = c("Ponds, Riparian (N, NE, NW)", "Tundra, Road (E)", "Drainage Channels (S, SE)","Tundra, Wet Lowlands (W, SW)")),
+    season = factor(season, levels = c("Winter", "Growing Season", "Fall Senescence"))
+  )
+
+#FCH4
+df_analysis_FCH4.2 <- landscape_FCH4 %>%
+  mutate(
+    # Create factors for analysis
+    landscape_feature = factor(landscape_feature, levels = c("Ponds, Riparian (N, NE, NW)", "Tundra, Road (E)", "Drainage Channels (S, SE)","Tundra, Wet Lowlands (W, SW)")),
+    season = factor(season, levels = c("Winter", "Growing Season", "Fall Senescence"))
+  )
+
+```
+
+#Stats on C by WD from landscape feature 
+
+note: FC is in umol/m2/s; FCH4 is in nmol/m2/s
+
+#Streamlined analyses code from Claude - non-parametric with BH corrections, filtered at n >= 5
+
+```{r}
+# FLUX ANALYSIS BY LANDSCAPE FEATURE
+# Tests if FCH4 and FC differ by landscape feature within each season
+
+library(dplyr)
+library(FSA)
+
+# Prepare data
+df_analysis_FC.2 <- landscape_FC %>%
+  mutate(
+    landscape_feature = factor(landscape_feature, 
+                               levels = c("Ponds, Riparian (N, NE, NW)", 
+                                        "Tundra, Road (E)", 
+                                        "Drainage Channels (S, SE)",
+                                        "Tundra, Wet Lowlands (W, SW)")),
+    season = factor(season, levels = c("Winter", "Growing Season", "Fall Senescence"))
+  )
+
+df_analysis_FCH4.2 <- landscape_FCH4 %>%
+  mutate(
+    landscape_feature = factor(landscape_feature, 
+                               levels = c("Ponds, Riparian (N, NE, NW)", 
+                                        "Tundra, Road (E)", 
+                                        "Drainage Channels (S, SE)",
+                                        "Tundra, Wet Lowlands (W, SW)")),
+    season = factor(season, levels = c("Winter", "Growing Season", "Fall Senescence"))
+  )
+
+# ============================================================================
+# 1. SUMMARY STATISTICS FUNCTION
+# ============================================================================
+
+create_flux_summary <- function(fch4_data, fc_data, min_n = 5) {
+  
+  # FCH4 summary
+  fch4_summary <- fch4_data %>%
+    group_by(season, landscape_feature) %>%
+    summarise(
+      n_obs_FCH4 = n(),
+      FCH4_mean = round(mean(FCH4, na.rm = TRUE), 3),
+      FCH4_se = round(sd(FCH4, na.rm = TRUE) / sqrt(n()), 3),
+      .groups = 'drop'
+    ) %>%
+    mutate(adequate_n_FCH4 = ifelse(n_obs_FCH4 >= min_n, "Yes", "No"))
+  
+  # FC summary  
+  fc_summary <- fc_data %>%
+    group_by(season, landscape_feature) %>%
+    summarise(
+      n_obs_FC = n(),
+      FC_mean = round(mean(FC, na.rm = TRUE), 3),
+      FC_se = round(sd(FC, na.rm = TRUE) / sqrt(n()), 3),
+      .groups = 'drop'
+    ) %>%
+    mutate(adequate_n_FC = ifelse(n_obs_FC >= min_n, "Yes", "No"))
+  
+  # Merge summaries
+  combined_summary <- full_join(fch4_summary, fc_summary, 
+                                by = c("season", "landscape_feature")) %>%
+    mutate(
+      n_obs_FCH4 = coalesce(n_obs_FCH4, 0),
+      n_obs_FC = coalesce(n_obs_FC, 0),
+      adequate_n_FCH4 = ifelse(n_obs_FCH4 >= min_n, "Yes", "No"),
+      adequate_n_FC = ifelse(n_obs_FC >= min_n, "Yes", "No")
+    ) %>%
+    arrange(season, landscape_feature)
+  
+  return(combined_summary)
+}
+
+# Create summary table
+summary_table <- create_flux_summary(df_analysis_FCH4.2, df_analysis_FC.2, min_n = 5)
+
+cat("\n", rep("=", 80), "\n")
+cat("SUMMARY STATISTICS BY SEASON AND LANDSCAPE FEATURE\n")
+cat("Minimum n = 5 for statistical analysis\n")
+cat(rep("=", 80), "\n")
+
+# Print by season
+for(season_name in c("Winter", "Growing Season", "Fall Senescence")) {
+  cat("\n--- ", toupper(season_name), " ---\n\n")
+  
+  season_data <- summary_table %>% filter(season == season_name)
+  
+  if(nrow(season_data) > 0) {
+    # FCH4 table
+    cat("** FCH4 (nmol/m²/s) **\n")
+    cat(sprintf("%-35s %6s %12s %10s\n", 
+                "Landscape Feature", "n", "Mean±SE", "Adequate"))
+    cat(rep("-", 70), "\n")
+    
+    for(i in 1:nrow(season_data)) {
+      if(season_data$n_obs_FCH4[i] > 0) {
+        mean_se <- sprintf("%.3f±%.3f", season_data$FCH4_mean[i], 
+                          season_data$FCH4_se[i])
+      } else {
+        mean_se <- "No data"
+      }
+      cat(sprintf("%-35s %6d %12s %10s\n",
+                 as.character(season_data$landscape_feature[i]),
+                 season_data$n_obs_FCH4[i],
+                 mean_se,
+                 season_data$adequate_n_FCH4[i]))
+    }
+    
+    # FC table
+    cat("\n** FC (µmol/m²/s) **\n")
+    cat(sprintf("%-35s %6s %12s %10s\n", 
+                "Landscape Feature", "n", "Mean±SE", "Adequate"))
+    cat(rep("-", 70), "\n")
+    
+    for(i in 1:nrow(season_data)) {
+      if(season_data$n_obs_FC[i] > 0) {
+        mean_se <- sprintf("%.3f±%.3f", season_data$FC_mean[i], 
+                          season_data$FC_se[i])
+      } else {
+        mean_se <- "No data"
+      }
+      cat(sprintf("%-35s %6d %12s %10s\n",
+                 as.character(season_data$landscape_feature[i]),
+                 season_data$n_obs_FC[i],
+                 mean_se,
+                 season_data$adequate_n_FC[i]))
+    }
+  } else {
+    cat("No data available\n")
+  }
+}
+
+# ============================================================================
+# 2. STATISTICAL ANALYSIS FUNCTION
+# ============================================================================
+
+run_landscape_analysis <- function(data, response_var, season_name, min_n = 5) {
+  
+  cat("\n", rep("=", 80), "\n")
+  cat("ANALYSIS:", toupper(response_var), "- SEASON:", toupper(season_name), "\n")
+  cat(rep("=", 80), "\n")
+  
+  # Check sample sizes by landscape feature
+  feature_counts <- table(data$landscape_feature)
+  adequate_features <- names(feature_counts[feature_counts >= min_n])
+  
+  # Find excluded features
+  all_possible_features <- levels(data$landscape_feature)
+  excluded_features <- all_possible_features[!all_possible_features %in% adequate_features]
+  
+  cat("\nSample sizes by landscape feature:\n")
+  for(feat in all_possible_features) {
+    n_obs <- ifelse(feat %in% names(feature_counts), feature_counts[feat], 0)
+    status <- ifelse(n_obs >= min_n, "✓ Adequate", "✗ Excluded")
+    cat(sprintf("  %-35s: n=%3d  %s\n", feat, n_obs, status))
+  }
+  
+  if(length(adequate_features) < 2) {
+    cat("\n*** INSUFFICIENT LANDSCAPE FEATURES FOR ANALYSIS ***\n")
+    cat("Need at least 2 features with n ≥", min_n, "\n")
+    return(NULL)
+  }
+  
+  # Filter to adequate features only
+  filtered_data <- data %>%
+    filter(landscape_feature %in% adequate_features) %>%
+    mutate(landscape_feature = factor(landscape_feature, levels = adequate_features))
+  
+  cat("\nFiltered dataset: n =", nrow(filtered_data), "observations\n")
+  cat("Analyzing", length(adequate_features), "landscape features\n")
+  
+  # Kruskal-Wallis test
+  if(nrow(filtered_data) >= 10) {
+    kw_formula <- as.formula(paste(response_var, "~ landscape_feature"))
+    kw_result <- kruskal.test(kw_formula, data = filtered_data)
+    
+    cat("\n** Kruskal-Wallis Test **\n")
+    cat("H statistic:", round(kw_result$statistic, 3), "\n")
+    cat("df:", kw_result$parameter, "\n")
+    cat("p-value:", format.pval(kw_result$p.value, digits = 4), "\n")
+    
+    # Dunn's post-hoc if significant
+    if(kw_result$p.value < 0.05) {
+      cat("\n*** SIGNIFICANT DIFFERENCES DETECTED ***\n")
+      cat("Running Dunn's post-hoc test with BH correction...\n\n")
+      
+      dunn_result <- dunnTest(kw_formula, data = filtered_data, method = "bh")
+      
+      # Show all comparisons
+      cat("** All Pairwise Comparisons **\n")
+      print(dunn_result$res[, c("Comparison", "Z", "P.unadj", "P.adj")])
+      
+      # Highlight significant pairs
+      significant_pairs <- dunn_result$res[dunn_result$res$P.adj < 0.05, ]
+      
+      if(nrow(significant_pairs) > 0) {
+        cat("\n** Significant Pairwise Differences (P.adj < 0.05) **\n")
+        for(i in 1:nrow(significant_pairs)) {
+          cat(sprintf("  %s\n    Z = %.3f, p.adj = %.4f\n", 
+                     significant_pairs$Comparison[i],
+                     significant_pairs$Z[i],
+                     significant_pairs$P.adj[i]))
+        }
+      } else {
+        cat("\nNo significant pairwise differences after BH correction\n")
+      }
+      
+      return(list(
+        kruskal_result = kw_result,
+        dunn_result = dunn_result,
+        filtered_data = filtered_data,
+        adequate_features = adequate_features,
+        excluded_features = excluded_features
+      ))
+      
+    } else {
+      cat("\nNo significant differences among landscape features\n")
+      return(list(
+        kruskal_result = kw_result,
+        filtered_data = filtered_data,
+        adequate_features = adequate_features,
+        excluded_features = excluded_features
+      ))
+    }
+  } else {
+    cat("\n*** INSUFFICIENT OBSERVATIONS FOR RELIABLE TESTING ***\n")
+    cat("Need at least 10 total observations\n")
+    return(NULL)
+  }
+}
+
+# ============================================================================
+# 3. RUN ANALYSES FOR ALL COMBINATIONS
+# ============================================================================
+
+cat("\n\n", rep("#", 80), "\n")
+cat("STATISTICAL ANALYSIS: DIFFERENCES BY LANDSCAPE FEATURE\n")
+cat(rep("#", 80), "\n")
+
+# Storage for results
+all_results <- list()
+
+# FCH4 - Winter
+fch4_winter_data <- df_analysis_FCH4.2 %>% filter(season == "Winter")
+all_results$FCH4_winter <- run_landscape_analysis(fch4_winter_data, "FCH4", "Winter")
+
+# FCH4 - Growing Season
+fch4_growing_data <- df_analysis_FCH4.2 %>% filter(season == "Growing Season")
+all_results$FCH4_growing <- run_landscape_analysis(fch4_growing_data, "FCH4", "Growing Season")
+
+# FCH4 - Fall Senescence
+fch4_fall_data <- df_analysis_FCH4.2 %>% filter(season == "Fall Senescence")
+all_results$FCH4_fall <- run_landscape_analysis(fch4_fall_data, "FCH4", "Fall Senescence")
+
+# FC - Winter
+fc_winter_data <- df_analysis_FC.2 %>% filter(season == "Winter")
+all_results$FC_winter <- run_landscape_analysis(fc_winter_data, "FC", "Winter")
+
+# FC - Growing Season
+fc_growing_data <- df_analysis_FC.2 %>% filter(season == "Growing Season")
+all_results$FC_growing <- run_landscape_analysis(fc_growing_data, "FC", "Growing Season")
+
+# FC - Fall Senescence
+fc_fall_data <- df_analysis_FC.2 %>% filter(season == "Fall Senescence")
+all_results$FC_fall <- run_landscape_analysis(fc_fall_data, "FC", "Fall Senescence")
+
+# ============================================================================
+# 4. FINAL SUMMARY
+# ============================================================================
+
+cat("\n\n", rep("#", 80), "\n")
+cat("FINAL SUMMARY: SIGNIFICANT RESULTS\n")
+cat(rep("#", 80), "\n\n")
+
+significant_found <- FALSE
+
+for(analysis_name in names(all_results)) {
+  result <- all_results[[analysis_name]]
+  
+  if(!is.null(result) && !is.null(result$kruskal_result)) {
+    if(result$kruskal_result$p.value < 0.05) {
+      significant_found <- TRUE
+      
+      # Parse analysis name
+      parts <- strsplit(analysis_name, "_")[[1]]
+      var_name <- parts[1]
+      season_name <- paste(parts[-1], collapse = " ")
+      
+      cat("✓", toupper(var_name), "-", toupper(season_name), "\n")
+      cat("  Kruskal-Wallis p =", format.pval(result$kruskal_result$p.value), "\n")
+      
+      if(!is.null(result$dunn_result)) {
+        sig_pairs <- result$dunn_result$res[result$dunn_result$res$P.adj < 0.05, ]
+        if(nrow(sig_pairs) > 0) {
+          cat("  Significant pairs:", nrow(sig_pairs), "\n")
+        }
+      }
+      cat("\n")
+    }
+  }
+}
+
+if(!significant_found) {
+  cat("No significant differences detected in any season/variable combination\n")
+}
+
+cat("\nAnalysis complete.\n")
+
+```
+#Figure with transparent boxes for landscape features with insufficient n to be used in analyses
+```{r}
+# BOXPLOTS BY LANDSCAPE FEATURE - MATCHING WIND DIRECTION FIGURE STYLE
+# Features with n < 5 shown as transparent
+# Boxplots show median (line) and mean (diamond)
+
+library(ggplot2)
+library(dplyr)
+
+# Set minimum sample size threshold
+min_n <- 5
+
+# ============================================================================
+# PREPARE DATA WITH ALPHA LEVELS AND SHORT LABELS
+# ============================================================================
+
+# Create short label mapping
+short_labels <- c(
+  "Ponds, Riparian (N, NE, NW)" = "Ponds,\nRiparian",
+  "Tundra, Road (E)" = "Tundra,\nRoad",
+  "Drainage Channels (S, SE)" = "Drainage\nChannels",
+  "Tundra, Wet Lowlands (W, SW)" = "Tundra,\nWet Lowlands"
+)
+
+# Convert FCH4 from nmol to µmol and add alpha column
+df_plot_FCH4 <- df_analysis_FCH4.2 %>%
+  mutate(
+    FCH4_umol = FCH4 * (1/1000),
+    landscape_short = factor(short_labels[as.character(landscape_feature)],
+                            levels = short_labels)
+  ) %>%
+  group_by(season, landscape_feature) %>%
+  mutate(
+    n_obs = n(),
+    alpha_level = ifelse(n_obs >= min_n, 1.0, 0.3)
+  ) %>%
+  ungroup()
+
+# Add alpha column for FC
+df_plot_FC <- df_analysis_FC.2 %>%
+  mutate(
+    landscape_short = factor(short_labels[as.character(landscape_feature)],
+                            levels = short_labels)
+  ) %>%
+  group_by(season, landscape_feature) %>%
+  mutate(
+    n_obs = n(),
+    alpha_level = ifelse(n_obs >= min_n, 1.0, 0.3)
+  ) %>%
+  ungroup()
+
+# ============================================================================
+# CREATE FCH4 PLOT
+# ============================================================================
+
+p_fch4 <- ggplot(df_plot_FCH4, aes(x = landscape_short, y = FCH4_umol, fill = landscape_feature)) +
+  
+  # Boxplot with conditional transparency
+  geom_boxplot(aes(alpha = alpha_level)) +
+  
+  # Add mean as diamond - filled with same color as box
+  stat_summary(aes(alpha = alpha_level, fill = landscape_feature), 
+               fun = mean, geom = "point", 
+               shape = 23, size = 4, color = "black", stroke = 0.5) +
+  
+  # Horizontal line at zero
+  geom_hline(yintercept = 0) +
+  
+  # Facet by season
+  facet_wrap(~ season, ncol = 3) +
+  
+  # Custom color scale
+  scale_fill_manual(
+    name = "Landscape Feature",
+    values = c(
+      "Drainage Channels (S, SE)" = "cyan3", 
+      "Ponds, Riparian (N, NE, NW)" = "royalblue", 
+      "Tundra, Road (E)" = "brown", 
+      "Tundra, Wet Lowlands (W, SW)" = "chartreuse4"
+    )
+  ) +
+  
+  # Transparency
+  scale_alpha_identity() +
+  
+  # Theme
+  theme_bw() +
+  theme(
+    axis.title = element_text(face = "bold", size = 11),
+    axis.text = element_text(face = "bold", size = 9),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+    plot.title = element_text(face = "bold", size = 12),
+    strip.text = element_text(face = "bold", size = 10),
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 9)
+  ) +
+  
+  # Labels
+  labs(
+    x = "Landscape Feature",
+    y = expression("Daily Average Half-hourly CH"[4] * " Flux (" * mu * mol ~ m^-2 ~ s^-1 * ")"),
+    title = expression("Daily Average Half-hourly CH"[4] ~ "Flux by Landscape Feature"),
+    caption = "Reduced opacity: n < 5"
+  )
+
+# ============================================================================
+# CREATE FC PLOT
+# ============================================================================
+
+p_fc <- ggplot(df_plot_FC, aes(x = landscape_short, y = FC, fill = landscape_feature)) +
+  
+  # Boxplot with conditional transparency
+  geom_boxplot(aes(alpha = alpha_level)) +
+  
+  # Add mean as diamond - filled with same color as box
+  stat_summary(aes(alpha = alpha_level, fill = landscape_feature), 
+               fun = mean, geom = "point", 
+               shape = 23, size = 4, color = "black", stroke = 0.5) +
+  
+  # Horizontal line at zero
+  geom_hline(yintercept = 0) +
+  
+  # Facet by season
+  facet_wrap(~ season, ncol = 3) +
+  
+  # Custom color scale
+  scale_fill_manual(
+    name = "Landscape Feature",
+    values = c(
+      "Drainage Channels (S, SE)" = "cyan3", 
+      "Ponds, Riparian (N, NE, NW)" = "royalblue", 
+      "Tundra, Road (E)" = "brown", 
+      "Tundra, Wet Lowlands (W, SW)" = "chartreuse4"
+    )
+  ) +
+  
+  # Transparency
+  scale_alpha_identity() +
+  
+  # Theme
+  theme_bw() +
+  theme(
+    axis.title = element_text(face = "bold", size = 11),
+    axis.text = element_text(face = "bold", size = 9),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+    plot.title = element_text(face = "bold", size = 12),
+    strip.text = element_text(face = "bold", size = 10),
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 9)
+  ) +
+  
+  # Labels
+  labs(
+    x = "Landscape Feature",
+    y = expression("Daily Average Half-hourly CO"[2] * " Flux (" * mu * mol ~ m^-2 ~ s^-1 * ")"),
+    title = expression("Daily Average Half-hourly CO"[2] ~ "Flux by Landscape Feature"),
+    caption = "Reduced opacity: n < 5"
+  )
+
+# ============================================================================
+# DISPLAY PLOTS
+# ============================================================================
+
+print(p_fch4)
+print(p_fc)
+
+cat("\nPlots created successfully!\n")
+cat("  - Transparent boxes indicate n < 5 (excluded from analysis)\n")
+cat("  - Diamond = mean, Box line = median\n")
+cat("  - Faceted by season (3 panels)\n")
+```
+#Adding letters to show statistical differences 
+
+```{r}
+# BOXPLOTS BY LANDSCAPE FEATURE - MATCHING WIND DIRECTION FIGURE STYLE
+# Features with n < 5 shown as transparent
+# Boxplots show median (line) and mean (diamond)
+
+library(ggplot2)
+library(dplyr)
+
+# Set minimum sample size threshold
+min_n <- 5
+
+# ============================================================================
+# PREPARE COMPACT LETTER DISPLAY DATA
+# ============================================================================
+
+# For significant comparisons, assign letters
+# Groups sharing letters are NOT significantly different
+# Groups with different letters ARE significantly different
+
+# FCH4 Growing Season: Drainage vs Ponds significant
+fch4_growing_letters <- data.frame(
+  season = "Growing Season",
+  landscape_short = factor(c("Ponds,\nRiparian", "Tundra,\nRoad", 
+                             "Drainage\nChannels", "Tundra,\nWet \nLowlands"),
+                          levels = short_labels),
+  letters = c("a", "ab", "b", "ab"),  # Drainage (b) differs from Ponds (a)
+  letter_y = c(0.045, 0.045, 0.045, 0.045)  # Adjust y position as needed
+)
+
+# FC Winter: Drainage vs Ponds significant
+fc_winter_letters <- data.frame(
+  season = "Winter",
+  landscape_short = factor(c("Ponds,\nRiparian", "Tundra,\nRoad", 
+                             "Drainage\nChannels", "Tundra,\nWet \nLowlands"),
+                          levels = short_labels),
+  letters = c("a", "ab", "b", "ab"),  # Drainage (b) differs from Ponds (a)
+  letter_y = c(2.5, 2.5, 2.5, 2.5)  # Adjust based on data range
+)
+
+# FC Growing Season: Drainage vs Ponds significant
+fc_growing_letters <- data.frame(
+  season = "Growing Season",
+  landscape_short = factor(c("Ponds,\nRiparian", "Tundra,\nRoad", 
+                             "Drainage\nChannels", "Tundra,\nWet \nLowlands"),
+                          levels = short_labels),
+  letters = c("a", "ab", "b", "ab"),  # Drainage (b) differs from Ponds (a)
+  letter_y = c(2.5, 2.5, 2.5, 2.5)  # Adjust based on data range
+)
+
+# ============================================================================
+# PREPARE DATA WITH ALPHA LEVELS AND SHORT LABELS
+# ============================================================================
+
+# Create short label mapping
+short_labels <- c(
+  "Ponds, Riparian (N, NE, NW)" = "Ponds,\nRiparian",
+  "Tundra, Road (E)" = "Tundra,\nRoad",
+  "Drainage Channels (S, SE)" = "Drainage\nChannels",
+  "Tundra, Wet Lowlands (W, SW)" = "Tundra,\nWet \nLowlands"
+)
+
+# Convert FCH4 from nmol to µmol and add alpha column
+df_plot_FCH4 <- df_analysis_FCH4.2 %>%
+  mutate(
+    FCH4_umol = FCH4 * (1/1000),
+    landscape_short = factor(short_labels[as.character(landscape_feature)],
+                            levels = short_labels)
+  ) %>%
+  group_by(season, landscape_feature) %>%
+  mutate(
+    n_obs = n(),
+    alpha_level = ifelse(n_obs >= min_n, 1.0, 0.3)
+  ) %>%
+  ungroup()
+
+# Add alpha column for FC
+df_plot_FC <- df_analysis_FC.2 %>%
+  mutate(
+    landscape_short = factor(short_labels[as.character(landscape_feature)],
+                            levels = short_labels)
+  ) %>%
+  group_by(season, landscape_feature) %>%
+  mutate(
+    n_obs = n(),
+    alpha_level = ifelse(n_obs >= min_n, 1.0, 0.3)
+  ) %>%
+  ungroup()
+
+# ============================================================================
+# CREATE FCH4 PLOT
+# ============================================================================
+
+p_fch4 <- ggplot(df_plot_FCH4, aes(x = landscape_short, y = FCH4_umol, fill = landscape_feature)) +
+  
+  # Boxplot with conditional transparency
+  geom_boxplot(aes(alpha = alpha_level)) +
+  
+  # Add mean as diamond - filled with same color as box
+  stat_summary(aes(alpha = alpha_level, fill = landscape_feature), 
+               fun = mean, geom = "point", 
+               shape = 23, size = 4, color = "black", stroke = 0.5) +
+  
+  # Add compact letter display for Growing Season only
+  geom_text(data = fch4_growing_letters,
+            aes(x = landscape_short, y = letter_y, label = letters),
+            inherit.aes = FALSE,
+            size = 5, fontface = "bold", color = "black") +
+  
+  # Horizontal line at zero
+  geom_hline(yintercept = 0) +
+  
+  # Facet by season
+  facet_wrap(~ season, ncol = 3) +
+  
+  # Custom color scale
+  scale_fill_manual(
+    name = "Landscape Feature",
+    values = c(
+      "Drainage Channels (S, SE)" = "cyan3", 
+      "Ponds, Riparian (N, NE, NW)" = "royalblue", 
+      "Tundra, Road (E)" = "brown", 
+      "Tundra, Wet Lowlands (W, SW)" = "chartreuse4"
+    )
+  ) +
+  
+  # Transparency
+  scale_alpha_identity() +
+  
+  # Theme
+  theme_bw() +
+  theme(
+    axis.title = element_text(face = "bold", size = 11),
+    axis.text = element_text(face = "bold", size = 9),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+    plot.title = element_text(face = "bold", size = 12),
+    strip.text = element_text(face = "bold", size = 10),
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 9)
+  ) +
+  
+  # Labels
+  labs(
+    x = "Landscape Feature",
+    y = expression("Daily Average Half-hourly CH"[4] * " Flux (" * mu * mol ~ m^-2 ~ s^-1 * ")"),
+    title = expression("Daily Average CH"[4] ~ "by Landscape Feature"),
+    caption = "Reduced opacity: n < 5. Diamond = mean, line = median. Letters indicate statistical groups for significant seasons (Kruskal-Wallis + Dunn's test, BH correction)."
+  )
+
+# ============================================================================
+# CREATE FC PLOT
+# ============================================================================
+
+p_fc <- ggplot(df_plot_FC, aes(x = landscape_short, y = FC, fill = landscape_feature)) +
+  
+  # Boxplot with conditional transparency
+  geom_boxplot(aes(alpha = alpha_level)) +
+  
+  # Add mean as diamond - filled with same color as box
+  stat_summary(aes(alpha = alpha_level, fill = landscape_feature), 
+               fun = mean, geom = "point", 
+               shape = 23, size = 4, color = "black", stroke = 0.5) +
+  
+  # Add compact letter display for Winter and Growing Season
+  geom_text(data = rbind(fc_winter_letters, fc_growing_letters),
+            aes(x = landscape_short, y = letter_y, label = letters),
+            inherit.aes = FALSE,
+            size = 5, fontface = "bold", color = "black") +
+  
+  # Horizontal line at zero
+  geom_hline(yintercept = 0) +
+  
+  # Facet by season
+  facet_wrap(~ season, ncol = 3) +
+  
+  # Custom color scale
+  scale_fill_manual(
+    name = "Landscape Feature",
+    values = c(
+      "Drainage Channels (S, SE)" = "cyan3", 
+      "Ponds, Riparian (N, NE, NW)" = "royalblue", 
+      "Tundra, Road (E)" = "brown", 
+      "Tundra, Wet Lowlands (W, SW)" = "chartreuse4"
+    )
+  ) +
+  
+  # Transparency
+  scale_alpha_identity() +
+  
+  # Theme
+  theme_bw() +
+  theme(
+    axis.title = element_text(face = "bold", size = 11),
+    axis.text = element_text(face = "bold", size = 9),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+    plot.title = element_text(face = "bold", size = 12),
+    strip.text = element_text(face = "bold", size = 10),
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 9)
+  ) +
+  
+  # Labels
+  labs(
+    x = "Landscape Feature",
+    y = expression("Daily Average Half-hourly CO"[2] * " Flux (" * mu * mol ~ m^-2 ~ s^-1 * ")"),
+    title = expression("Daily Average CO"[2] ~ "Flux by Landscape Feature"),
+    caption = "Reduced opacity: n < 5. Diamond = mean, line = median. Letters indicate statistical groups for significant seasons (Kruskal-Wallis + Dunn's test, BH correction)."
+  )
+
+# ============================================================================
+# DISPLAY PLOTS
+# ============================================================================
+
+print(p_fch4)
+print(p_fc)
+
+
+cat("\nPlots created successfully!\n")
+cat("  - Transparent boxes indicate n < 5 (excluded from analysis)\n")
+cat("  - Diamond = mean, Box line = median\n")
+cat("  - Faceted by season (3 panels)\n")
+
+
+    
+```
+
+
+#save figure with statistical lettering 
+```{r}
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/FCH4_by_landfeature_stats.png", p_fch4, 
+       width = 12, height = 7, dpi = 600)
+
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/FC_by_landfeature_stats.png", p_fc, 
+       width = 12, height = 7, dpi = 600)
 ```
