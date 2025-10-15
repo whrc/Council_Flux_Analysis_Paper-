@@ -30,6 +30,9 @@ library(RColorBrewer)
 library(pracma)
 library(dplyr)
 
+install.packages("writexl")
+library(writexl)
+
 
 Sys.setenv(TZ='UTC')
 ```
@@ -631,6 +634,7 @@ library(ggplot2)
 library(dplyr)
 library(lubridate)
 
+#TO DO: NEED TO FIX THESE DOYs, they're outdated - 10.14.2025 -- 
 # Create seasonal boundaries dataframe
 season_boundaries <- data.frame(
   year = rep(2017:2022, each = 3),  # now each year has 3 dates
@@ -2238,7 +2242,74 @@ sum(is.na(df_avg2$FCH4)) # 1855   - diff of 241 obs for FC vs FCH4
 
 ```
 
+#Autocorrelation check 
 
+Autocorr test - just in case, though since these are seasonal averages among years, autocorr should not be an issue
+
+ * Want to test autocorr among years, but within each season* 
+
+#Autocorr
+```{r}
+# For each season separately:
+winter_data <- seasonal_summary_all %>% 
+  filter(season == "Winter") %>%
+  arrange(year) #%>%
+  #pull(TS_3_gapfilled_mean)  # or whatever variable
+
+
+
+# Check autocorrelation
+acf(winter_data$TS_3_gapfilled_mean, lag.max = 2, plot = TRUE)
+
+# Or get the lag-1 autocorrelation value
+lag1_autocorr <- acf(winter_data$TS_3_gapfilled_mean, lag.max = 1, plot = FALSE)$acf[2]
+
+#Ljung-Box test for timeseries models / data -- if p<0.05, there is autocorr and residuals are not independent - not working here, not sure why
+#Box.test(winter_data$TS_3_gapfilled_mean, lag = 20, type = "Ljung-Box") #p<0.001
+
+
+#Durbin watson test for when a model has been fitted - checks if residuals are autocorrelated - DW = 2 = no autocorr, DW < 2 = pos autocorr, DW > 2 = neg autocorr
+
+#install.packages("lmtest")   
+library(lmtest)
+
+lm_test<- lm(TS_3_gapfilled_mean ~ year, data = winter_data)
+dwtest(lm_test)
+acf(residuals(lm_test), main = "ACF of model residuals")
+
+#not doing all tests, these seem ok / not autocorr 
+
+#growing season
+#SWC: ok 
+#Air temp GF: ok
+#soil temp GF: ok 
+#LE:
+#H:
+#G:
+#RH: 
+
+
+#fall
+#SWC: ok 
+#Air temp GF: ok 
+#soil temp GF: ok 
+#LE:
+#H:
+#G:
+#RH: 
+
+
+#winter
+#SWC: ok
+#Air temp GF: ok
+#soil temp GF: ok 
+#LE:
+#H:
+#G:
+#RH: 
+
+
+```
 
 
 #Stats - differences in variables among years within each season 
@@ -3909,7 +3980,7 @@ p_RH_with_stats
 
 
 #Manual annotations of stats for each panel 
-#VPD - Annotating each panel - code from Claude 
+#VPD - Annotating each panel - code from Claude - fixed with corrected Mann-Kendall test 10.14.2025
 ```{r}
 #Best way to add unique text to each panel in the facet_wrapped figure is to create a dataframe with the info you want to add to each panel 
 
@@ -3919,8 +3990,8 @@ vpd_stats <- data.frame(
   r2 = c(0.75, 0.84, 0.95),  # Replace with your actual adj R² values - Fall, Growing, Winter 
   slope = c(0.91, 0.81, 0.63),  # Replace with your actual slopes - Fall, Growing, Winter 
   p_value = c(0.037, 0.007, 0.001),  # Replace with your actual p-values - Fall, Growing, Winter 
-  kendall_p = c(0.017, 0.017, 0.017),
-  kendall_tau = c(1.00, 0.87, 0.87),
+  mann_kendall_p = c(0.027, 0.024, 0.024),
+  mann_kendall_tau = c(1.00, 0.87, 0.87),
   x = c(2017, 2017, 2017),  # x position for text
   y = c(10, 10, 10)  # y position for text - adjust based on your data range
 )
@@ -3930,8 +4001,8 @@ vpd_stats <- vpd_stats %>%
   mutate(label = paste0("adj R² = ", round(r2, 2), "\n",
                         "Slope = ", round(slope, 2), "\n",
                         "LM_p = ", format.pval(p_value, digits = 3), "\n",
-                        "Kendall_tau =", round(kendall_tau, 2), "\n",
-                        "Kendall_p =", format.pval(kendall_p, digits = 3)))
+                        "Mann-Kendall_tau =", round(mann_kendall_tau, 2), "\n",
+                        "Mann-Kendall_p =", format.pval(mann_kendall_p, digits = 3)))
 
 # Add to plot
 p_VPD_lm <- ggplot(seasonal_summary_all, aes(x = year, y = VPD_mean, color = year_factor)) +
@@ -3982,7 +4053,7 @@ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper
         width = 7, height = 5, dpi = 600)
 ```
 
-#RH - Annotating each panel - code from Claude 
+#RH - Annotating each panel - code from Claude - updated with corrected Mann-Kendall test for timeseries 
 ```{r}
 #Best way to add unique text to each panel in the facet_wrapped figure is to create a dataframe with the info you want to add to each panel 
 
@@ -3992,10 +4063,10 @@ rh_stats <- data.frame(
   r2 = c(0.89, 0.96, 0.97),  # Replace with your actual adj R² values - Fall, Growing, Winter 
   slope = c(-8.38, -6.59, -7.52),  # Replace with your actual slopes - Fall, Growing, Winter 
   p_value = c(0.01, 0.0004, 0.0002),  # Replace with your actual p-values - Fall, Growing, Winter 
-  kendall_p = c(0.017, 0.003, 0.003),
-  kendall_tau = c(-1.00, -1.00, -1.00),
-  x = c(2019.5, 2019.5, 2019.5),  # x position for text
-  y = c(90, 90, 90)  # y position for text - adjust based on your data range
+  mann_kendall_p = c(0.027, 0.009, 0.009),
+  mann_kendall_tau = c(-1.00, -1.00, -1.00),
+  x = c(2018, 2018, 2018),  # x position for text
+  y = c(100, 100, 100)  # y position for text - adjust based on your data range
 )
 
 # Create labels
@@ -4003,8 +4074,8 @@ rh_stats <- rh_stats %>%
   mutate(label = paste0("adj R² = ", round(r2, 2), "\n",
                         "Slope = ", round(slope, 2), "\n",
                         "LM_p = ", format.pval(p_value, digits = 4, scientific = FALSE), "\n", 
-                        "Kendall_tau =", round(kendall_tau, 2), "\n",
-                        "Kendall_p =", format.pval(kendall_p, digits = 4)))
+                        "Mann-Kendall_tau =", round(mann_kendall_tau, 2), "\n",
+                        "Mann-Kendall_p =", format.pval(mann_kendall_p, digits = 4)))
 
 # Add to plot
 p_rh_lm <- ggplot(seasonal_summary_all, aes(x = year, y = RH_mean, color = year_factor)) +
@@ -4053,5 +4124,865 @@ p_rh_lm
 ```{r}
 
 ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/RH_trends_stats.png", p_rh_lm, 
-        width = 7, height = 5, dpi = 600)
+        width = 7, height = 5, dpi = 600) 
 ```
+
+
+#Correcting the kendall's rank corr to mann-kendall test 
+
+```{r}
+# Tests for significant trends in environmental variables by season (2017-2022)
+
+library(dplyr)
+library(broom)
+library(Kendall)  # For proper Mann-Kendall test
+
+# ============================================================================
+# FUNCTION: Test trends for a variable within each season
+# ============================================================================
+
+test_seasonal_trends <- function(data, var_name, var_label, units) {
+  
+  results_list <- list()
+  seasons <- unique(data$season)
+  
+  for (s in seasons) {
+    season_data <- data %>% filter(season == s) %>% arrange(year)  # Ensure temporal order!
+    
+    # Extract variable values
+    y_vals <- season_data[[var_name]]
+    x_vals <- season_data$year
+    
+    # Skip if too many NAs
+    if (sum(!is.na(y_vals)) < 4) {
+      next
+    }
+    
+    # Linear regression
+    lm_model <- lm(y_vals ~ x_vals)
+    lm_summary <- summary(lm_model)
+    
+    # Test normality of RESIDUALS (not raw data)
+    residuals_vals <- residuals(lm_model)
+    shapiro_p <- shapiro.test(residuals_vals)$p.value
+    
+    # Extract key statistics from linear model
+    slope <- coef(lm_model)[2]
+    slope_se <- summary(lm_model)$coefficients[2, 2]
+    slope_p <- summary(lm_model)$coefficients[2, 4]
+    r_squared <- lm_summary$r.squared
+    adj_r_squared <- lm_summary$adj.r.squared
+    
+    # PROPER Mann-Kendall test for temporal trends
+    mk_test <- MannKendall(y_vals)
+    mk_tau <- as.numeric(mk_test$tau)
+    mk_p <- as.numeric(mk_test$sl)  # significance level (p-value)
+    
+    # Spearman correlation (alternative non-parametric option)
+    spearman_test <- cor.test(x_vals, y_vals, method = "spearman")
+    spearman_rho <- spearman_test$estimate
+    spearman_p <- spearman_test$p.value
+    
+    # Sen's slope (robust trend estimator, pairs well with Mann-Kendall)
+    sens_slope <- NA
+    tryCatch({
+      sens_test <- sens.slope(y_vals)
+      sens_slope <- as.numeric(sens_test$estimates)
+    }, error = function(e) {
+      sens_slope <- NA
+    })
+    
+    # Store results
+    results_list[[s]] <- data.frame(
+      season = s,
+      variable = var_label,
+      units = units,
+      n_years = length(y_vals),
+      mean_value = mean(y_vals, na.rm = TRUE),
+      
+      # Normality test
+      shapiro_p = shapiro_p,
+      normal = ifelse(shapiro_p > 0.05, "Yes", "No"),
+      
+      # Linear model (parametric)
+      slope = slope,
+      slope_se = slope_se,
+      slope_p = slope_p,
+      r_squared = r_squared,
+      adj_r_squared = adj_r_squared,
+      
+      # Non-parametric tests
+      mann_kendall_tau = mk_tau,
+      mann_kendall_p = mk_p,
+      sens_slope = sens_slope,
+      spearman_rho = spearman_rho,
+      spearman_p = spearman_p,
+      
+      # Significance (using appropriate test)
+      significant = ifelse(shapiro_p > 0.05, 
+                          ifelse(slope_p < 0.05, "Yes*", "No"),
+                          ifelse(mk_p < 0.05, "Yes**", "No")),
+      recommended_test = ifelse(shapiro_p > 0.05, 
+                               "Linear Regression", 
+                               "Mann-Kendall"),
+      
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # Combine all seasons
+  do.call(rbind, results_list)
+}
+
+# ============================================================================
+# RUN TESTS FOR ALL VARIABLES
+# ============================================================================
+
+cat("============================================================\n")
+cat("ANNUAL TREND ANALYSIS BY SEASON (2017-2022)\n")
+cat("============================================================\n\n")
+
+cat("Significance codes:\n")
+cat("* = Linear regression (residuals normal)\n")
+cat("** = Mann-Kendall test (residuals non-normal)\n")
+cat("p < 0.05 = significant trend\n\n")
+
+# GF Air Temperature
+cat("\n--- AIR TEMPERATURE (Gap-filled) ---\n")
+gf_ta_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TA_gapfilled_mean", 
+                                    "GF Air Temperature", 
+                                    "°C")
+print(gf_ta_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", "spearman_rho",                                "spearman_p", "recommended_test", "significant")])
+
+
+
+# Air Temperature (measured)
+cat("\n--- AIR TEMPERATURE (measured) ---\n")
+ta_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TA_mean", 
+                                    "Air Temperature", 
+                                    "°C")
+print(ta_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", "spearman_rho",                                "spearman_p", "recommended_test", "significant")])
+
+# GF Soil Temperature
+cat("\n--- SOIL TEMPERATURE (Gap-filled) ---\n")
+gf_ts_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TS_3_gapfilled_mean", 
+                                    "GF Soil Temperature", 
+                                    "°C")
+print(gf_ts_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", "spearman_rho",                                "spearman_p", "recommended_test", "significant")])
+
+# Soil Temperature (measured)
+cat("\n--- SOIL TEMPERATURE ---\n")
+ts_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TS_3_mean", 
+                                    "Soil Temperature", 
+                                    "°C")
+print(ts_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", "spearman_rho",                                "spearman_p", "recommended_test", "significant")])
+
+# Soil Moisture
+cat("\n--- SOIL MOISTURE ---\n")
+swc_results <- test_seasonal_trends(seasonal_summary_all, 
+                                     "SWC_3_mean", 
+                                     "Soil Moisture", 
+                                     "%")
+print(swc_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", "spearman_rho",                                "spearman_p", "recommended_test", "significant")])
+
+# VPD
+cat("\n--- VAPOR PRESSURE DEFICIT ---\n")
+vpd_results <- test_seasonal_trends(seasonal_summary_all, 
+                                     "VPD_mean", 
+                                     "VPD", 
+                                     "hPa")
+print(vpd_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", "spearman_rho",                                "spearman_p", "recommended_test", "significant")])
+
+# RH
+cat("\n--- RH ---\n")
+rh_results <- test_seasonal_trends(seasonal_summary_all, 
+                                     "RH_mean", 
+                                     "RH", 
+                                     "%")
+print(rh_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", "spearman_rho",                                "spearman_p", "recommended_test", "significant")])
+
+# Sensible Heat
+cat("\n--- SENSIBLE HEAT FLUX ---\n")
+h_results <- test_seasonal_trends(seasonal_summary_all, 
+                                   "H_mean", 
+                                   "Sensible Heat", 
+                                   "W/m²")
+print(h_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", "spearman_rho",                                "spearman_p", "recommended_test", "significant")])
+
+# Latent Heat
+cat("\n--- LATENT HEAT FLUX ---\n")
+le_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "LE_mean", 
+                                    "Latent Heat", 
+                                    "W/m²")
+print(le_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", "spearman_rho",                                "spearman_p", "recommended_test", "significant")])
+
+# Ground Heat
+cat("\n--- GROUND HEAT FLUX ---\n")
+g_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "G_mean", 
+                                    "Ground Heat Flux", 
+                                    "W/m²")
+print(g_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", "spearman_rho",                                "spearman_p", "recommended_test", "significant")])
+
+# ============================================================================
+# COMBINE ALL RESULTS INTO ONE TABLE
+# ============================================================================
+
+all_results <- rbind(gf_ta_results, ta_results, gf_ts_results, ts_results, swc_results, 
+                     vpd_results, rh_results, h_results, le_results, g_results)
+
+cat("\n\n============================================================\n")
+cat("SUMMARY: SIGNIFICANT TRENDS ONLY\n")
+cat("============================================================\n")
+
+significant_trends <- all_results %>%
+  filter(significant %in% c("Yes*", "Yes**")) %>%
+  select(variable, season, mean_value, units, slope, sens_slope,
+         mann_kendall_tau, mann_kendall_p, slope_p, recommended_test, significant)
+
+if (nrow(significant_trends) > 0) {
+  print(significant_trends)
+} else {
+  cat("No statistically significant trends detected at p < 0.05\n")
+}
+
+cat("\n\nInterpretation:\n")
+cat("- Positive slope/tau = increasing trend over time\n")
+cat("- Negative slope/tau = decreasing trend over time\n")
+cat("- slope = parametric trend estimate (°C/year, W/m²/year, etc.)\n")
+cat("- sens_slope = Sen's slope (robust non-parametric trend estimate)\n")
+cat("- mann_kendall_tau = strength of monotonic trend (-1 to +1)\n")
+cat("- Use recommended_test column to know which result to report\n")
+```
+
+
+#Make table of all stats results 
+```{r}
+# Combine all results
+all_results <- rbind(gf_ta_results, ta_results, gf_ts_results, ts_results, 
+                     swc_results, vpd_results, rh_results, h_results, 
+                     le_results, g_results)
+
+# View the complete table
+print(all_results)
+
+# Select specific columns for cleaner presentation
+supp_table <- all_results %>%
+  select(variable, season, n_years, mean_value, units,
+         slope, slope_se, slope_p, 
+         adj_r_squared,
+         mann_kendall_tau, mann_kendall_p, sens_slope,
+         spearman_rho, spearman_p,
+         shapiro_p, normal, recommended_test, significant) %>%
+  arrange(variable, season)
+
+
+supp_table
+
+# Export to CSV
+# write.csv(supp_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_met_trends_statisticscsv2", row.names = FALSE)
+
+write_xlsx(supp_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_met_trends_statistics_XL2.xlsx")
+
+```
+
+#trying to sens-slope to work -- Sens_slope goes hand in hand with the Mann-Kendall test for timeseries. It shows the magnitude of change across time (similar to slope in linear regression but robust to outliers and data that don't meet assumptions/autocorrelation)
+```{r}
+install.packages("trend")
+
+
+# Tests for significant trends in environmental variables by season (2017-2022)
+
+library(dplyr)
+library(broom)
+library(Kendall)  # For proper Mann-Kendall test
+library(trend)    # For Sen's slope (zyp package is an alternative)
+
+# ============================================================================
+# FUNCTION: Test trends for a variable within each season
+# ============================================================================
+
+test_seasonal_trends <- function(data, var_name, var_label, units) {
+  
+  results_list <- list()
+  seasons <- unique(data$season)
+  
+  for (s in seasons) {
+    season_data <- data %>% filter(season == s) %>% arrange(year)  # Ensure temporal order!
+    
+    # Extract variable values
+    y_vals <- season_data[[var_name]]
+    x_vals <- season_data$year
+    
+    # Skip if too many NAs
+    if (sum(!is.na(y_vals)) < 4) {
+      next
+    }
+    
+    # Linear regression
+    lm_model <- lm(y_vals ~ x_vals)
+    lm_summary <- summary(lm_model)
+    
+    # Test normality of RESIDUALS (not raw data)
+    residuals_vals <- residuals(lm_model)
+    shapiro_p <- shapiro.test(residuals_vals)$p.value
+    
+    # Extract key statistics from linear model
+    slope <- coef(lm_model)[2]
+    slope_se <- summary(lm_model)$coefficients[2, 2]
+    slope_p <- summary(lm_model)$coefficients[2, 4]
+    r_squared <- lm_summary$r.squared
+    adj_r_squared <- lm_summary$adj.r.squared
+    
+    # PROPER Mann-Kendall test for temporal trends
+    mk_test <- MannKendall(y_vals)
+    mk_tau <- as.numeric(mk_test$tau)
+    mk_p <- as.numeric(mk_test$sl)  # significance level (p-value)
+    
+    # Spearman correlation (alternative non-parametric option)
+    spearman_test <- cor.test(x_vals, y_vals, method = "spearman")
+    spearman_rho <- spearman_test$estimate
+    spearman_p <- spearman_test$p.value
+    
+    # Sen's slope (robust trend estimator, pairs well with Mann-Kendall)
+    sens_slope <- NA
+    tryCatch({
+      # Remove NAs before calculating Sen's slope
+      y_clean <- y_vals[!is.na(y_vals)]
+      if(length(y_clean) >= 3) {  # Need at least 3 observations
+        sens_test <- sens.slope(y_clean)
+        sens_slope <- as.numeric(sens_test$estimates)
+      }
+    }, error = function(e) {
+      # If trend package doesn't work, try zyp package as alternative
+      tryCatch({
+        if(requireNamespace("zyp", quietly = TRUE)) {
+          y_clean <- y_vals[!is.na(y_vals)]
+          sens_result <- zyp::zyp.sen(y_clean ~ seq_along(y_clean))
+          sens_slope <- as.numeric(coef(sens_result)[2])
+        }
+      }, error = function(e2) {
+        cat("Warning: Sen's slope failed for", var_label, "in", s, "\n")
+      })
+    })
+    
+    # Store results
+    results_list[[s]] <- data.frame(
+      season = s,
+      variable = var_label,
+      units = units,
+      n_years = length(y_vals),
+      mean_value = mean(y_vals, na.rm = TRUE),
+      
+      # Normality test
+      shapiro_p = shapiro_p,
+      normal = ifelse(shapiro_p > 0.05, "Yes", "No"),
+      
+      # Linear model (parametric)
+      slope = slope,
+      slope_se = slope_se,
+      slope_p = slope_p,
+      r_squared = r_squared,
+      adj_r_squared = adj_r_squared,
+      
+      # Non-parametric tests
+      mann_kendall_tau = mk_tau,
+      mann_kendall_p = mk_p,
+      sens_slope = sens_slope,
+      spearman_rho = spearman_rho,
+      spearman_p = spearman_p,
+      
+      # Significance (using appropriate test)
+      significant = ifelse(shapiro_p > 0.05, 
+                          ifelse(slope_p < 0.05, "Yes*", "No"),
+                          ifelse(mk_p < 0.05, "Yes**", "No")),
+      recommended_test = ifelse(shapiro_p > 0.05, 
+                               "Linear Regression", 
+                               "Mann-Kendall"),
+      
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # Combine all seasons
+  do.call(rbind, results_list)
+}
+
+# ============================================================================
+# RUN TESTS FOR ALL VARIABLES
+# ============================================================================
+
+cat("============================================================\n")
+cat("ANNUAL TREND ANALYSIS BY SEASON (2017-2022)\n")
+cat("============================================================\n\n")
+
+cat("Significance codes:\n")
+cat("* = Linear regression (residuals normal)\n")
+cat("** = Mann-Kendall test (residuals non-normal)\n")
+cat("p < 0.05 = significant trend\n\n")
+
+# GF Air Temperature
+cat("\n--- AIR TEMPERATURE (Gap-filled) ---\n")
+gf_ta_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TA_gapfilled_mean", 
+                                    "GF Air Temperature", 
+                                    "°C")
+print(gf_ta_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope",
+                     "recommended_test", "significant")])
+
+# Air Temperature (measured)
+cat("\n--- AIR TEMPERATURE (measured) ---\n")
+ta_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TA_mean", 
+                                    "Air Temperature", 
+                                    "°C")
+print(ta_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope",
+                     "recommended_test", "significant")])
+
+# GF Soil Temperature
+cat("\n--- SOIL TEMPERATURE (Gap-filled) ---\n")
+gf_ts_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TS_3_gapfilled_mean", 
+                                    "GF Soil Temperature", 
+                                    "°C")
+print(gf_ts_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope",
+                     "recommended_test", "significant")])
+
+# Soil Temperature (measured)
+cat("\n--- SOIL TEMPERATURE ---\n")
+ts_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "TS_3_mean", 
+                                    "Soil Temperature", 
+                                    "°C")
+print(ts_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope",
+                     "recommended_test", "significant")])
+
+# Soil Moisture
+cat("\n--- SOIL MOISTURE ---\n")
+swc_results <- test_seasonal_trends(seasonal_summary_all, 
+                                     "SWC_3_mean", 
+                                     "Soil Moisture", 
+                                     "%")
+print(swc_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                      "mann_kendall_tau", "mann_kendall_p", "sens_slope",
+                      "recommended_test", "significant")])
+
+# VPD
+cat("\n--- VAPOR PRESSURE DEFICIT ---\n")
+vpd_results <- test_seasonal_trends(seasonal_summary_all, 
+                                     "VPD_mean", 
+                                     "VPD", 
+                                     "hPa")
+print(vpd_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                      "mann_kendall_tau", "mann_kendall_p", "sens_slope",
+                      "recommended_test", "significant")])
+
+# RH
+cat("\n--- RH ---\n")
+rh_results <- test_seasonal_trends(seasonal_summary_all, 
+                                     "RH_mean", 
+                                     "RH", 
+                                     "%")
+print(rh_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                      "mann_kendall_tau", "mann_kendall_p", "sens_slope",
+                      "recommended_test", "significant")])
+
+# Sensible Heat
+cat("\n--- SENSIBLE HEAT FLUX ---\n")
+h_results <- test_seasonal_trends(seasonal_summary_all, 
+                                   "H_mean", 
+                                   "Sensible Heat", 
+                                   "W/m²")
+print(h_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                    "mann_kendall_tau", "mann_kendall_p", "sens_slope",
+                    "recommended_test", "significant")])
+
+# Latent Heat
+cat("\n--- LATENT HEAT FLUX ---\n")
+le_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "LE_mean", 
+                                    "Latent Heat", 
+                                    "W/m²")
+print(le_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope",
+                     "recommended_test", "significant")])
+
+# Ground Heat
+cat("\n--- GROUND HEAT FLUX ---\n")
+g_results <- test_seasonal_trends(seasonal_summary_all, 
+                                    "G_mean", 
+                                    "Ground Heat Flux", 
+                                    "W/m²")
+print(g_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope",
+                     "recommended_test", "significant")])
+
+# ============================================================================
+# COMBINE ALL RESULTS INTO ONE TABLE
+# ============================================================================
+
+all_results <- rbind(gf_ta_results, ta_results, gf_ts_results, ts_results, swc_results, 
+                     vpd_results, rh_results, h_results, le_results, g_results)
+
+cat("\n\n============================================================\n")
+cat("SUMMARY: SIGNIFICANT TRENDS ONLY\n")
+cat("============================================================\n")
+
+significant_trends <- all_results %>%
+  filter(significant %in% c("Yes*", "Yes**")) %>%
+  select(variable, season, mean_value, units, slope, sens_slope,
+         mann_kendall_tau, mann_kendall_p, slope_p, recommended_test, significant)
+
+if (nrow(significant_trends) > 0) {
+  print(significant_trends)
+} else {
+  cat("No statistically significant trends detected at p < 0.05\n")
+}
+
+cat("\n\nInterpretation:\n")
+cat("- Positive slope/tau = increasing trend over time\n")
+cat("- Negative slope/tau = decreasing trend over time\n")
+cat("- slope = parametric trend estimate (°C/year, W/m²/year, etc.)\n")
+cat("- sens_slope = Sen's slope (robust non-parametric trend estimate)\n")
+cat("- mann_kendall_tau = strength of monotonic trend (-1 to +1)\n")
+cat("- Use recommended_test column to know which result to report\n")
+```
+
+#Make table of all stats results 
+```{r}
+# Combine all results
+all_results <- rbind(gf_ta_results, ta_results, gf_ts_results, ts_results, 
+                     swc_results, vpd_results, rh_results, h_results, 
+                     le_results, g_results)
+
+# View the complete table
+print(all_results)
+
+# Select specific columns for cleaner presentation
+supp_table <- all_results %>%
+  select(variable, season, n_years, mean_value, units,
+         slope, slope_se, slope_p, 
+         adj_r_squared,
+         mann_kendall_tau, mann_kendall_p, sens_slope,
+         spearman_rho, spearman_p,
+         shapiro_p, normal, recommended_test, significant) %>%
+  arrange(variable, season)
+
+
+supp_table
+
+# Export to CSV
+# write.csv(supp_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_met_trends_statisticscsv2", row.names = FALSE)
+
+write_xlsx(supp_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_met_trends_statistics_XL3.xlsx")
+```
+
+
+
+#Trying to automate visuals that use the appropriate test (linear reg for slope, R2, p or mann-kendall for tau, sens-slope, and mk p)
+
+#this doesn't really work bc n=6, so everything is coming up as normal/homogeneity of var, when it may or may not be. Best to use non-parametric here but leaving this code becuase it's a good reference for automation 
+
+```{r}
+# VISUALIZATION: Seasonal Trends Over Time (2017-2022)
+# Automatically plots linear regression or Sen's slope based on normality
+
+library(ggplot2)
+library(dplyr)
+library(trend)
+library(gridExtra)
+
+# ============================================================================
+# FUNCTION: Create trend plot for a variable within a season
+# ============================================================================
+
+plot_seasonal_trend <- function(data, var_name, season_name, 
+                                result_row, var_label, units) {
+  
+  # Filter data for this season and arrange by year
+  plot_data <- data %>% 
+    filter(season == season_name) %>%
+    arrange(year) %>%
+    select(year, value = !!sym(var_name)) %>%
+    filter(!is.na(value))
+  
+  # Determine which test to use
+  use_parametric <- result_row$normal == "Yes"
+  
+  # Create base plot
+  p <- ggplot(plot_data, aes(x = year, y = value)) +
+    geom_point(size = 4, alpha = 0.7, color = "#2166ac") +
+    theme_bw() +
+    theme(
+      plot.title = element_text(face = "bold", size = 13),
+      axis.title = element_text(face = "bold", size = 11),
+      axis.text = element_text(size = 10),
+      panel.grid.minor = element_blank()
+    )
+  
+  # Add appropriate trend line and statistics
+  if(use_parametric) {
+    # Use linear regression
+    p <- p + 
+      geom_smooth(method = "lm", se = TRUE, 
+                  color = "#d73027", fill = "#d73027", 
+                  alpha = 0.2, linewidth = 1.2) +
+      labs(
+        title = paste0(var_label, " - ", season_name),
+        subtitle = "Linear Regression (Normal Residuals)",
+        x = "Year",
+        y = paste0(var_label, " (", units, ")")
+      )
+    
+    # Create annotation text
+    stats_text <- paste0(
+      "Slope = ", sprintf("%.4f", result_row$slope), " ", units, "/year",
+      "\nR² = ", sprintf("%.3f", result_row$adj_r_squared),
+      "\np = ", format.pval(result_row$slope_p, digits = 3),
+      "\n", ifelse(result_row$significant == "Yes*", "✓ Significant", "Not significant")
+    )
+    
+  } else {
+    # Use Sen's slope
+    # Calculate Sen's slope line for plotting
+    sens_slope_val <- result_row$sens_slope
+    
+    if(!is.na(sens_slope_val)) {
+      # Calculate intercept for Sen's slope line
+      # Use median point as anchor
+      median_year <- median(plot_data$year)
+      median_value <- median(plot_data$value)
+      sens_intercept <- median_value - sens_slope_val * median_year
+      
+      p <- p + 
+        geom_abline(slope = sens_slope_val, 
+                    intercept = sens_intercept,
+                    color = "#1b7837", linewidth = 1.2) +
+        # Add a ribbon for uncertainty (optional - using IQR as rough estimate)
+        stat_smooth(method = "lm", formula = y ~ x, 
+                   se = TRUE, alpha = 0.1, 
+                   color = NA, fill = "#1b7837")
+    }
+    
+    p <- p + 
+      labs(
+        title = paste0(var_label, " - ", season_name),
+        subtitle = "Mann-Kendall Trend Test (Non-Normal Residuals)",
+        x = "Year",
+        y = paste0(var_label, " (", units, ")")
+      )
+    
+    # Create annotation text
+    stats_text <- paste0(
+      "Sen's Slope = ", sprintf("%.4f", result_row$sens_slope), " ", units, "/year",
+      "\nτ = ", sprintf("%.3f", result_row$mann_kendall_tau),
+      "\np = ", format.pval(result_row$mann_kendall_p, digits = 3),
+      "\n", ifelse(result_row$significant == "Yes**", "✓ Significant", "Not significant")
+    )
+  }
+  
+  # Add statistics annotation
+  p <- p + 
+    annotate("text", 
+             x = min(plot_data$year), 
+             y = max(plot_data$value), 
+             label = stats_text,
+             hjust = 0, vjust = 1, 
+             size = 3.5, 
+             fontface = "bold",
+             color = ifelse(use_parametric, "#d73027", "#1b7837"))
+  
+  return(p)
+}
+
+# ============================================================================
+# FUNCTION: Create plots for all seasons of a variable
+# ============================================================================
+
+plot_all_seasons <- function(data, var_name, results_df, var_label, units, 
+                             save_file = TRUE) {
+  
+  plot_list <- list()
+  seasons <- unique(results_df$season)
+  
+  for(s in seasons) {
+    result_row <- results_df %>% filter(season == s)
+    
+    if(nrow(result_row) == 0) next
+    
+    p <- plot_seasonal_trend(data, var_name, s, result_row, var_label, units)
+    plot_list[[s]] <- p
+  }
+  
+  # Combine plots
+  if(length(plot_list) > 0) {
+    combined <- grid.arrange(grobs = plot_list, ncol = 2)
+    
+    # Save if requested
+    # if(save_file) {
+    #   filename <- paste0(gsub(" ", "_", var_label), "_seasonal_trends.png")
+    #   ggsave(filename, combined, width = 12, height = 8, dpi = 300)
+    #   cat("Saved:", filename, "\n")
+    #}
+    
+    return(combined)
+  }
+}
+
+# ============================================================================
+# CREATE PLOTS FOR SIGNIFICANT TRENDS
+# ============================================================================
+
+cat("============================================================\n")
+cat("CREATING SEASONAL TREND VISUALIZATIONS\n")
+cat("============================================================\n\n")
+
+cat("Red lines = Linear Regression (normal residuals)\n")
+cat("Green lines = Sen's Slope (non-normal residuals)\n\n")
+
+# Example usage - modify based on your variable names in seasonal_summary_all
+
+# Air Temperature (gap-filled)
+cat("\n--- Plotting Air Temperature (Gap-filled) ---\n")
+if(exists("gf_ta_results")) {
+  plot_all_seasons(seasonal_summary_all, "TA_gapfilled_mean", 
+                   gf_ta_results, "Air Temperature (GF)", "°C")
+}
+
+# Soil Temperature (gap-filled)
+cat("\n--- Plotting Soil Temperature (Gap-filled) ---\n")
+if(exists("gf_ts_results")) {
+  plot_all_seasons(seasonal_summary_all, "TS_3_gapfilled_mean", 
+                   gf_ts_results, "Soil Temperature (GF)", "°C")
+}
+
+# Soil Moisture
+cat("\n--- Plotting Soil Moisture ---\n")
+if(exists("swc_results")) {
+  plot_all_seasons(seasonal_summary_all, "SWC_3_mean", 
+                   swc_results, "Soil Moisture", "%")
+}
+
+# VPD
+cat("\n--- Plotting VPD ---\n")
+if(exists("vpd_results")) {
+  plot_all_seasons(seasonal_summary_all, "VPD_mean", 
+                   vpd_results, "VPD", "hPa")
+}
+
+# RH
+cat("\n--- Plotting RH ---\n")
+if(exists("rh_results")) {
+  plot_all_seasons(seasonal_summary_all, "RH_mean", 
+                   rh_results, "Relative Humidity", "%")
+}
+
+# Sensible Heat
+cat("\n--- Plotting Sensible Heat ---\n")
+if(exists("h_results")) {
+  plot_all_seasons(seasonal_summary_all, "H_mean", 
+                   h_results, "Sensible Heat Flux", "W/m²")
+}
+
+# Latent Heat
+cat("\n--- Plotting Latent Heat ---\n")
+if(exists("le_results")) {
+  plot_all_seasons(seasonal_summary_all, "LE_mean", 
+                   le_results, "Latent Heat Flux", "W/m²")
+}
+
+# Ground Heat
+cat("\n--- Plotting Ground Heat ---\n")
+if(exists("g_results")) {
+  plot_all_seasons(seasonal_summary_all, "G_mean", 
+                   g_results, "Ground Heat Flux", "W/m²")
+}
+
+# ============================================================================
+# CREATE A SUMMARY PLOT OF ONLY SIGNIFICANT TRENDS
+# ============================================================================
+
+cat("\n\n--- Creating Summary Plot (Significant Trends Only) ---\n")
+
+# Combine all results
+if(exists("all_results")) {
+  significant_results <- all_results %>%
+    filter(significant %in% c("Yes*", "Yes**"))
+  
+  if(nrow(significant_results) > 0) {
+    sig_plot_list <- list()
+    
+    for(i in 1:nrow(significant_results)) {
+      row <- significant_results[i,]
+      
+      # Determine the variable name in the dataset
+      var_map <- list(
+        "GF Air Temperature" = "TA_gapfilled_mean",
+        "Air Temperature" = "TA_mean",
+        "GF Soil Temperature" = "TS_3_gapfilled_mean",
+        "Soil Temperature" = "TS_3_mean",
+        "Soil Moisture" = "SWC_3_mean",
+        "VPD" = "VPD_mean",
+        "RH" = "RH_mean",
+        "Sensible Heat" = "H_mean",
+        "Latent Heat" = "LE_mean",
+        "Ground Heat Flux" = "G_mean"
+      )
+      
+      var_name <- var_map[[row$variable]]
+      if(!is.null(var_name)) {
+        p <- plot_seasonal_trend(seasonal_summary_all, var_name, 
+                                row$season, row, row$variable, row$units)
+        sig_plot_list[[paste(row$variable, row$season)]] <- p
+      }
+    }
+    
+    if(length(sig_plot_list) > 0) {
+      n_plots <- length(sig_plot_list)
+      ncol_sig <- ifelse(n_plots <= 2, 2, 3)
+      nrow_sig <- ceiling(n_plots / ncol_sig)
+      
+      sig_combined <- grid.arrange(
+        grobs = sig_plot_list, 
+        ncol = ncol_sig,
+        top = grid::textGrob("Significant Seasonal Trends (2017-2022)", 
+                            gp = grid::gpar(fontsize = 16, fontface = "bold"))
+      )
+      
+      # ggsave("Significant_seasonal_trends_combined.png", sig_combined,
+      #        width = 6 * ncol_sig, height = 5 * nrow_sig, dpi = 300)
+      cat("Saved: Significant_seasonal_trends_combined.png\n")
+    }
+  } else {
+    cat("No significant trends to plot.\n")
+  }
+}
+
+cat("\n\nVisualization complete!\n")
+cat("- Individual seasonal trend plots saved for each variable\n")
+cat("- Red lines = Linear regression (normal residuals)\n")
+cat("- Green lines = Sen's slope (non-normal residuals)\n")
+cat("- Statistics shown match the recommended test\n")
+```
+
+
+
