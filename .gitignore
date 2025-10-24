@@ -40,3 +40,5 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 flux_met_regression_results.rds
+FCH4_quadratic_LME_model.rds
+df_monthly_FCH4_vs_met_vars
