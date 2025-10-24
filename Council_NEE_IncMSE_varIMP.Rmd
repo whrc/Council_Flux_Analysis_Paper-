@@ -504,6 +504,7 @@ varImpPlot(rf.nee_6.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 
 #reduced model 7: removing soil moist-temp interaction, vpd, rg, *tair, and le  (swapping tair and tsoil)  
+#**Final model used for AMF council paper **
 ```{r}
 
 rf.nee_7.cc <- randomForest(nee ~ tsoil + rh + ws + wd + swc + h,
@@ -576,6 +577,8 @@ varImpPlot(rf.nee_8.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #Notes: 
 #*tsoil has higher incMSE compared to interaction term; tair inMSE also slightly higher 
+#*
+#*#but I think this clouds the individual tsoil and swc, so this is exploratory, will not use interaction in final model for AMF Council paper 
 
 ```
 
@@ -732,7 +735,7 @@ data.frame(model = c("airT", "soilT", "interaction"),
 # soilT	      2.173410	           0.6487229		
 # interaction	2.167859	           0.6496200	
 
-#looking at models 6 - 11 
+#looking at models 9 - 11 
 oob_mse_9 <- tail(rf.nee_9.cc$mse, 1)
 oob_r2_9  <- tail(rf.nee_9.cc$rsq, 1)
 
