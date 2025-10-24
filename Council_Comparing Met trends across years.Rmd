@@ -2242,6 +2242,344 @@ sum(is.na(df_avg2$FCH4)) # 1855   - diff of 241 obs for FC vs FCH4
 
 ```
 
+# Trends in FC and FCH4 - using winter adj budgets for FC and FCH4
+
+Plot fluxes - plot GF fluxes (uses the winter-adj calculated C fluxes and budgets*)
+
+#winter-adj dataset (calculated based on winter - growing season proportions)
+
+```{r}
+library(readxl)
+adj_C_budgets <- read_xlsx(path ="C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Seasonal_Cbudgets_Table_all_years_for_paper.xlsx", sheet = "R_template_adjWinterCdaily_flux" )
+
+
+# Reshape data for plotting
+adj_C_budgets_long<- adj_C_budgets %>%
+  pivot_longer(cols = c(Net_CH4_adj_dailyflux, Net_CO2_adj_dailyflux),
+               names_to = "flux_type",
+               values_to = "flux")
+
+# Convert year to factor for consistent color mapping
+adj_C_budgets$year_factor <- as.factor(adj_C_budgets$Year)
+adj_C_budgets$Season <- as.factor(adj_C_budgets$Season)
+
+```
+
+```{r}
+
+#== FC =================
+p_FC <- ggplot(adj_C_budgets) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = Net_CO2_adj_dailyflux, color = year_factor, group = Year), 
+             size = 3) +
+    geom_errorbar(aes(x = Year,
+                    ymin = Net_CO2_adj_dailyflux - Net_CO2_adj_dailyflux_se, 
+                    ymax = Net_CO2_adj_dailyflux + Net_CO2_adj_dailyflux_se),
+                width = 0.2, linewidth = 0.8) +
+
+  # geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+  #             method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+ # facet_wrap(~ season, ncol = 3) +
+  facet_wrap(~factor(Season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3)+
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Daily Avg HH FC Flux by Season (2017-2022) - Winter Adj",
+       x = "Year", 
+      # y = "umol/m2/day") +
+    y = expression(CO[2]~flux~(umol~m^{-2}~s^{-1}))) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_FC
+
+#======== FCH4 ===================
+
+p_FCH4 <- ggplot(adj_C_budgets) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = Net_CH4_adj_dailyflux, color = year_factor, group = Year), 
+             size = 3) +
+   geom_errorbar(aes(x = Year,
+                    ymin = Net_CH4_adj_dailyflux - Net_CH4_adj_dailyflux_se, 
+                    ymax = Net_CH4_adj_dailyflux + Net_CH4_adj_dailyflux_se),
+                width = 0.2, linewidth = 0.8) +
+
+  # geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+  #             method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+ # facet_wrap(~ season, ncol = 3) +
+  facet_wrap(~factor(Season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3)+
+  
+  scale_color_manual(values = year_colors) +
+  scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(title = "Daily Avg HH FCH4 Flux by Season (2017-2022)- Winter Adj",
+       x = "Year", 
+      # y = "nmol/m2/day") +
+   y = expression(CH[4]~flux~(nmol~m^{-2}~s^{-1}))) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_FCH4
+```
+
+#save images
+```{r}
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_mean_adjFC_by_year.png", p_FC,
+       width = 8, height = 5, dpi = 600)
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_mean_adjFCH4_by_year.png", p_FCH4,
+       width = 8, height = 5, dpi = 600)
+```
+
+
+
+#Autocorr - seasonal FC and FCH4
+
+#Autocorr checks - make a df for each season, then test the relationship you're planning to analyze.Within winter months, is FCH4 related to VPD? --> 
+Within winter data, are the residuals from FCH4 ~ VPD autocorrelated?
+```{r}
+#test by flux and season - yep, all autocorr
+FC_fall <- adj_C_budgets%>%
+  filter(Season == "Fall Senescence")
+#autocorrelation - want everything below the blue dotted line 
+acf(FC_fall$Net_CO2_adj_dailyflux, na.action = na.omit, main = "Autocorrelation of variable")
+#partial autocorr - removes effect of intermediate lags, still want everything below blue dotted line 
+pacf(FC_fall$Net_CO2_adj_dailyflux, na.action = na.omit, main = "Partial Autocorrelation")
+
+
+
+#Results: yep severely autocorrelated 
+
+
+#Ljung-Box test for timeseries models / data -- if p<0.05, there is autocorr and residuals are not independent 
+Box.test(FC_fall$Net_CO2_adj_dailyflux, lag = 20, type = "Ljung-Box") #p<0.001
+
+
+#Durbin watson test for when a model has been fitted - checks if residuals are autocorrelated - DW = 2 = no autocorr, DW < 2 = pos autocorr, DW > 2 = neg autocorr
+
+#install.packages("lmtest")   
+library(lmtest)
+
+lm_test<- lm(Net_CO2_adj_dailyflux ~ Year, data = FC_fall)
+dwtest(lm_test)
+acf(residuals(lm_test), main = "ACF of model residuals")
+
+#FCH4
+#fall - p = 0.1, ok 
+#winter - p = 0.2 - ok
+#growing- p = 0.2 - ok
+
+
+
+#FC
+#fall - p = 0.15 - ok
+#winter - p = 0.15 - ok
+#growing- p = 0.14 - ok
+
+
+
+```
+
+
+
+#Mann-Kendall test for timeseries - no autocorr
+```{r}
+library(dplyr)
+library(broom)
+library(Kendall)  # For proper Mann-Kendall test
+library(trend)    # For Sen's slope
+
+# ============================================================================
+# FUNCTION: Test trends for a variable within each season
+# ============================================================================
+
+test_seasonal_trends <- function(data, var_name, var_label) {
+  
+  results_list <- list()
+  seasons <- unique(data$Season)  # Capital S
+  
+  for (s in seasons) {
+    season_data <- data %>% 
+      filter(Season == s) %>%  # Capital S
+      arrange(Year)  # Capital Y - ensure temporal order!
+    
+    # Extract variable values
+    y_vals <- season_data[[var_name]]
+    x_vals <- season_data$Year  # Capital Y
+    
+    # Skip if too many NAs
+    if (sum(!is.na(y_vals)) < 4) {
+      next
+    }
+    
+    # Linear regression
+    lm_model <- lm(y_vals ~ x_vals)
+    lm_summary <- summary(lm_model)
+    
+    # Test normality of RESIDUALS (not raw data)
+    residuals_vals <- residuals(lm_model)
+    shapiro_p <- shapiro.test(residuals_vals)$p.value
+    
+    # Extract key statistics from linear model
+    slope <- coef(lm_model)[2]
+    slope_se <- summary(lm_model)$coefficients[2, 2]
+    slope_p <- summary(lm_model)$coefficients[2, 4]
+    r_squared <- lm_summary$r.squared
+    adj_r_squared <- lm_summary$adj.r.squared
+    
+    # PROPER Mann-Kendall test for temporal trends
+    mk_test <- MannKendall(y_vals)
+    mk_tau <- as.numeric(mk_test$tau)
+    mk_p <- as.numeric(mk_test$sl)  # significance level (p-value)
+    
+    # Spearman correlation (alternative non-parametric option)
+    spearman_test <- cor.test(x_vals, y_vals, method = "spearman")
+    spearman_rho <- spearman_test$estimate
+    spearman_p <- spearman_test$p.value
+    
+    # Sen's slope (robust trend estimator, pairs well with Mann-Kendall)
+    sens_slope <- NA
+    tryCatch({
+      sens_test <- sens.slope(y_vals)
+      sens_slope <- as.numeric(sens_test$estimates)
+    }, error = function(e) {
+      sens_slope <- NA
+    })
+    
+    # Store results
+    results_list[[s]] <- data.frame(
+      season = s,  # lowercase for output consistency
+      variable = var_label,
+      n_years = length(y_vals),
+      mean_value = mean(y_vals, na.rm = TRUE),
+      
+      # Normality test
+      shapiro_p = shapiro_p,
+      normal = ifelse(shapiro_p > 0.05, "Yes", "No"),
+      
+      # Linear model (parametric)
+      slope = slope,
+      slope_se = slope_se,
+      slope_p = slope_p,
+      r_squared = r_squared,
+      adj_r_squared = adj_r_squared,
+      
+      # Non-parametric tests
+      mann_kendall_tau = mk_tau,
+      mann_kendall_p = mk_p,
+      sens_slope = sens_slope,
+      spearman_rho = spearman_rho,
+      spearman_p = spearman_p,
+      
+      # Significance (using appropriate test)
+      significant = ifelse(shapiro_p > 0.05, 
+                          ifelse(slope_p < 0.05, "Yes*", "No"),
+                          ifelse(mk_p < 0.05, "Yes**", "No")),
+      recommended_test = ifelse(shapiro_p > 0.05, 
+                               "Linear Regression", 
+                               "Mann-Kendall"),
+      
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # Combine all seasons
+  do.call(rbind, results_list)
+}
+
+# ============================================================================
+# RUN TESTS FOR ALL VARIABLES
+# ============================================================================
+
+cat("============================================================\n")
+cat("ANNUAL TREND ANALYSIS BY SEASON (2017-2022)\n")
+cat("============================================================\n\n")
+
+cat("Significance codes:\n")
+cat("* = Linear regression (residuals normal)\n")
+cat("** = Mann-Kendall test (residuals non-normal)\n")
+cat("p < 0.05 = significant trend\n\n")
+
+# FC (CO2)
+cat("\n--- FC (CO2) ---\n")
+FC_results <- test_seasonal_trends(adj_C_budgets, 
+                                    "Net_CO2_adj_dailyflux", 
+                                    "Daily Avg half-hourly CO2 Flux")
+
+print(FC_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", 
+                     "spearman_rho", "spearman_p", 
+                     "recommended_test", "significant")])
+
+# FCH4 (CH4)
+cat("\n--- FCH4 (CH4) ---\n")
+FCH4_results <- test_seasonal_trends(adj_C_budgets, 
+                                     "Net_CH4_adj_dailyflux", 
+                                     "Daily Avg half-hourly CH4 Flux")
+
+print(FCH4_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                       "mann_kendall_tau", "mann_kendall_p", "sens_slope", 
+                       "spearman_rho", "spearman_p",
+                       "recommended_test", "significant")])
+
+# ============================================================================
+# COMBINE ALL RESULTS INTO ONE TABLE
+# ============================================================================
+
+all_results <- rbind(FC_results, FCH4_results)
+
+cat("\n\n============================================================\n")
+cat("SUMMARY: SIGNIFICANT TRENDS ONLY\n")
+cat("============================================================\n")
+
+significant_trends <- all_results %>%
+  filter(significant %in% c("Yes*", "Yes**")) %>%
+  dplyr::select(variable, season, mean_value, slope, sens_slope,
+         mann_kendall_tau, mann_kendall_p, slope_p, recommended_test, significant)
+
+if (nrow(significant_trends) > 0) {
+  print(significant_trends)
+} else {
+  cat("No statistically significant trends detected at p < 0.05\n")
+}
+
+cat("\n\nInterpretation:\n")
+cat("- Positive slope/tau = increasing trend over time\n")
+cat("- Negative slope/tau = decreasing trend over time\n")
+cat("- slope = parametric trend estimate (flux units/year)\n")
+cat("- sens_slope = Sen's slope (robust non-parametric trend estimate)\n")
+cat("- mann_kendall_tau = strength of monotonic trend (-1 to +1)\n")
+cat("- Use recommended_test column to know which result to report\n")
+
+#Results: no sig diffs in either LM or Mann-kendall 
+```
+
+
+
+#Met variables 
+
+
 #Autocorrelation check 
 
 Autocorr test - just in case, though since these are seasonal averages among years, autocorr should not be an issue
@@ -2251,21 +2589,22 @@ Autocorr test - just in case, though since these are seasonal averages among yea
 #Autocorr
 ```{r}
 # For each season separately:
-winter_data <- seasonal_summary_all %>% 
-  filter(season == "Winter") %>%
+growing_data <- seasonal_summary_all %>% 
+  filter(season == "Growing Season", na.rm = TRUE) %>%
   arrange(year) #%>%
   #pull(TS_3_gapfilled_mean)  # or whatever variable
 
 
 
 # Check autocorrelation
-acf(winter_data$TS_3_gapfilled_mean, lag.max = 2, plot = TRUE)
+acf(na.omit(growing_data$RH_mean, lag.max = 2, plot = TRUE))
+
 
 # Or get the lag-1 autocorrelation value
-lag1_autocorr <- acf(winter_data$TS_3_gapfilled_mean, lag.max = 1, plot = FALSE)$acf[2]
+lag1_autocorr <- acf(na.omit(growing_data$RH_mean, lag.max = 1, plot = FALSE))$acf[2]
 
 #Ljung-Box test for timeseries models / data -- if p<0.05, there is autocorr and residuals are not independent - not working here, not sure why
-#Box.test(winter_data$TS_3_gapfilled_mean, lag = 20, type = "Ljung-Box") #p<0.001
+#Box.test(growing_data$TS_3_gapfilled_mean, lag = 20, type = "Ljung-Box") #p<0.001
 
 
 #Durbin watson test for when a model has been fitted - checks if residuals are autocorrelated - DW = 2 = no autocorr, DW < 2 = pos autocorr, DW > 2 = neg autocorr
@@ -2273,7 +2612,7 @@ lag1_autocorr <- acf(winter_data$TS_3_gapfilled_mean, lag.max = 1, plot = FALSE)
 #install.packages("lmtest")   
 library(lmtest)
 
-lm_test<- lm(TS_3_gapfilled_mean ~ year, data = winter_data)
+lm_test<- lm(RH_mean ~ year, data = growing_data)
 dwtest(lm_test)
 acf(residuals(lm_test), main = "ACF of model residuals")
 
@@ -2283,30 +2622,30 @@ acf(residuals(lm_test), main = "ACF of model residuals")
 #SWC: ok 
 #Air temp GF: ok
 #soil temp GF: ok 
-#LE:
-#H:
-#G:
-#RH: 
+#LE: ok 
+#H: ok 
+#G: ok 
+#RH: p 0.08 - ok 
 
 
 #fall
 #SWC: ok 
 #Air temp GF: ok 
 #soil temp GF: ok 
-#LE:
-#H:
-#G:
-#RH: 
+#LE: ok 
+#H: ok 
+#G: ok 
+#RH: ok 
 
 
 #winter
 #SWC: ok
 #Air temp GF: ok
 #soil temp GF: ok 
-#LE:
-#H:
-#G:
-#RH: 
+#LE:  ok 
+#H: p 0.07, ok 
+#G: ok 
+#RH: ok 
 
 
 ```
@@ -4128,7 +4467,7 @@ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper
 ```
 
 
-#Correcting the kendall's rank corr to mann-kendall test 
+#Correcting the kendall's rank corr to mann-kendall test for timeseries data 
 
 ```{r}
 # Tests for significant trends in environmental variables by season (2017-2022)
