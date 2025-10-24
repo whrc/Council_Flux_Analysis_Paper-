@@ -475,7 +475,8 @@ varImpPlot(rf.fch4_6.cc, type = 1, main = "CH4: Variable Importance (%IncMSE)")
 #swc then wd then tair most important when tsoil removed 
 
 ```
-#reduced model 7: removing VPD, soil moist-temp interaction, rg, *tair, and le    
+#reduced model 7: removing VPD, soil moist-temp interaction, rg, *tair, and le 
+#**Final model for AMF Council paper ** 
 ```{r}
 
 rf.fch4_7.cc <- randomForest(fch4 ~ tsoil + rh + ws + wd + swc + h,
