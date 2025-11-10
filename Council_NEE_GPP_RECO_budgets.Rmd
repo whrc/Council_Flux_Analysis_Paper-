@@ -1,0 +1,349 @@
+---
+title: "Counil_NEE_GPP_RECO_budgets"
+output: html_document
+date: "2025-10-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+# Set working directory and then Load data
+
+```{r}
+
+#original half-hourly dataframe 
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#needs continuous day variable - daily avg, calculated in processing steps
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.4.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+```
+
+#Not winter adj 
+
+#Table: seasonal and annual NEE, GPP, RECO budgets 
+```{r}
+# Load necessary packages
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+#Annual and seasonal summaries with SE 
+
+#no SE for CO2 and CH4 fluxes as these are sums **** then we calc averages with SE for the met variables 
+
+# Annual summaries with standard errors
+# Annual summaries with total C budget
+annual_budgets <- df_avg %>%
+  group_by(year = year(date)) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    NEE_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    RECO_budget = sum(RECO_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    GPP_budget = sum(GPP_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+      )
+
+# Seasonal summaries with total C budget
+seasonal_budgets <- df_avg %>%
+  group_by(year = year(date), season) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+   NEE_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    RECO_budget = sum(RECO_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    GPP_budget = sum(GPP_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+      )
+
+
+print(annual_budgets)
+print(seasonal_budgets)
+```
+
+
+
+#### Seasonal GPP & RECO avg daily flux by year  - not winter adj
+```{r}
+
+# Calculate daily average CO2 flux (GPP_F) & RECO_GF by season with standard error - in umol/m2/s
+#GAP FiLLED
+seasonal_GPP.RECO_summary_gf <- df_avg %>%
+  group_by(year, season) %>%
+  summarize(
+    mean_GPP = mean(GPP_F, na.rm = TRUE),
+    se_GPP = sd(GPP_F, na.rm = TRUE)/sqrt(sum(!is.na(GPP_F))),
+    mean_RECO = mean(RECO_F, na.rm = TRUE),
+    se_RECO = sd(RECO_F, na.rm = TRUE)/sqrt(sum(!is.na(RECO_F))),
+    n_days = n()  # number of days per season
+  )
+
+# Format the results with mean ± SE
+seasonal_GPP.RECO_summary_gf2 <- seasonal_GPP.RECO_summary_gf %>%
+  mutate(
+    GPP_flux = sprintf("%.2f ± %.2f", mean_GPP, se_GPP),
+    RECO_flux = sprintf("%.2f ± %.2f", mean_RECO, se_RECO),
+  ) %>%
+  select(year, season, GPP_flux, RECO_flux, n_days)
+         
+seasonal_GPP.RECO_summary_gf
+
+# Save to Excel
+library(writexl)
+write_xlsx(seasonal_GPP.RECO_summary_gf2, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_dailyavg_GPP.RECO.GF_summary.xlsx")
+
+```
+
+
+#### Figure
+```{r}
+#make a df_long to plot both fluxes on same fig 
+seasonal_GPP.RECO_long <- seasonal_GPP.RECO_summary_gf %>%
+  pivot_longer(cols = c(mean_RECO, mean_GPP),
+               names_to = "flux_type",
+               values_to = "flux_value")
+  
+
+seasonal_GPP.RECO_bargraph <- ggplot(seasonal_GPP.RECO_long %>% 
+                                    filter(year != "2023") %>% #takes out 2023
+                                        mutate(season = factor(season, levels = c("Winter", "Growing Season", "Fall Senescence"))), #lets you determine order of seasons
+ aes(x = factor(year), y = flux_value, fill = flux_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~season) + 
+  geom_hline(yintercept=0, colour = "black")+ 
+  labs(title = expression(bold(Seasonal~GPP~and~RECO~by~Year)),
+       x = "Year",
+        fill = "Season",
+       #y = "CO2 Budget (gC/m²/season)") +
+   y = expression(bold(Daily~Avg~CO[2]~Flux~(umolC/m^2/s)))) +
+  scale_fill_manual(values = c("darkgreen","brown4"))+
+   scale_y_continuous(
+      limits = c(-1, 4),  # Adjust these limits as needed
+      breaks = seq(-1, 4, by = 0.5))+
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 14, face = "bold"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+                                  axis.text = element_text(size = 12, face = "bold"),
+                                  axis.title = element_text(size = 14, face = "bold"))
+
+seasonal_GPP.RECO_bargraph
+```
+
+
+
+
+
+#Budgets - pre-winter adj
+
+#Year, season 
+```{r}
+# Annual summaries with standard errors
+
+annual_GPP.RECO_budgets_gf <- df_avg %>%
+  group_by(year = year(date)) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    RECO_budget = sum(RECO_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    GPP_budget = sum(GPP_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    NEE_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+       days = n()
+  )
+
+annual_GPP.RECO_budgets_gf 
+
+#double checking with HH data to ensure they match - yup all good 
+annual_GPP.RECO_budgets_HH_gf <- df %>%
+  group_by(year = year(date)) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    RECO_budget = sum(RECO_F * (60*30*(1/1000000)*12), na.rm = TRUE),
+    GPP_budget = sum(GPP_F * (60*30*(1/1000000)*12), na.rm = TRUE),
+    NEE_budget = sum(FC_F * (60*30*(1/1000000)*12), na.rm = TRUE),
+       days = n()
+  )
+
+annual_GPP.RECO_budgets_HH_gf
+
+
+# Seasonal summaries with total C budget
+seasonal_GPP.RECO_budgets_gf2 <- df_avg %>%
+  group_by(year = year(date), season) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    RECO_budget = sum(RECO_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    GPP_budget = sum(GPP_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    NEE_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    days = n()
+  )
+
+seasonal_GPP.RECO_budgets_gf 
+
+# Save to Excel - now units in gC/m2
+library(writexl)
+write_xlsx(annual_GPP.RECO_budgets_gf, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_GPP.RECO.GF_budgets.xlsx")
+
+write_xlsx(seasonal_GPP.RECO_budgets_gf, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_GPP.RECO.GF_budgets.xlsx")
+```
+
+#### Figure - annual 
+```{r}
+#make a df_long to plot both fluxes on same fig 
+seasonal_GPP.RECO_budgets_long <- seasonal_GPP.RECO_budgets_gf%>%
+  pivot_longer(cols = c(RECO_budget, GPP_budget, NEE_budget),
+               names_to = "flux_type",
+               values_to = "flux_value")
+  
+
+seasonal_GPP.RECO_budget_bargraph <- ggplot(seasonal_GPP.RECO_budgets_long %>% 
+                                    filter(year != "2023") %>% #takes out 2023
+                                    filter(flux_type != "NEE_budget") %>% #take out NEE 
+                                        mutate(season = factor(season, levels = c("Winter", "Growing Season", "Fall Senescence"))), #lets you determine order of seasons
+ aes(x = factor(year), y = flux_value, fill = flux_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~season) + 
+  geom_hline(yintercept=0, colour = "black")+ 
+  labs(title = expression(bold(Seasonal~GPP~and~RECO~Budgets~by~Year)),
+       x = "Year",
+        fill = "Flux Type",
+       #y = "CO2 Budget (gC/m²/season)") +
+   y = expression(bold(gC/m^2))) +
+  scale_fill_manual(
+       values = c("darkgreen","brown4"),
+       labels = c("RECO_budget" = "RECO",
+                  "GPP_budget" =))+
+   scale_y_continuous(
+      limits = c(-20, 340),  # Adjust these limits as needed
+      breaks = seq(-20, 360, by = 20))+
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 14, face = "bold"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+                                  axis.text = element_text(size = 12, face = "bold"),
+                                  axis.title = element_text(size = 14, face = "bold"))
+
+seasonal_GPP.RECO_budget_bargraph 
+```
+ 
+ 
+#Winter adj based on daily avg flux from growing season : winter proportions 
+```{r}
+#FC in umol/m2/s
+
+# Calculate 0.254 daily RECO flux during growing season season with standard error
+
+seasonal_RECO_summary_gf_winteradjRECO <- df_avg %>%
+  filter(season == "Growing Season") %>%
+  group_by(year, season) %>%
+  summarize(
+    mean_flux = abs(mean(RECO_F*0.254, na.rm = TRUE)),
+    se_flux = sd(RECO_F*0.254, na.rm = TRUE)/sqrt(sum(!is.na(RECO_F))),
+    n_days = n()  # number of days per season
+  )
+
+#renaming the ~47% of growing season avg variable name 
+seasonal_RECO_summary_gf_winteradjRECO$season[seasonal_RECO_summary_gf_winteradjRECO$season=="Growing Season"] <- "Winter Adj RECO DailyAvg"
+
+
+seasonal_RECO_summary_gf_winteradjRECO 
+
+# Format the results with mean ± SE
+seasonal_RECO_summary_gf_winteradjRECO_formatted <- seasonal_RECO_summary_gf_winteradjRECO  %>%
+  mutate(
+    flux = sprintf("%.2f ± %.2f", mean_flux, se_flux)
+  ) %>%
+  select(season, flux)
+         
+seasonal_RECO_summary_gf_winteradjRECO_formatted
+
+# # Save to Excel
+# library(writexl)
+write_xlsx(seasonal_RECO_summary_gf_winteradjRECO_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteradj_dailyAvg_RECO_summary_gf.xlsx")
+
+
+```
+
+
+#Winter adj RECO budgets - multiplied the winter adj daily avg flux by # days within winter season to calc new RECO budgets 
+
+```{r}
+
+library(readxl)
+adj_RECO.GPP_budgets <- read_xlsx(path ="C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_seasonal_GPP.RECO.GF_budgets.xlsx", sheet = "R template" )
+
+
+# Reshape data for plotting
+adj_RECO.GPP_budgets_long<- adj_RECO.GPP_budgets %>%
+  pivot_longer(cols = c(GPP_budget, RECO_budget, adj_RECO_budget),
+               names_to = "flux_type",
+               values_to = "flux_value")
+
+
+
+```
+
+
+#Winter adj RECO Figure
+
+```{r}
+
+adj_RECO.GPP_budgets_bargraph <- ggplot(adj_RECO.GPP_budgets_long%>% 
+                                    filter(year != "2023") %>% #takes out 2023
+                                    filter(flux_type != "NEE_budget") %>%
+                                      filter(flux_type != "RECO_budget") %>% #take out NEE and non-winter adj RECO
+                                        mutate(season = factor(season, levels = c("Winter", "Growing Season", "Fall Senescence"))), #lets you determine order of seasons
+ aes(x = factor(year), y = flux_value, fill = flux_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~season) + 
+  geom_hline(yintercept=0, colour = "black")+ 
+  labs(title = expression(bold(Seasonal~GPP~and~Adjusted~RECO~Budgets~by~Year)),
+       x = "Year",
+        fill = "Flux Type",
+       #y = "CO2 Budget (gC/m²/season)") +
+   y = expression(bold(gC/m^2))) +
+  scale_fill_manual(
+       values = c("brown4", "darkgreen"),
+       labels = c("adj_RECO_budget" = "Winter Adjusted RECO Budget",
+                  "GPP_budget" = "GPP Budget"))+
+   scale_y_continuous(
+      limits = c(-20, 340),  # Adjust these limits as needed
+      breaks = seq(-20, 360, by = 20))+
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 14, face = "bold"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+                                  axis.text = element_text(size = 12, face = "bold"),
+                                  axis.title = element_text(size = 14, face = "bold"))
+
+adj_RECO.GPP_budgets_bargraph
+```
+
+#save fig 
+```{r}#Save - winter-adj CH4 based on daily fluxes
+```{r}
+# #Save CH4 seasonal budgets 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adj_seasonal_budgets_RECO_dailyflux.png", adj_RECO.GPP_budgets_bargraph,
+       width = 15, height = 7, dpi = 600)
+```
