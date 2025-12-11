@@ -1202,7 +1202,7 @@ write.csv(x=df, file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfi
 
 
 #Function for fast-plotting from Claude
-#Creating timeseries for each year, with seasonal delineations 
+####Creating timeseries for each year, with seasonal delineations 
 ```{r}
 #Below code sets it up as a function so all you have to do it change the years at the bottom, and re-run, and it'll adjust the figure with associated seasonal delineations (code from Claude)
 
