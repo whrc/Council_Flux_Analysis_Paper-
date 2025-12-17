@@ -879,29 +879,30 @@ df_avg_2023_check <- df_avg_2023 %>%
   select(date, FC_F, TA, TA_gapfilled, TS_3_1_1, TS_3_gapfilled, DOY, season)
 
 #first day of summer: DOY 157, 6/6
-#first day of Winter: DOY 
-#first day of Fall: DOY 234, 8/22
-
-
+#first day of Winter: DOY - NA, data incomplete 
+#first day of Fall: DOY 234, 8/22 maybe, but jumps back to neg NEE, data incomplete can't verify
 
 # Add seasonal delineations to the daily average dataframe 
 
 #don't think data is complete enough to calc this 2023 year's budget 
 
 
-# df_avg_2023 <- df_avg_2023 %>%
-#   mutate(
-#        season = case_when(
-#       (DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',
-#       (DOY >= 145 & DOY <= 245) ~ 'Growing Season',
-#       (DOY >= 289 | DOY <= 144) ~ 'Winter',
-#       TRUE ~ NA_character_
-#     )
-#   )
+df_avg_2023 <- df_avg_2023 %>%
+  mutate(
+       season = case_when(
+      #(DOY >= 246 & DOY <= 284) ~ 'Fall Senescence',  -- NA
+     # (DOY >= 157 & DOY <= 245) ~ 'Growing Season', have start of growing but not end 
+     # (DOY >= 289 | DOY <= 144) ~ 'Winter',
+         (DOY >= 1 & DOY <= 156) ~ "Winter",
+         (DOY >= 157) ~ "Growing Season",
+         
+      TRUE ~ NA_character_
+    )
+  )
 
 ```
 
-####2023 Seasonal Plot with NEE and temp 
+####2023 Seasonal Plot with NEE and temp - NA, not enough data to complete, only here for reference 
 ```{r}
 #2023
 # colnames(df_avg_2023)[colnames(df_avg_2023) == "date"] <- "day"
@@ -937,10 +938,8 @@ seasonal_timeseries_2023_plot <- ggplot(data = df_avg_2023) +
   
   # vertical lines for specific events
   geom_vline(xintercept = as.POSIXct("2023-06-06"))+ #end of winter, DOY 157 
-  geom_vline(xintercept =  as.POSIXct("2023-08-24"))+ #end of growing season-->not enough to estimate (?)
-  #geom_vline(xintercept =  as.POSIXct("2023-10-7")) + #end of Fall Senescence, not enough to estimate 
-     #geom_vline(xintercept =  as.POSIXct("2023-06-12"))+ #end of snowmelt, DOY 163
-  
+  #geom_vline(xintercept =  as.POSIXct("2023-08-24"))+ #end of growing season-->not enough to estimate (?)
+
 # Labels for each vertical line within figure 
 annotate("text", size = 3, x = as.POSIXct("2023-03-01"), y = -4, label = "Winter", color = "black") +
 annotate("text", size = 3, x = as.POSIXct("2023-07-10"), y = -4, label = "Growing Season", color = "black") +
@@ -1133,7 +1132,10 @@ df<- df %>%
       year == "2022" & (DOY >= 143 & DOY <= 249) ~ 'Growing Season',
       year == "2022" & (DOY >= 281 | DOY <= 142) ~ 'Winter',
       
-      # not doing one for 2023 ** incomplete year 
+      # 2023 incomplete but adding winter for 2022-2023 winter budget
+      year == "2023"  & (DOY >= 157) ~ 'Growing Season',
+      year == "2023" & (DOY >= 1 & DOY <= 156) ~ "Winter",
+      
       TRUE ~ NA_character_
     )
   )
@@ -1183,7 +1185,10 @@ df_avg2 <- df_avg2 %>%
       year == "2022" & (DOY >= 143 & DOY <= 249) ~ 'Growing Season',
       year == "2022" & (DOY >= 281 | DOY <= 142) ~ 'Winter',
       
-      # not doing one for 2023 ** incomplete year 
+           # 2023 incomplete but adding winter for 2022-2023 winter budget
+      year == "2023"  & (DOY >= 157) ~ 'Growing Season',
+      year == "2023" & (DOY >= 1 & DOY <= 156) ~ "Winter",
+      
       TRUE ~ NA_character_
     )
   )
@@ -1227,6 +1232,7 @@ season_boundaries <- data.frame(
     142, 255, 282,  # Growing season start, Fall start, Winter start
     # 2022
     143, 250, 281   # Growing season start, Fall start, Winter start
+    
   )
 )
 
