@@ -1,0 +1,1513 @@
+---
+title: "Council_Seasonal_Annual_Flux_Budgets_Met_Means"
+output: html_document
+date: "2025-12-17"
+#Important notes:
+  # - includes SWC_3 when TS_3_gf (gapfilled soil temp) is > 2 to avoid frozen ground / freezing processes 
+  # -includes winters that span across 2 years (winter of 2021 inclues winter 2021 - end of winter in 2022)
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+# Set working directory and then Load data
+
+```{r}
+
+#HH daataset
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+#needs continuous day variable - daily avg, calculated in processing steps - using ".4" with GF temps, two WD classifications, and corrected seasonal delineations 
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.4.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+```
+
+
+#Set year colors for consistency 
+```{r}
+# Define consistent year colors
+year_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+# Convert year to factor for consistent color mapping
+df_avg$year_factor <- as.factor(df_avg$year)
+```
+
+#SWC when ground is not frozen - SWC measurements in frozen ground are not reliable with specific calibrations or data processing 
+
+####Create variable for SWC_3 means when winter is excluded and TS_3_gf is > 2 degC = SWC_3_nf
+```{r}
+df_avg <- df_avg %>%
+  mutate(
+    # SWC_3_nf: Only use SWC when soil is not frozen (TS > 2°C)
+    # Set to NA when TS <= 2 or when it's winter season
+    SWC_3_nf = case_when(
+      season == "Winter" ~ NA_real_,              # Exclude all winter
+      TS_3_gapfilled <= 2 ~ NA_real_,             # Exclude frozen soil
+      TRUE ~ SWC_3_1_1                            # Use actual SWC otherwise
+    )
+  )
+
+#Data inclusion/exclusion diagnostics: 
+cat(sprintf("  Original SWC observations: %d\n", sum(!is.na(df_avg$SWC_3_1_1))))
+cat(sprintf("  Non-frozen SWC observations: %d\n", sum(!is.na(df_avg$SWC_3_nf))))
+cat(sprintf("  Excluded: %d observations\n\n", 
+            sum(!is.na(df_avg$SWC_3_1_1)) - sum(!is.na(df_avg$SWC_3_nf))))
+
+#check
+ggplot(df_avg %>%
+         filter(season != "Winter" & TS_3_gapfilled > 2)) +
+  geom_point(aes(x = TS_3_gapfilled, y = SWC_3_1_1)) +
+  geom_point(aes(TS_3_gapfilled, y = SWC_3_nf), color = "red", shape = 5)
+
+#check
+ggplot(df_avg) +
+  geom_point(aes(x = TS_3_gapfilled, y = SWC_3_1_1)) +
+  geom_point(aes(TS_3_gapfilled, y = SWC_3_nf), color = "red", shape = 5)
+
+
+```
+
+#Table 1 in Council paper: seasonal and annual C fluxes, total C budget & met variables
+
+#Annual Budgets / Means 
+
+#Annual - not winter-adj
+```{r}
+library(dplyr)
+library(lubridate)
+
+#Annual and seasonal summaries with SE 
+
+#no SE for CO2 and CH4 fluxes as these are sums **** then we calc averages with SE for the met variables 
+
+annual_budgets <- df_avg %>%
+  group_by(year = year(date)) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    #pre winter-adj
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    #pre winter-adj 
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    #pre winter-adj
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
+    # GPP budget
+    GPP_budget = sum(GPP_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    # pre-winter adj RECO budget
+    RECO_budget = sum(RECO_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    #measured, not GF
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+    #SWC_3 all 
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    #SWC_3_nf (not frozen) 
+    mean_soil_moisture_nf = mean(SWC_3_nf, na.rm = TRUE),
+    se_soil_moisture_nf = sd(SWC_3_nf, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_nf))),
+    #measured TA, not GF 
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+    #ERA-mod GF TA
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+    se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+   #ERA-mod GF TS_3
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled)))),
+   #vapor pressure deficit
+    mean_VPD = mean(VPD, na.rm = TRUE),
+    se_VPD = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+   #relative humidity 
+    mean_RH = mean(RH, na.rm = TRUE),
+    se_RH = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    # Sensible heat
+    mean_H = mean(H, na.rm = TRUE),
+    se_H = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    # Latent heat
+    mean_LE = mean(LE, na.rm = TRUE),
+    se_LE = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    # Ground heat
+    mean_G = mean(G_1_1_1, na.rm = TRUE),
+    se_G = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+   
+    days = n()
+      )
+
+print(annual_budgets)
+```
+
+#Create Table 
+```{r}
+library(tidyverse)
+
+#Create formatted columns with mean ± SE
+
+annual_budgets_formatted <- annual_budgets %>%
+  arrange(year) %>%  # Sort by yr
+  mutate(
+    # Carbon budgets (no SE, just values)
+    `CO2 Budget` = sprintf("%.2f", CO2_budget),
+    `CH4 Budget` = sprintf("%.2f", CH4_budget),
+    `Total C Budget` = sprintf("%.2f", total_C_budget),
+    `GPP Budget` = sprintf("%.2f", GPP_budget),
+    `RECO Budget` = sprintf("%.2f", RECO_budget),
+    
+    # Temperature variables
+    `Soil Temp` = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    `Air Temp` = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    `Air Temp (GF)` = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    `Soil Temp (GF)` = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+    
+    # Soil moisture
+    `SWC` = sprintf("%.2f ± %.2f", mean_soil_moisture, se_soil_moisture),
+    `SWC (non-frozen)` = sprintf("%.2f ± %.2f", mean_soil_moisture_nf, se_soil_moisture_nf),
+    
+    # Other met variables
+    `VPD` = sprintf("%.2f ± %.2f", mean_VPD, se_VPD),
+    `RH` = sprintf("%.2f ± %.2f", mean_RH, se_RH),
+    `H` = sprintf("%.2f ± %.2f", mean_H, se_H),
+    `LE` = sprintf("%.2f ± %.2f", mean_LE, se_LE),
+    `G` = sprintf("%.2f ± %.2f", mean_G, se_G),
+    
+    # Keep identifiers and sample size
+    Year = year,
+    Days = days
+  ) %>%
+  # Select formatted columns in desired order
+  select(Year, Days, 
+         `CO2 Budget`, `CH4 Budget`, `Total C Budget`, `GPP Budget`, `RECO Budget`,
+         `Air Temp (GF)`, `Soil Temp (GF)`,
+         `SWC (non-frozen)`,
+         `VPD`, `RH`, `H`, `LE`, `G`)
+
+# Display as simple table
+print(annual_budgets_formatted)
+
+
+```
+
+
+#Save table 
+```{r}
+# # Save to Excel
+ library(writexl)
+write_xlsx(annual_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_means_budgets_12.17.2025.xlsx")
+```
+
+
+
+
+#Seasonal by year - not winter adj - add in SWC_3_nf 
+```{r}
+# Seasonal summaries with SE &  with total C budget
+
+seasonal_budgets <- df_avg %>%
+  group_by(year = year(date), season) %>%
+  #filter(year != 2023) %>% #keeping 2023 winter
+  summarize(
+    #daily avg NEE flux (FC_F)
+   mean_daily_NEE = mean(FC_F, na.rm = TRUE),
+    se_NEE = sd(FC_F, na.rm = TRUE)/sqrt(sum(!is.na(FC_F))),
+   #daily avg FCH4_F flux
+    mean_daily_FCH4 = mean(FCH4_F, na.rm = TRUE),
+    se_FCH4 = sd(FCH4_F, na.rm = TRUE)/sqrt(sum(!is.na(FCH4_F))),
+   # pre-winter adj CO2 budget
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+   #pre-winter adj CH4 budget 
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+   #pre-winter adj total C budget
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
+    # GPP budget
+    GPP_budget = sum(GPP_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+   #daily avg GPP flux (GPP_F)
+    mean_daily_GPP = mean(GPP_F, na.rm = TRUE),
+    se_GPP = sd(GPP_F, na.rm = TRUE)/sqrt(sum(!is.na(GPP_F))),
+   # pre-winter adj RECO budget
+    RECO_budget = sum(RECO_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    #daily avg RECO flux (RECO_F)
+    mean_daily_RECO = mean(RECO_F, na.rm = TRUE),
+    se_RECO = sd(RECO_F, na.rm = TRUE)/sqrt(sum(!is.na(RECO_F))),
+      #measured soil temp, no GF
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+   #SWC_3, all 
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    #SWC_3, excluding winter and TS_3_gf > 2 degC
+    mean_soil_moisture_nf = mean(SWC_3_nf, na.rm = TRUE),
+    se_soil_moisture_nf = sd(SWC_3_nf, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_nf))),
+   #measured TA, no GF
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+   #ERA-mod GF TA
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+    se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+   #ERA-mod GF TS_3
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled)))),
+   #vapor pressure deficit
+    mean_VPD = mean(VPD, na.rm = TRUE),
+    se_VPD = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+   #relative humidity 
+    mean_RH = mean(RH, na.rm = TRUE),
+    se_RH = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    # Sensible heat
+    mean_H = mean(H, na.rm = TRUE),
+    se_H = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    # Latent heat
+    mean_LE = mean(LE, na.rm = TRUE),
+    se_LE = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    # Ground heat
+    mean_G = mean(G_1_1_1, na.rm = TRUE),
+    se_G = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    days = n()
+  )
+
+
+print(seasonal_budgets)
+```
+#Create Table - not winter adj 
+```{r}
+library(tidyverse)
+
+
+#Create formatted columns with mean ± SE
+
+seasonal_budgets_formatted <- seasonal_budgets %>%
+  mutate(
+    season = factor(season,
+                   levels = c("Growing Season", "Fall Senescence", "Winter"))
+  ) %>%
+  arrange(year, season) %>%  # Sort by this order
+  mutate(
+    # Fluxes with ± SE
+    `Daily NEE` = sprintf("%.2f ± %.2f", mean_daily_NEE, se_NEE),
+    `Daily FCH4` = sprintf("%.2f ± %.2f", mean_daily_FCH4, se_FCH4),
+     `Daily GPP` = sprintf("%.2f ± %.2f", mean_daily_GPP, se_GPP),
+     `Daily RECO` = sprintf("%.2f ± %.2f", mean_daily_RECO, se_RECO),
+    
+    # Carbon budgets (no SE, just values)
+    `CO2 Budget` = sprintf("%.2f", CO2_budget),
+    `CH4 Budget` = sprintf("%.2f", CH4_budget),
+    `Total C Budget` = sprintf("%.2f", total_C_budget),
+     `GPP Budget` = sprintf("%.2f", GPP_budget),
+     `RECO Budget` = sprintf("%.2f", RECO_budget),
+    
+    # Temperature variables
+    `Soil Temp` = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    `Air Temp` = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    `Air Temp (GF)` = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    `Soil Temp (GF)` = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+    
+    # Soil moisture
+    `SWC` = sprintf("%.3f ± %.3f", mean_soil_moisture, se_soil_moisture),
+    `SWC (non-frozen)` = sprintf("%.3f ± %.3f", mean_soil_moisture_nf, se_soil_moisture_nf),
+    
+    # Other met variables
+    `VPD` = sprintf("%.2f ± %.2f", mean_VPD, se_VPD),
+    `RH` = sprintf("%.2f ± %.2f", mean_RH, se_RH),
+    `H` = sprintf("%.2f ± %.2f", mean_H, se_H),
+    `LE` = sprintf("%.2f ± %.2f", mean_LE, se_LE),
+    `G` = sprintf("%.2f ± %.2f", mean_G, se_G),
+    
+    # Keep identifiers and sample size
+    Year = year,
+    Season = season,
+    Days = days
+  ) %>%
+  # Select formatted columns in desired order
+  select(Year, Season, Days, 
+         `Daily NEE`, `Daily FCH4`, `Daily GPP`, `Daily RECO`,
+         `CO2 Budget`, `CH4 Budget`, `Total C Budget`, `GPP Budget`, `RECO Budget`,
+         `Air Temp (GF)`, `Soil Temp (GF)`,
+         `SWC (non-frozen)`,
+         `VPD`, `RH`, `H`, `LE`, `G`)
+
+# Display as simple table
+print(seasonal_budgets_formatted)
+
+
+
+
+```
+#Save table 
+```{r}
+# # Save to Excel
+ library(writexl)
+write_xlsx(seasonal_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_means_budgets_12.17.2025.xlsx")
+```
+
+
+
+#Create Winter-year for cross-year winters
+```{r}
+#Use July as a cutoff. Winter_year_2021 uses all DOY assigned "Winter" AFTER July 2021 and all DOY assigned "Winter" in 2022 BEFORE month of July 
+#example: Winter 2021 = Winter obs from July-Dec 2021 + Winter obs from Jan-June 2022
+
+df_avg2 <- df_avg %>%
+  mutate(
+    year = year(date),
+    month = month(date),
+    doy = yday(date)
+  )
+
+
+
+# Assign winter_year based on season and July cutoff
+
+
+df_avg2 <- df_avg2 %>%
+  mutate(
+    winter_year = case_when(
+      # For NON-WINTER seasons: use calendar year
+      season != "Winter" ~ year,
+      
+      # For WINTER season AFTER July (months 7-12): THIS year's winter
+      season == "Winter" & month >= 7 ~ year,
+      
+      # For WINTER season BEFORE July (months 1-6): PREVIOUS year's winter
+      season == "Winter" & month < 7 ~ year - 1,
+      
+      # Catch-all
+      TRUE ~ year
+    )
+  )
+
+#Verify
+winter_verification <- df_avg2 %>%
+  filter(season == "Winter") %>%
+  group_by(winter_year) %>%
+  summarise(
+    n_obs = n(),
+    calendar_years = paste(sort(unique(year)), collapse = " & "),
+    months_included = paste(sort(unique(month)), collapse = ", "),
+    start_date = min(date),
+    end_date = max(date),
+    date_range_desc = paste(format(min(date), "%b %d, %Y"), "to", 
+                           format(max(date), "%b %d, %Y")),
+    .groups = "drop"
+  ) %>%
+  arrange(winter_year)
+
+print(winter_verification)
+
+
+
+```
+#Winter budgets and means based on winter year
+```{r}
+
+winter_year_budgets <- df_avg2 %>%
+  filter(season == "Winter") %>%
+  group_by(winter_year) %>%
+  summarize(
+    # Fluxes
+    mean_daily_NEE = mean(FC_F, na.rm = TRUE),
+    se_NEE = sd(FC_F, na.rm = TRUE)/sqrt(sum(!is.na(FC_F))),
+    mean_daily_FCH4 = mean(FCH4_F, na.rm = TRUE),
+    se_FCH4 = sd(FCH4_F, na.rm = TRUE)/sqrt(sum(!is.na(FCH4_F))),
+    
+    # Carbon budgets
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    total_C_budget = CO2_budget + CH4_budget,
+    
+    # Temperature
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+    mean_TA_gapfilled = mean(TA_gapfilled, na.rm = TRUE),
+    se_TA_gapfilled = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))),
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE),
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_gapfilled))),
+    
+    # Soil moisture - both versions
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    mean_SWC_nf = mean(SWC_3_nf, na.rm = TRUE),
+    se_SWC_nf = sd(SWC_3_nf, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_nf))),
+    n_SWC_nf = sum(!is.na(SWC_3_nf)),
+    
+    # Other met variables
+    mean_VPD = mean(VPD, na.rm = TRUE),
+    se_VPD = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    mean_RH = mean(RH, na.rm = TRUE),
+    se_RH = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    mean_H = mean(H, na.rm = TRUE),
+    se_H = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    mean_LE = mean(LE, na.rm = TRUE),
+    se_LE = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    mean_G = mean(G_1_1_1, na.rm = TRUE),
+    se_G = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    
+    days = n(),
+    .groups = "drop"
+  ) %>%
+  rename(year = winter_year)  # Rename for consistency
+
+print(winter_year_budgets)
+
+
+#checking 
+winter_year_2019 <- df_avg2 %>%
+  filter(winter_year == "2019" & season == "Winter") #ok looks good 
+
+winter_year_2019_budgets <- winter_year_2019 %>%
+  summarize(
+    # Fluxes
+    mean_daily_NEE = mean(FC_F, na.rm = TRUE),
+    se_NEE = sd(FC_F, na.rm = TRUE)/sqrt(sum(!is.na(FC_F))),
+    mean_daily_FCH4 = mean(FCH4_F, na.rm = TRUE),
+    se_FCH4 = sd(FCH4_F, na.rm = TRUE)/sqrt(sum(!is.na(FCH4_F))),
+    
+    # Carbon budgets
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+ 
+          days = n(),
+    .groups = "drop"
+  )
+```
+
+#**** Note on difference:
+####FC_F remains similar between the old winter calcs and winter_year calcs, but FCH4_F *doubled* - not sure why FCH4_F would change so much but FC_F wouldn't, so running visual checks 
+```{r}
+
+#checking 
+winter_year_2019_FCH4 <- winter_year_2019 %>%
+  filter(winter_year == "2019" & season == "Winter") #ok looks good 
+
+winter_year_2019_budgets <- winter_year_2019 %>%
+  summarize(
+    # Fluxes
+    mean_daily_NEE = mean(FC_F, na.rm = TRUE),
+    se_NEE = sd(FC_F, na.rm = TRUE)/sqrt(sum(!is.na(FC_F))),
+    mean_daily_FCH4 = mean(FCH4_F, na.rm = TRUE),
+    se_FCH4 = sd(FCH4_F, na.rm = TRUE)/sqrt(sum(!is.na(FCH4_F))),
+    
+    # Carbon budgets
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+ 
+          days = n(),
+    .groups = "drop"
+  )
+
+print(winter_year_budgets)
+print(winter_year_2019_budgets)
+
+#Visual check of difference between 2019 winter and 2019 winter_year
+#FCH4_F
+ggplot(data = winter_year_2019) +
+  geom_point(aes(x = date, y = FCH4_F, color = year_factor))
+
+ggplot(data = df_avg2 %>%
+         filter(year == "2019" & season == "Winter")) +
+    geom_point(aes(x = date, y = FCH4_F, color = year))
+
+#FC_F
+ggplot(data = winter_year_2019) +
+  geom_point(aes(x = date, y = FC_F, color = year_factor)) +
+  labs(title = "2019 Winter year")
+
+ggplot(data = df_avg2 %>%
+         filter(year == "2019" & season == "Winter")) +
+    geom_point(aes(x = date, y = FC_F, color = year)) +
+  labs(title = "df_avg_2019_winter")
+
+df_avg_2019_winter <- df_avg2 %>%
+  filter(year == "2019" & season == "Winter")
+
+summary(df_avg_2019_winter$FCH4_F)
+summary(winter_year_2019$FCH4_F)
+
+summary(df_avg_2019_winter$FC_F)
+summary(winter_year_2019$FC_F)
+```
+
+
+
+#Code for calculating budgets based on all seasons & assigned winter year 
+```{r}
+seasonal_budgets_winteryear <- df_avg2 %>%
+  group_by(winter_year, season) %>%
+  summarize(
+    #daily avg NEE flux (FC_F)
+   mean_daily_NEE = mean(FC_F, na.rm = TRUE),
+    se_NEE = sd(FC_F, na.rm = TRUE)/sqrt(sum(!is.na(FC_F))),
+   #daily avg FCH4_F flux
+    mean_daily_FCH4 = mean(FCH4_F, na.rm = TRUE),
+    se_FCH4 = sd(FCH4_F, na.rm = TRUE)/sqrt(sum(!is.na(FCH4_F))),
+   # pre-winter adj CO2 budget
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+   #pre-winter adj CH4 budget 
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+   #pre-winter adj total C budget
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
+    # GPP budget
+    GPP_budget = sum(GPP_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+   #daily avg GPP flux (GPP_F)
+    mean_daily_GPP = mean(GPP_F, na.rm = TRUE),
+    se_GPP = sd(GPP_F, na.rm = TRUE)/sqrt(sum(!is.na(GPP_F))),
+   # pre-winter adj RECO budget
+    RECO_budget = sum(RECO_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    #daily avg RECO flux (RECO_F)
+    mean_daily_RECO = mean(RECO_F, na.rm = TRUE),
+    se_RECO = sd(RECO_F, na.rm = TRUE)/sqrt(sum(!is.na(RECO_F))),
+      #measured soil temp, no GF
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+   #SWC_3, all 
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    #SWC_3, excluding winter and TS_3_gf > 2 degC
+    mean_soil_moisture_nf = mean(SWC_3_nf, na.rm = TRUE),
+    se_soil_moisture_nf = sd(SWC_3_nf, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_nf))),
+   #measured TA, no GF
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+   #ERA-mod GF TA
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+    se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+   #ERA-mod GF TS_3
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled)))),
+   #vapor pressure deficit
+    mean_VPD = mean(VPD, na.rm = TRUE),
+    se_VPD = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+   #relative humidity 
+    mean_RH = mean(RH, na.rm = TRUE),
+    se_RH = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    # Sensible heat
+    mean_H = mean(H, na.rm = TRUE),
+    se_H = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    # Latent heat
+    mean_LE = mean(LE, na.rm = TRUE),
+    se_LE = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    # Ground heat
+    mean_G = mean(G_1_1_1, na.rm = TRUE),
+    se_G = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+  
+     # Winter year Date info
+    wy_start_date = min(date),
+    wy_end_date = max(date),
+    
+   #days per season 
+   days = n(),
+    .groups = "drop"
+  ) %>%
+  rename(year = winter_year) 
+
+print(seasonal_budgets_winteryear)
+```
+
+#Make table with winter-year budgets - not winter-adj
+
+```{r}
+library(tidyverse)
+
+
+#Create formatted columns with mean ± SE
+
+seasonal_budgets_winteryear_formatted <- seasonal_budgets_winteryear %>%
+  mutate(
+    season = factor(season,
+                   levels = c("Growing Season", "Fall Senescence", "Winter"))
+  ) %>%
+  arrange(year, season) %>%  # Sort by this order
+  mutate(
+    # Fluxes with ± SE
+    `Daily NEE` = sprintf("%.2f ± %.2f", mean_daily_NEE, se_NEE),
+    `Daily FCH4` = sprintf("%.2f ± %.2f", mean_daily_FCH4, se_FCH4),
+     `Daily GPP` = sprintf("%.2f ± %.2f", mean_daily_GPP, se_GPP),
+     `Daily RECO` = sprintf("%.2f ± %.2f", mean_daily_RECO, se_RECO),
+    
+    # Carbon budgets (no SE, just values)
+    `CO2 Budget` = sprintf("%.2f", CO2_budget),
+    `CH4 Budget` = sprintf("%.2f", CH4_budget),
+    `Total C Budget` = sprintf("%.2f", total_C_budget),
+     `GPP Budget` = sprintf("%.2f", GPP_budget),
+     `RECO Budget` = sprintf("%.2f", RECO_budget),
+    
+    # Temperature variables
+    `Soil Temp` = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    `Air Temp` = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    `Air Temp (GF)` = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    `Soil Temp (GF)` = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+    
+    # Soil moisture
+    `SWC` = sprintf("%.3f ± %.3f", mean_soil_moisture, se_soil_moisture),
+    `SWC (non-frozen)` = sprintf("%.3f ± %.3f", mean_soil_moisture_nf, se_soil_moisture_nf),
+    
+    # Other met variables
+    `VPD` = sprintf("%.2f ± %.2f", mean_VPD, se_VPD),
+    `RH` = sprintf("%.2f ± %.2f", mean_RH, se_RH),
+    `H` = sprintf("%.2f ± %.2f", mean_H, se_H),
+    `LE` = sprintf("%.2f ± %.2f", mean_LE, se_LE),
+    `G` = sprintf("%.2f ± %.2f", mean_G, se_G),
+    
+    # Keep identifiers and sample size
+    Year = year,
+    Season = season,
+    Days = days
+  ) %>%
+  # Select formatted columns in desired order
+  select(Year, Season, Days, 
+         `Daily NEE`, `Daily FCH4`, `Daily GPP`, `Daily RECO`,
+         `CO2 Budget`, `CH4 Budget`, `Total C Budget`, `GPP Budget`, `RECO Budget`,
+         `Air Temp (GF)`, `Soil Temp (GF)`,
+         `SWC (non-frozen)`,
+         `VPD`, `RH`, `H`, `LE`, `G`)
+
+# Display as simple table
+print(seasonal_budgets_winteryear_formatted)
+
+
+
+```
+
+
+#Save table 
+```{r}
+# # Save to Excel
+ library(writexl)
+write_xlsx(seasonal_budgets_winteryear_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_means_budgets_winteryear_12.17.2025.xlsx")
+```
+
+# % gapfilled - edit 
+#### comparing HH and df_avg %gapfilled differ by only ~1%, so using df_avg for calculating gf%
+
+
+
+```{r}
+
+gapfill_summary <- df_avg2 %>%
+  # Just group directly by winter_year (which already exists!)
+  group_by(winter_year, season) %>%
+  summarise(
+    # Total days in this season
+    total_days = n(),
+    
+    # NEE (FC vs FC_F)
+    NEE_measured = sum(!is.na(FC)),
+    NEE_gapfilled = sum(is.na(FC) & !is.na(FC_F)),
+    NEE_pct_gapfilled = round((NEE_gapfilled / total_days) * 100, 1),
+    
+    # FCH4 (FCH4 vs FCH4_F)
+    FCH4_measured = sum(!is.na(FCH4)),
+    FCH4_gapfilled = sum(is.na(FCH4) & !is.na(FCH4_F)),
+    FCH4_pct_gapfilled = round((FCH4_gapfilled / total_days) * 100, 1),
+    
+    # GPP (GPP vs GPP_F)
+    GPP_measured = sum(!is.na(GPP)),
+    GPP_gapfilled = sum(is.na(GPP) & !is.na(GPP_F)),
+    GPP_pct_gapfilled = round((GPP_gapfilled / total_days) * 100, 1),
+    
+    # RECO (RECO vs RECO_F)
+    RECO_measured = sum(!is.na(RECO)),
+    RECO_gapfilled = sum(is.na(RECO) & !is.na(RECO_F)),
+    RECO_pct_gapfilled = round((RECO_gapfilled / total_days) * 100, 1),
+    
+    # Air Temperature (TA vs TA_gapfilled)
+    TA_measured = sum(!is.na(TA)),
+    TA_gapfilled = sum(is.na(TA) & !is.na(TA_gapfilled)),
+    TA_pct_gapfilled = round((TA_gapfilled / total_days) * 100, 1),
+    
+    # Soil Temperature (TS_3_1_1 vs TS_3_gapfilled)
+    TS_measured = sum(!is.na(TS_3_1_1)),
+    TS_gapfilled = sum(is.na(TS_3_1_1) & !is.na(TS_3_gapfilled)),
+    TS_pct_gapfilled = round((TS_gapfilled / total_days) * 100, 1),
+    
+    .groups = "drop"
+  ) %>%
+  # Rename to "year" for consistency with other tables
+  rename(year = winter_year)
+
+
+
+# Display summary
+print(gapfill_summary)
+
+
+#compact table with only %gf
+
+gapfill_pct_only <- gapfill_summary %>%
+  select(year, season, total_days,
+         NEE_pct_gapfilled,
+         FCH4_pct_gapfilled,
+         GPP_pct_gapfilled,
+         RECO_pct_gapfilled,
+         TA_pct_gapfilled,
+         TS_pct_gapfilled)
+
+print(gapfill_pct_only)
+
+#visual check - FC
+ggplot(data = df_avg_2019_winter) +
+  geom_point(aes(x = date, y = FC)) +
+  geom_point(aes(x = date, y = FC_F, color = "red")) +
+  labs(title = "df_avg_2019_winter")
+
+ggplot(data = winter_year_2019) +
+  geom_point(aes(x = date, y = FC)) +
+  geom_point(aes(x = date, y = FC_F, color = "red"))+
+  labs(title = "2019 winter year")
+
+#visual check with temp
+ggplot(data = df_avg_2019_winter) +
+  geom_point(aes(x = date, y = TA)) +
+  geom_jitter(aes(x = date, y = TA_gapfilled, color = "red")) +
+  labs(title = "df_avg_2019_winter")
+
+sum(is.na(df_avg_2019_winter$TA))
+
+ggplot(data = winter_year_2019) +
+  geom_point(aes(x = date, y = TA)) +
+  geom_jitter(aes(x = date, y = TA_gapfilled, color = "red"))+
+  labs(title = "2019 winter year")
+
+sum(is.na(winter_year_2019$TA))
+
+#yup, checks out 
+
+
+ggplot(data = df_avg %>%
+         filter(year == "2018" & season == "Winter")) +
+  geom_point(aes(x = date, y = FC)) +
+  geom_jitter(aes(x = date, y = FC_F, color = "red"))+
+  labs(title = "2018 winter year")
+
+winter_year_2018 <- df_avg2 %>%
+  filter(winter_year == "2018" & season == "Winter")
+
+winter_year_2022 <- df_avg2 %>%
+  filter(winter_year == "2022" & season == "Winter")
+
+ggplot(data = df_avg2 %>%
+         filter(winter_year == "2018" & season == "Winter")) +
+  geom_point(aes(x = date, y = FC)) +
+  geom_jitter(aes(x = date, y = FC_F, color = "red"))+
+  labs(title = "df_avg_2018 winter")
+
+
+sum(is.na(winter_year_2018$FC))
+sum(is.na(winter_year_2019$FC))
+sum(is.na(winter_year_2022$FCH4))
+
+```
+#merge %gf with seasonal summaries by winter_year
+```{r}
+
+seasonal_budgets_winteryear_with_gf <- seasonal_budgets_winteryear %>%
+  left_join(
+    gapfill_pct_only,
+    by = c("year", "season")
+  )
+
+
+# Display merged data
+print(seasonal_budgets_winteryear_with_gf %>%
+      select(year, season, days, 
+             mean_daily_NEE, NEE_pct_gapfilled,
+             mean_daily_FCH4, FCH4_pct_gapfilled,
+             ))
+
+#formatted table 
+
+seasonal_table_with_gf <- seasonal_budgets_winteryear_with_gf %>%
+  mutate(
+    # Format mean ± SE with % gapfilled
+    `NEE` = sprintf("%.2f ± %.2f (%s%%)", 
+                    mean_daily_NEE, se_NEE, NEE_pct_gapfilled),
+    `FCH4` = sprintf("%.2f ± %.2f (%s%%)", 
+                     mean_daily_FCH4, se_FCH4, FCH4_pct_gapfilled),
+    `GPP` = sprintf("%.2f ± %.2f (%s%%)",
+                    mean_daily_GPP, se_GPP, GPP_pct_gapfilled),
+    `RECO` = sprintf("%.2f ± %.2f (%s%%)",
+                     mean_daily_RECO, se_RECO, RECO_pct_gapfilled),
+    `Air Temp` = sprintf("%.2f ± %.2f (%s%%)",
+                         mean_TA_gapfilled, se_TA_gapfilled, TA_pct_gapfilled),
+    `Soil Temp` = sprintf("%.2f ± %.2f (%s%%)",
+                          mean_TS_3_gapfilled, se_TS_3_gapfilled, TS_pct_gapfilled),
+    
+    Year = year,
+    Season = season,
+    Days = days
+  ) %>%
+  select(Year, Season, Days, NEE, FCH4, GPP, RECO, `Air Temp`, `Soil Temp`)
+
+seasonal_table_with_gf 
+
+```
+#save table with %gf
+```{r}
+
+ library(writexl)
+write_xlsx(seasonal_table_with_gf , "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_means_budgets_winteryear_percentGF_12.17.2025.xlsx")
+
+```
+
+
+
+#*** NEW WINTER ADJ BASED ON WINTER YEAR
+
+#Winter adj based on proportion of 2018 daily mean winter flux : daily mean flux of growing season 
+
+####FCH4 - daily mean winter adj 
+
+#based on 2018 daily avg growing season fluxes, winter daily avg CH4 flux can be ~44% of growing season daily avg flux (0.443) --> multiply winter daily avg fluxes by 0.443 & re-calc the daily avg CH4 flux to get an adjusted potential winter daily avg flux 
+
+
+
+```{r}
+
+library(tidyverse)
+
+# 1. Calculate growing season means AND SE for each winter_year
+
+growing_season_means <- df_avg2 %>%
+  filter(season == "Growing Season") %>%
+  group_by(winter_year) %>%
+  summarise(
+    # Means
+    mean_growing_NEE = mean(FC_F, na.rm = TRUE),
+    mean_growing_FCH4 = mean(FCH4_F, na.rm = TRUE),
+    
+    # Standard Errors
+    se_growing_NEE = sd(FC_F, na.rm = TRUE) / sqrt(sum(!is.na(FC_F))),
+    se_growing_FCH4 = sd(FCH4_F, na.rm = TRUE) / sqrt(sum(!is.na(FCH4_F))),
+    
+    # Sample size
+    n_growing = n(),
+    
+    .groups = "drop"
+  )
+
+
+print(growing_season_means %>%
+      mutate(
+        `NEE ± SE` = sprintf("%.3f ± %.3f", mean_growing_NEE, se_growing_NEE),
+        `FCH4 ± SE` = sprintf("%.4f ± %.4f", mean_growing_FCH4, se_growing_FCH4)
+      ) %>%
+      select(winter_year, `NEE ± SE`, `FCH4 ± SE`, n_growing))
+
+
+# 2. Count winter days for each winter_year
+
+winter_days <- df_avg2 %>%
+  filter(season == "Winter") %>%
+  group_by(winter_year) %>%
+  summarise(
+    winter_days = n(),
+    .groups = "drop"
+  )
+
+print(winter_days)
+
+
+# 3: Calculate winter-adjusted budgets WITH PROPAGATED SE
+
+
+# Define conversion factors
+CO2_conversion <- 60 * 60 * 24 * (1/1000000) * 12  # = 1.0368; umol/m2/s to g/m2/day
+CH4_conversion <- 60 * 60 * 24 * (1/1000000000) * 12  # = 0.0010368; nmol/m2/s to g/m2/day
+
+# Define proportion factors - based on year 2018 with best winter coverage 
+NEE_winter_proportion <- 0.451
+FCH4_winter_proportion <- 0.443
+
+
+# Calculate winter-adjusted budgets with SE propagation
+winter_adj_budgets <- growing_season_means %>%
+  left_join(winter_days, by = "winter_year") %>%
+  mutate(
+    # ========================================
+    # Winter-adjusted DAILY flux (μmol/m2/s or nmol/m²/s)
+    # ========================================
+    
+    # Mean daily flux (still in original units)
+    winter_adj_daily_NEE_flux = abs(mean_growing_NEE) * NEE_winter_proportion,
+    winter_adj_daily_FCH4_flux = abs(mean_growing_FCH4) * FCH4_winter_proportion,
+    
+    # SE for daily flux: SE_new = SE_original × proportion
+    # (When multiplying by a constant, SE scales by that constant)
+    se_winter_adj_daily_NEE_flux = se_growing_NEE * NEE_winter_proportion,
+    se_winter_adj_daily_FCH4_flux = se_growing_FCH4 * FCH4_winter_proportion,
+    
+    # ========================================
+    # Convert daily flux to daily BUDGET (g C/m2/day)
+    # ========================================
+    
+    # Mean daily budget
+    winter_adj_daily_NEE_budget = winter_adj_daily_NEE_flux * CO2_conversion,
+    winter_adj_daily_FCH4_budget = winter_adj_daily_FCH4_flux * CH4_conversion,
+    
+    # SE for daily budget: SE_new = SE_flux × conversion_factor
+    se_winter_adj_daily_NEE_budget = se_winter_adj_daily_NEE_flux * CO2_conversion,
+    se_winter_adj_daily_FCH4_budget = se_winter_adj_daily_FCH4_flux * CH4_conversion,
+    
+    # ========================================
+    # Seasonal BUDGET (g C/m2) for entire winter)
+    # ========================================
+    
+    # winter budget 
+    winter_adj_CO2_budget = winter_adj_daily_NEE_budget * winter_days,
+    winter_adj_CH4_budget = winter_adj_daily_FCH4_budget * winter_days,
+    
+    # SE for seasonal budget: SE_new = SE_daily × sqrt(n_days) but also saw another forum that said to just multiply by the same constant number as multiplying the mean ** need to look up 
+    # This accounts for the fact that we're summing n independent days
+     # se_winter_adj_CO2_budget = se_winter_adj_daily_NEE_budget * sqrt(winter_days),
+     # se_winter_adj_CH4_budget = se_winter_adj_daily_FCH4_budget * sqrt(winter_days),
+    
+    #using just winter days as a constant is more appropriate here bc we are treating the daily avg as the overall avg and are scaling up, not treating each day as indepedent 
+       se_winter_adj_CO2_budget = se_winter_adj_daily_NEE_budget * winter_days,
+      se_winter_adj_CH4_budget = se_winter_adj_daily_FCH4_budget *  winter_days,
+    
+    # Total C budget
+    winter_adj_total_C_budget = winter_adj_CO2_budget + winter_adj_CH4_budget,
+    
+    # SE for total C: SE_total = sqrt(SE_CO2² + SE_CH4²)
+    # (When adding two variables, variances add, so SE = sqrt(SE1² + SE2²))
+     se_winter_adj_total_C_budget = sqrt(se_winter_adj_CO2_budget^2 + 
+                                         se_winter_adj_CH4_budget^2)
+  ) %>%
+  rename(year = winter_year)
+
+
+
+#daily fluxes with SE 
+
+winter_adj_budgets %>%
+  mutate(
+    `NEE (μmol m⁻² s⁻¹)` = sprintf("%.3f ± %.3f", 
+                                     winter_adj_daily_NEE_flux, 
+                                     se_winter_adj_daily_NEE_flux),
+    `FCH4 (nmol m⁻² s⁻¹)` = sprintf("%.4f ± %.4f",
+                                      winter_adj_daily_FCH4_flux,
+                                      se_winter_adj_daily_FCH4_flux)
+  ) %>%
+  select(year, `NEE (μmol m⁻² s⁻¹)`, `FCH4 (nmol m⁻² s⁻¹)`) %>%
+  print()
+
+
+# Display seasonal budgets with SE
+ winter_adj_budgets %>%
+  mutate(
+    `CO2 Budget (g C m⁻²)` = sprintf("%.2f ± %.2f",
+                                      winter_adj_CO2_budget,
+                                      se_winter_adj_CO2_budget),
+    `CH4 Budget (g C m⁻²)` = sprintf("%.3f ± %.3f",
+                                      winter_adj_CH4_budget,
+                                      se_winter_adj_CH4_budget),
+    `Total C Budget (g C m⁻²)` = sprintf("%.2f ± %.2f",
+                                          winter_adj_total_C_budget,
+                                          se_winter_adj_total_C_budget)
+  ) %>%
+  select(year, winter_days, `NEE (μmol m⁻² s⁻¹)`, `FCH4 (nmolm⁻² s⁻¹)`,
+         `CO2 Budget (g C m⁻²)`, `CH4 Budget (g C m⁻²)`, 
+         `Total C Budget (g C m⁻²)`) %>%
+  print()
+
+
+#Combined table 
+ # Combined table with all info
+combined_table <- winter_adj_budgets %>%
+  mutate(
+    `NEE (μmol m⁻² s⁻¹)` = sprintf("%.2f ± %.2f", 
+                                     winter_adj_daily_NEE_flux, 
+                                     se_winter_adj_daily_NEE_flux),
+    `FCH4 (nmol m⁻² s⁻¹)` = sprintf("%.2f ± %.2f",
+                                      winter_adj_daily_FCH4_flux,
+                                      se_winter_adj_daily_FCH4_flux),
+    `CO2 Budget (g C m⁻²)` = sprintf("%.2f ± %.2f",
+                                      winter_adj_CO2_budget,
+                                      se_winter_adj_CO2_budget),
+    `CH4 Budget (g C m⁻²)` = sprintf("%.2f ± %.2f",
+                                      winter_adj_CH4_budget,
+                                      se_winter_adj_CH4_budget),
+    `Total C Budget (g C m⁻²)` = sprintf("%.2f ± %.2f",
+                                          winter_adj_total_C_budget,
+                                          se_winter_adj_total_C_budget)
+  ) %>%
+  select(year, winter_days, 
+         `NEE (μmol m⁻² s⁻¹)`, `FCH4 (nmol m⁻² s⁻¹)`,
+         `CO2 Budget (g C m⁻²)`, `CH4 Budget (g C m⁻²)`, 
+         `Total C Budget (g C m⁻²)`)
+
+print(combined_table)
+
+# # Add to seasonal_budgets_winteryear
+# 
+# 
+# # Select relevant columns to merge
+# winter_adj_to_merge <- winter_adj_budgets %>%
+#   select(year, 
+#          # Daily fluxes
+#          winter_adj_daily_NEE_flux, se_winter_adj_daily_NEE_flux,
+#          winter_adj_daily_FCH4_flux, se_winter_adj_daily_FCH4_flux,
+#          # Seasonal budgets
+#          winter_adj_CO2_budget, se_winter_adj_CO2_budget,
+#          winter_adj_CH4_budget, se_winter_adj_CH4_budget,
+#          winter_adj_total_C_budget, se_winter_adj_total_C_budget)
+# 
+# # Merge with existing seasonal budgets
+# seasonal_budgets_winteryear_adj <- seasonal_budgets_winteryear %>%
+#   left_join(winter_adj_to_merge, by = "year") %>%
+#   mutate(
+#     # Set to NA for non-winter seasons
+#     across(starts_with("winter_adj"), 
+#            ~ifelse(season == "Winter", .x, NA))
+#   )
+# 
+
+
+
+# Create formatted table
+
+
+library(knitr)
+library(kableExtra)
+
+
+
+pub_table <- winter_adj_budgets %>%
+  mutate(
+    # Format with mean ± SE
+    `Daily NEE Flux` = sprintf("%.3f ± %.3f", 
+                               winter_adj_daily_NEE_flux, 
+                               se_winter_adj_daily_NEE_flux),
+    `Daily FCH4 Flux` = sprintf("%.4f ± %.4f",
+                                winter_adj_daily_FCH4_flux,
+                                se_winter_adj_daily_FCH4_flux),
+    `CO2 Budget` = sprintf("%.2f ± %.2f",
+                           winter_adj_CO2_budget,
+                           se_winter_adj_CO2_budget),
+    `CH4 Budget` = sprintf("%.3f ± %.3f",
+                           winter_adj_CH4_budget,
+                           se_winter_adj_CH4_budget),
+    `Total C Budget` = sprintf("%.2f ± %.2f",
+                               winter_adj_total_C_budget,
+                               se_winter_adj_total_C_budget),
+    `Winter Year` = year,
+    `Days` = winter_days
+  ) %>%
+  select(`Winter Year`, Days, 
+         `Daily NEE Flux`, `Daily FCH4 Flux`,
+         `CO2 Budget`, `CH4 Budget`, `Total C Budget`)
+
+
+
+# Statistical notes about SE propagation
+
+
+
+#SE PROPAGATION METHODOLOGY\n")
+
+#Standard errors were propagated as follows:\n\n")
+
+#1. Daily Flux (μmol/m²/s or nmol/m²/s):\n")
+#   Mean: flux_winter = flux_growing × proportion\n")
+#   SE:   SE_winter = SE_growing × proportion\n\n")
+
+#2. Daily Budget (g C/m²/day):\n")
+#   Mean: budget_daily = flux_winter × conversion\n")
+#   SE:   SE_daily = SE_flux × conversion\n\n")
+
+#3. Seasonal Budget (g C/m²):\n")
+#   Mean: budget_seasonal = budget_daily × n_days\n")
+#   SE:   SE_seasonal = SE_daily × sqrt(n_days)\n")
+#   (Assumes daily values are independent)\n\n")
+
+#4. Total C Budget:\n")
+#   Mean: total_C = CO2_budget + CH4_budget\n")
+#   SE:   SE_total = sqrt(SE_CO2² + SE_CH4²)\n")
+#   (Variance addition rule for independent variables)\n\n")
+
+
+
+cat("Summary of winter-adjusted values:\n")
+cat(sprintf("  Mean winter NEE flux: %.3f ± %.3f μmol m⁻² s⁻¹\n",
+            mean(winter_adj_budgets$winter_adj_daily_NEE_flux),
+            mean(winter_adj_budgets$se_winter_adj_daily_NEE_flux)))
+cat(sprintf("  Mean winter FCH4 flux: %.4f ± %.4f nmol m⁻² s⁻¹\n",
+            mean(winter_adj_budgets$winter_adj_daily_FCH4_flux),
+            mean(winter_adj_budgets$se_winter_adj_daily_FCH4_flux)))
+cat(sprintf("  Mean winter CO2 budget: %.2f ± %.2f g C m⁻²\n",
+            mean(winter_adj_budgets$winter_adj_CO2_budget),
+            mean(winter_adj_budgets$se_winter_adj_CO2_budget)))
+cat(sprintf("  Mean winter CH4 budget: %.3f ± %.3f g C m⁻²\n\n",
+            mean(winter_adj_budgets$winter_adj_CH4_budget),
+            mean(winter_adj_budgets$se_winter_adj_CH4_budget)))
+```
+#save winter-adj tables
+
+```{r}
+#save winter-adj daily NEE and FCH4_F fluxes raw table 
+ library(writexl)
+write_xlsx(winter_adj_budgets, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_means_budgets_winteryear_adj_12.17.2025.xlsx")
+
+
+#save winter-adj daily NEE and FCH4_F fluxes formatted 
+
+write_xlsx(combined_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_means_budgets_winteryear_adj_formatted_12.17.2025.xlsx")
+
+```
+
+# Annual means and budgets 
+
+##### (not winter-adj - did winter adj here manually in excel sheet "Seasonal_Cbudgets_Table_all_years_for_paper")
+
+#Code for calculating budgets based on all seasons & assigned winter year 
+```{r}
+annual_budgets_winteryear <- df_avg2 %>%
+  group_by(winter_year) %>%
+  summarize(
+   # pre-winter adj CO2 budget
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+   #pre-winter adj CH4 budget 
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+   #pre-winter adj total C budget
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
+    # GPP budget
+    GPP_budget = sum(GPP_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+   # pre-winter adj RECO budget
+    RECO_budget = sum(RECO_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    #measured soil temp, no GF
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+   #SWC_3, all 
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    #SWC_3, excluding winter and TS_3_gf > 2 degC
+    mean_soil_moisture_nf = mean(SWC_3_nf, na.rm = TRUE),
+    se_soil_moisture_nf = sd(SWC_3_nf, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_nf))),
+   #measured TA, no GF
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+   #ERA-mod GF TA
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+    se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+   #ERA-mod GF TS_3
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled)))),
+   #vapor pressure deficit
+    mean_VPD = mean(VPD, na.rm = TRUE),
+    se_VPD = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+   #relative humidity 
+    mean_RH = mean(RH, na.rm = TRUE),
+    se_RH = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    # Sensible heat
+    mean_H = mean(H, na.rm = TRUE),
+    se_H = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    # Latent heat
+    mean_LE = mean(LE, na.rm = TRUE),
+    se_LE = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    # Ground heat
+    mean_G = mean(G_1_1_1, na.rm = TRUE),
+    se_G = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+
+   #days per season 
+   days = n(),
+    .groups = "drop"
+  ) %>%
+  rename(year = winter_year) 
+
+print(annual_budgets_winteryear)
+```
+
+#Make table with annual winter-year budgets - not winter-adj **this is by winter year, not calendar year, so the days don't match up to 365
+
+```{r}
+library(tidyverse)
+
+
+#Create formatted columns with mean ± SE
+
+annual_budgets_winteryear_formatted <- annual_budgets_winteryear %>%
+ # arrange(year) %>%  # Sort by this order
+  mutate(
+    # Carbon budgets (no SE, just values)
+    `CO2 Budget` = sprintf("%.2f", CO2_budget),
+    `CH4 Budget` = sprintf("%.2f", CH4_budget),
+    `Total C Budget` = sprintf("%.2f", total_C_budget),
+     `GPP Budget` = sprintf("%.2f", GPP_budget),
+     `RECO Budget` = sprintf("%.2f", RECO_budget),
+    
+    # Temperature variables
+    `Soil Temp` = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    `Air Temp` = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    `Air Temp (GF)` = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    `Soil Temp (GF)` = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+    
+    # Soil moisture
+    `SWC` = sprintf("%.3f ± %.3f", mean_soil_moisture, se_soil_moisture),
+    `SWC (non-frozen)` = sprintf("%.3f ± %.3f", mean_soil_moisture_nf, se_soil_moisture_nf),
+    
+    # Other met variables
+    `VPD` = sprintf("%.2f ± %.2f", mean_VPD, se_VPD),
+    `RH` = sprintf("%.2f ± %.2f", mean_RH, se_RH),
+    `H` = sprintf("%.2f ± %.2f", mean_H, se_H),
+    `LE` = sprintf("%.2f ± %.2f", mean_LE, se_LE),
+    `G` = sprintf("%.2f ± %.2f", mean_G, se_G),
+    
+    # Keep identifiers and sample size
+    Year = year,
+    Days = days
+  ) %>%
+  # Select formatted columns in desired order
+  select(Year, Days, 
+         `CO2 Budget`, `CH4 Budget`, `Total C Budget`, `GPP Budget`, `RECO Budget`,
+         `Air Temp (GF)`, `Soil Temp (GF)`,
+         `SWC (non-frozen)`,
+         `VPD`, `RH`, `H`, `LE`, `G`)
+
+# Display as simple table
+print(annual_budgets_winteryear_formatted)
+
+
+
+```
+
+
+#Save table 
+```{r}
+# # Save to Excel
+ library(writexl)
+write_xlsx(annual_budgets_winteryear_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_means_budgets_winteryear_12.17.2025.xlsx")
+```
+
+# % gapfilled - edit 
+#### comparing HH and df_avg %gapfilled differ by only ~1%, so using df_avg for calculating gf%
+
+```{r}
+
+gapfill_summary <- df_avg2 %>%
+  # Just group directly by winter_year (which already exists!)
+  group_by(winter_year) %>%
+  summarise(
+    # Total days in this season
+    total_days = n(),
+    
+    # Air Temperature (TA vs TA_gapfilled)
+    TA_measured = sum(!is.na(TA)),
+    TA_gapfilled = sum(is.na(TA) & !is.na(TA_gapfilled)),
+    TA_pct_gapfilled = round((TA_gapfilled / total_days) * 100, 1),
+    
+    # Soil Temperature (TS_3_1_1 vs TS_3_gapfilled)
+    TS_measured = sum(!is.na(TS_3_1_1)),
+    TS_gapfilled = sum(is.na(TS_3_1_1) & !is.na(TS_3_gapfilled)),
+    TS_pct_gapfilled = round((TS_gapfilled / total_days) * 100, 1),
+    
+    .groups = "drop"
+  ) %>%
+  # Rename to "year" for consistency with other tables
+  rename(year = winter_year)
+
+
+
+# Display summary
+print(gapfill_summary)
+
+
+#compact table with only %gf
+
+gapfill_pct_only <- gapfill_summary %>%
+  select(year, total_days,
+         TA_pct_gapfilled,
+         TS_pct_gapfilled)
+
+print(gapfill_pct_only)
+
+
+```
+
+#merge %gf with seasonal summaries by winter_year
+```{r}
+
+seasonal_budgets_winteryear_with_gf <- seasonal_budgets_winteryear %>%
+  left_join(
+    gapfill_pct_only,
+    by = c("year", "season")
+  )
+
+
+# Display merged data
+print(seasonal_budgets_winteryear_with_gf %>%
+      select(year, season, days, 
+             mean_daily_NEE, NEE_pct_gapfilled,
+             mean_daily_FCH4, FCH4_pct_gapfilled,
+             ))
+
+#formatted table 
+
+seasonal_table_with_gf <- seasonal_budgets_winteryear_with_gf %>%
+  mutate(
+    # Format mean ± SE with % gapfilled
+    `NEE` = sprintf("%.2f ± %.2f (%s%%)", 
+                    mean_daily_NEE, se_NEE, NEE_pct_gapfilled),
+    `FCH4` = sprintf("%.2f ± %.2f (%s%%)", 
+                     mean_daily_FCH4, se_FCH4, FCH4_pct_gapfilled),
+    `GPP` = sprintf("%.2f ± %.2f (%s%%)",
+                    mean_daily_GPP, se_GPP, GPP_pct_gapfilled),
+    `RECO` = sprintf("%.2f ± %.2f (%s%%)",
+                     mean_daily_RECO, se_RECO, RECO_pct_gapfilled),
+    `Air Temp` = sprintf("%.2f ± %.2f (%s%%)",
+                         mean_TA_gapfilled, se_TA_gapfilled, TA_pct_gapfilled),
+    `Soil Temp` = sprintf("%.2f ± %.2f (%s%%)",
+                          mean_TS_3_gapfilled, se_TS_3_gapfilled, TS_pct_gapfilled),
+    
+    Year = year,
+    Season = season,
+    Days = days
+  ) %>%
+  select(Year, Season, Days, NEE, FCH4, GPP, RECO, `Air Temp`, `Soil Temp`)
+
+seasonal_table_with_gf 
+
+```
+#save table with %gf
+```{r}
+
+ library(writexl)
+write_xlsx(seasonal_table_with_gf , "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_means_budgets_winteryear_percentGF_12.17.2025.xlsx")
+
+```
+
+
+
+#end 
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+# CH4 in nano-moles of CH4/m^2/s)
+#Net CH4 Flux - gapfilled
+
+# Calculate 0.443 (~44%) of daily average CH4 flux (FCH4_F) during growing season season with standard error
+
+seasonal_FCH4_summary_gf_winteradjCH4 <- df_avg2 %>%
+  filter(season == "Growing Season") %>%
+  group_by(year, season) %>%
+  summarize(
+    mean_flux = mean(FCH4_F*0.443, na.rm = TRUE),
+    se_flux = sd(FCH4_F*0.443, na.rm = TRUE)/sqrt(sum(!is.na(FCH4_F))),
+    n_days = n()  # number of days per season
+  )
+
+#renaming the ~44% of growing season avg variable name 
+seasonal_FCH4_summary_gf_winteradjCH4$season[seasonal_FCH4_summary_gf_winteradjCH4$season=="Growing Season"] <- "Winter Adj FCHF DailyAvg"
+
+
+seasonal_FCH4_summary_gf_winteradjCH4 
+
+# Format the results with mean ± SE
+seasonal_FCH4_summary_gf_winteradjCH4_formatted <- seasonal_FCH4_summary_gf_winteradjCH4 %>%
+  mutate(
+    flux = sprintf("%.2f ± %.2f", mean_flux, se_flux)
+  ) %>%
+  select(season, flux)
+         
+seasonal_FCH4_summary_gf_winteradjCH4_formatted
+
+# # Save to Excel
+library(writexl)
+#write_xlsx(seasonal_FCH4_summary_gf_winteradjCH4_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteradj_dailyAvg_FCH4_summary_gf.xlsx")
+
+```
+
+
+# NEE - daily flux winter-adj
+
+#based on 2018 dailg avg growing season fluxes, winter daily avg CO2 flux can be ~45% of growing season daily avg flux (0.451) --> multiply winter daily avg fluxes by 0.451 & re-calc the daily avg flux to get an adjusted potential winter daily avg flux 
+
+
+```{r}
+#FC in umol/m2/s
+
+# Calculate 0.473 (~47%) of daily average daily NEE (FC_F) during growing season season with standard error
+
+seasonal_NEE_summary_gf_winteradjNEE <- df_avg %>%
+  filter(season == "Growing Season") %>%
+  group_by(year, season) %>%
+  summarize(
+    mean_flux = abs(mean(FC_F*0.451, na.rm = TRUE)),
+    se_flux = sd(FC_F*0.451, na.rm = TRUE)/sqrt(sum(!is.na(FC_F))),
+    n_days = n()  # number of days per season
+  )
+
+#renaming the ~47% of growing season avg variable name 
+seasonal_NEE_summary_gf_winteradjNEE$season[seasonal_NEE_summary_gf_winteradjNEE$season=="Growing Season"] <- "Winter Adj NEE DailyAvg"
+
+
+seasonal_NEE_summary_gf_winteradjNEE 
+
+# Format the results with mean ± SE
+seasonal_NEE_summary_gf_winteradjNEE_formatted <- seasonal_NEE_summary_gf_winteradjNEE  %>%
+  mutate(
+    flux = sprintf("%.2f ± %.2f", mean_flux, se_flux)
+  ) %>%
+  select(season, flux)
+         
+seasonal_NEE_summary_gf_winteradjNEE_formatted
+
+# # Save to Excel
+# library(writexl)
+#write_xlsx(seasonal_NEE_summary_gf_winteradjNEE_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteradj_dailyAvg_NEE_summary_gf.xlsx")
+
+
+```
+
+
+
+
+
+
+
