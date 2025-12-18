@@ -1247,7 +1247,7 @@ annual_budgets_winteryear <- df_avg2 %>%
 print(annual_budgets_winteryear)
 ```
 
-#Make table with annual winter-year budgets - not winter-adj **this is by winter year, not calendar year, so the days don't match up to 365
+#Make table with annual winter-year budgets - not winter-adj **this is by winter year, not calendar year, so the days don't match up to 365 -- ended up not putting this into table because it's confusing...will ask Kyle and Sue about it 
 
 ```{r}
 library(tidyverse)
