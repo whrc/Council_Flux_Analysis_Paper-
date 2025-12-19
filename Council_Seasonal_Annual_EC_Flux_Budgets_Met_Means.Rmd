@@ -63,6 +63,8 @@ year_colors <- c("2017" = "#E41A1C",  # Red
 
 # Convert year to factor for consistent color mapping
 df_avg$year_factor <- as.factor(df_avg$year)
+
+
 ```
 
 #SWC when ground is not frozen - SWC measurements in frozen ground are not reliable with specific calibrations or data processing 
@@ -425,6 +427,16 @@ print(winter_verification)
 
 
 ```
+
+#Save dataset with winter_year & SWC_nf variables 
+```{r}
+# # Save as csv
+write.csv(x = df_avg2, file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.5.csv',quote = F,row.names = F)
+
+```
+
+
+
 #Winter budgets and means based on winter year
 ```{r}
 
@@ -757,6 +769,10 @@ gapfill_summary <- df_avg2 %>%
 
 
 
+# Display the results
+print("FCH4 Data Coverage by Year:")
+print(fch4_coverage)
+
 # Display summary
 print(gapfill_summary)
 
@@ -889,13 +905,11 @@ write_xlsx(seasonal_table_with_gf , "C:/Users/kkent/Documents/Github Flux Networ
 
 #based on 2018 daily avg growing season fluxes, winter daily avg CH4 flux can be ~44% of growing season daily avg flux (0.443) --> multiply winter daily avg fluxes by 0.443 & re-calc the daily avg CH4 flux to get an adjusted potential winter daily avg flux 
 
-
-
 ```{r}
 
 library(tidyverse)
 
-# 1. Calculate growing season means AND SE for each winter_year
+# 1: Calculate growing season means AND SE for each winter_year
 
 growing_season_means <- df_avg2 %>%
   filter(season == "Growing Season") %>%
@@ -924,7 +938,7 @@ print(growing_season_means %>%
       select(winter_year, `NEE ± SE`, `FCH4 ± SE`, n_growing))
 
 
-# 2. Count winter days for each winter_year
+# 2: Count winter days for each winter_year
 
 winter_days <- df_avg2 %>%
   filter(season == "Winter") %>%
@@ -1157,22 +1171,11 @@ pub_table <- winter_adj_budgets %>%
 
 
 
-cat("Summary of winter-adjusted values:\n")
-cat(sprintf("  Mean winter NEE flux: %.3f ± %.3f μmol m⁻² s⁻¹\n",
-            mean(winter_adj_budgets$winter_adj_daily_NEE_flux),
-            mean(winter_adj_budgets$se_winter_adj_daily_NEE_flux)))
-cat(sprintf("  Mean winter FCH4 flux: %.4f ± %.4f nmol m⁻² s⁻¹\n",
-            mean(winter_adj_budgets$winter_adj_daily_FCH4_flux),
-            mean(winter_adj_budgets$se_winter_adj_daily_FCH4_flux)))
-cat(sprintf("  Mean winter CO2 budget: %.2f ± %.2f g C m⁻²\n",
-            mean(winter_adj_budgets$winter_adj_CO2_budget),
-            mean(winter_adj_budgets$se_winter_adj_CO2_budget)))
-cat(sprintf("  Mean winter CH4 budget: %.3f ± %.3f g C m⁻²\n\n",
-            mean(winter_adj_budgets$winter_adj_CH4_budget),
-            mean(winter_adj_budgets$se_winter_adj_CH4_budget)))
-```
-#save winter-adj tables
 
+```
+
+
+#save winter-adj tables
 ```{r}
 #save winter-adj daily NEE and FCH4_F fluxes raw table 
  library(writexl)
@@ -1185,11 +1188,11 @@ write_xlsx(combined_table, "C:/Users/kkent/Documents/Github Flux Network/Council
 
 ```
 
-# Annual means and budgets 
+# Annual - Winter_year means and budgets - winter_year (not calendar year)
 
-##### (not winter-adj - did winter adj here manually in excel sheet "Seasonal_Cbudgets_Table_all_years_for_paper")
+##### (not winter-adj - did winter adj using proportions manually in excel sheet "Seasonal_Cbudgets_Table_all_years_for_paper") by simply adding up the seasonal budgets for each winter_year
 
-#Code for calculating budgets based on all seasons & assigned winter year 
+#Code for calculating budgets based on all seasons & assigned winter year (not calendar year, not winter-adj**)
 ```{r}
 annual_budgets_winteryear <- df_avg2 %>%
   group_by(winter_year) %>%
@@ -1251,7 +1254,6 @@ print(annual_budgets_winteryear)
 
 ```{r}
 library(tidyverse)
-
 
 #Create formatted columns with mean ± SE
 
@@ -1350,21 +1352,20 @@ gapfill_pct_only <- gapfill_summary %>%
 
 print(gapfill_pct_only)
 
-
 ```
 
 #merge %gf with seasonal summaries by winter_year
 ```{r}
 
-seasonal_budgets_winteryear_with_gf <- seasonal_budgets_winteryear %>%
+annual_budgets_winteryear_with_gf <- annual_budgets_winteryear %>%
   left_join(
     gapfill_pct_only,
-    by = c("year", "season")
+    by = c("year")
   )
 
 
 # Display merged data
-print(seasonal_budgets_winteryear_with_gf %>%
+print(annual_budgets_winteryear_with_gf %>%
       select(year, season, days, 
              mean_daily_NEE, NEE_pct_gapfilled,
              mean_daily_FCH4, FCH4_pct_gapfilled,
@@ -1372,7 +1373,7 @@ print(seasonal_budgets_winteryear_with_gf %>%
 
 #formatted table 
 
-seasonal_table_with_gf <- seasonal_budgets_winteryear_with_gf %>%
+annual_winteryear_table_with_gf <- annual_budgets_winteryear_with_gf %>%
   mutate(
     # Format mean ± SE with % gapfilled
     `NEE` = sprintf("%.2f ± %.2f (%s%%)", 
@@ -1389,21 +1390,524 @@ seasonal_table_with_gf <- seasonal_budgets_winteryear_with_gf %>%
                           mean_TS_3_gapfilled, se_TS_3_gapfilled, TS_pct_gapfilled),
     
     Year = year,
-    Season = season,
     Days = days
   ) %>%
-  select(Year, Season, Days, NEE, FCH4, GPP, RECO, `Air Temp`, `Soil Temp`)
+  select(Year, Days, NEE, FCH4, GPP, RECO, `Air Temp`, `Soil Temp`)
 
-seasonal_table_with_gf 
+annual_winteryear_table_with_gf
+
+```
+
+#save table with %gf
+```{r}
+
+ library(writexl)
+write_xlsx(annual_winteryear_table_with_gf , "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_means_budgets_winteryear_percentGF_12.17.2025.xlsx")
+
+```
+
+#Annual - calendar year for met variables ** TA_gf, TS_3_gf, SWC > 2degC
+
+
+```{r}
+annual_budgets_calyear <- df_avg2 %>%
+  group_by(year) %>%
+  summarize(
+    #measured soil temp, no GF
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+   #SWC_3, all 
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    #SWC_3, excluding winter and TS_3_gf > 2 degC
+    mean_soil_moisture_nf = mean(SWC_3_nf, na.rm = TRUE),
+    se_soil_moisture_nf = sd(SWC_3_nf, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_nf))),
+   #measured TA, no GF
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+   #ERA-mod GF TA
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+    se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+   #ERA-mod GF TS_3
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled)))),
+   #vapor pressure deficit
+    mean_VPD = mean(VPD, na.rm = TRUE),
+    se_VPD = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+   #relative humidity 
+    mean_RH = mean(RH, na.rm = TRUE),
+    se_RH = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    # Sensible heat
+    mean_H = mean(H, na.rm = TRUE),
+    se_H = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    # Latent heat
+    mean_LE = mean(LE, na.rm = TRUE),
+    se_LE = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    # Ground heat
+    mean_G = mean(G_1_1_1, na.rm = TRUE),
+    se_G = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+
+   #days per season 
+   days = n(),
+    .groups = "drop"
+  ) 
+
+print(annual_budgets_calyear)
+```
+
+#Make table with annual winter-year budgets - not winter-adj **this is by winter year, not calendar year, so the days don't match up to 365 -- ended up not putting this into table because it's confusing...will ask Kyle and Sue about it 
+
+```{r}
+library(tidyverse)
+
+
+#Create formatted columns with mean ± SE
+
+annual_budgets_calyear_formatted <- annual_budgets_calyear %>%
+ # arrange(year) %>%  # Sort by this order
+  mutate(
+    # Temperature variables
+    `Soil Temp` = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    `Air Temp` = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    `Air Temp (GF)` = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    `Soil Temp (GF)` = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+    
+    # Soil moisture
+    `SWC` = sprintf("%.3f ± %.3f", mean_soil_moisture, se_soil_moisture),
+    `SWC (non-frozen)` = sprintf("%.3f ± %.3f", mean_soil_moisture_nf, se_soil_moisture_nf),
+    
+    # Other met variables
+    `VPD` = sprintf("%.2f ± %.2f", mean_VPD, se_VPD),
+    `RH` = sprintf("%.2f ± %.2f", mean_RH, se_RH),
+    `H` = sprintf("%.2f ± %.2f", mean_H, se_H),
+    `LE` = sprintf("%.2f ± %.2f", mean_LE, se_LE),
+    `G` = sprintf("%.2f ± %.2f", mean_G, se_G),
+    
+    # Keep identifiers and sample size
+    Year = year,
+    Days = days
+  ) %>%
+  # Select formatted columns in desired order
+  select(Year, Days, 
+         `Air Temp (GF)`, `Soil Temp (GF)`,
+         `SWC (non-frozen)`,
+         `VPD`, `RH`, `H`, `LE`, `G`)
+
+# Display as simple table
+print(annual_budgets_calyear_formatted)
+
+
+
+```
+
+
+#Save table 
+```{r}
+# # Save to Excel
+ library(writexl)
+write_xlsx(annual_budgets_calyear_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_met_means_calyear_12.17.2025.xlsx")
+```
+
+# % gapfilled - edit 
+#### comparing HH and df_avg %gapfilled differ by only ~1%, so using df_avg for calculating gf%
+
+```{r}
+
+gapfill_summary <- df_avg2 %>%
+  # Just group directly by winter_year (which already exists!)
+  group_by(year) %>%
+  summarise(
+    # Total days 
+    total_days = n(),
+    
+    # Air Temperature (TA vs TA_gapfilled)
+    TA_measured = sum(!is.na(TA)),
+    TA_gapfilled = sum(is.na(TA) & !is.na(TA_gapfilled)),
+    TA_pct_gapfilled = round((TA_gapfilled / total_days) * 100, 1),
+    
+    # Soil Temperature (TS_3_1_1 vs TS_3_gapfilled)
+    TS_measured = sum(!is.na(TS_3_1_1)),
+    TS_gapfilled = sum(is.na(TS_3_1_1) & !is.na(TS_3_gapfilled)),
+    TS_pct_gapfilled = round((TS_gapfilled / total_days) * 100, 1),
+    
+    #SWC_nf (SWC above 2degC)
+    SWC_nf_measured = sum(!is.na(SWC_3_nf)),
+    SWC_nf_missing = sum(is.na(SWC_3_nf)),
+    SWC_nf_pct_missing = round((SWC_nf_missing / total_days) * 100, 1),
+    SWC_nf_pct_coverage = round((SWC_nf_measured / total_days) * 100, 1),
+    
+    .groups = "drop"
+  ) 
+
+
+# Display summary
+print(gapfill_summary)
+
+#=================================================================
+#check
+TA_coverage <- df_avg2 %>%
+  mutate(year = year(date)) %>%
+  group_by(year) %>%
+  summarise(
+    total_days = n(),
+    measured_days = sum(!is.na(TA)),
+    missing_days = sum(is.na(TA)),
+    coverage_percent = round((measured_days / total_days) * 100, 1),
+    missing_percent = round((missing_days / total_days) * 100, 1),
+    .groups = 'drop'
+  ) %>%
+  arrange(year)
+
+TA_coverage
+
+#SWC coverage - SWC not frozen 
+SWC_nf_coverage <- df_avg2 %>%
+  mutate(year = year(date)) %>%
+  group_by(year) %>%
+  summarise(
+    total_days = n(),
+    measured_days = sum(!is.na(SWC_3_nf)),
+    missing_days = sum(is.na(SWC_3_nf)),
+    coverage_percent = round((measured_days / total_days) * 100, 1),
+    missing_percent = round((missing_days / total_days) * 100, 1),
+    .groups = 'drop'
+  ) %>%
+  arrange(year)
+
+SWC_nf_coverage
+
+
+#compact table with only %gf
+
+gapfill_pct_only <- gapfill_summary %>%
+  select(year, total_days,
+         TA_pct_gapfilled,
+         TS_pct_gapfilled,
+         SWC_nf_pct_missing,
+         SWC_nf_pct_coverage)
+
+print(gapfill_pct_only)
+
+
+```
+
+#merge %gf with seasonal summaries by winter_year
+```{r}
+
+annual_temps_calyear_with_gf <- annual_budgets_calyear %>%
+  left_join(
+    gapfill_pct_only,
+    by = c("year")
+  )
+
+
+#formatted table 
+
+annual_temps_calyear_table_with_gf <- annual_temps_calyear_with_gf%>%
+  mutate(
+    # Format mean ± SE with % gapfilled
+    `Air Temp` = sprintf("%.2f ± %.2f (%s%%)",
+                         mean_TA_gapfilled, se_TA_gapfilled, TA_pct_gapfilled),
+    `Soil Temp` = sprintf("%.2f ± %.2f (%s%%)",
+                          mean_TS_3_gapfilled, se_TS_3_gapfilled, TS_pct_gapfilled),
+    
+    `Soil Moisture (non-frozen)` = sprintf("%.2f ± %.2f",
+                                          mean_soil_moisture_nf, se_soil_moisture_nf),
+    
+    Year = year,
+    Days = days
+  ) %>%
+  select(Year, Days, `Air Temp`, `Soil Temp`, `Soil Moisture (non-frozen)`)
+
+annual_temps_calyear_table_with_gf 
 
 ```
 #save table with %gf
 ```{r}
 
  library(writexl)
-write_xlsx(seasonal_table_with_gf , "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_means_budgets_winteryear_percentGF_12.17.2025.xlsx")
+write_xlsx(annual_temps_calyear_table_with_gf , "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_temps_calyear_percentGF_12.17.2025.xlsx")
 
 ```
+
+
+
+#Figures of C Budgets with winter adjustments based on 2018 proportions 
+
+```{r}
+library(readxl)
+adj_C_budgets <- read_xlsx(path ="C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Seasonal_Cbudgets_Table_all_years_for_paper.xlsx", sheet = "R_template_adjWinterYear_C" )
+
+
+# Reshape data for plotting
+adj_C_budgets_long<- adj_C_budgets %>%
+  pivot_longer(cols = c(Net_CH4_adj_dailyflux_budget, Net_CO2_adj_dailyflux_budget, Total_Net_C_adj_dailyflux_budget
+),
+               names_to = "flux_type",
+               values_to = "flux")
+
+
+#Set year colors for consistency 
+
+# Define consistent year colors
+year_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+# Convert year to factor for consistent color mapping
+adj_C_budgets$year_factor <- as.factor(adj_C_budgets$Year)
+
+```
+
+
+#Plot of budgets with winter-adj CH4 - color by season and sort by winter_year
+```{r}
+#Seasonal patterns - winter-adj CH4 using daily mean fluxes 
+
+#Seasonal budgets for CH4 based on the winter-adj avg daily flux 
+adj_seasonal_budgets_CH4 <- ggplot(adj_C_budgets %>% 
+                                    filter(Season != "Annual") %>% #takes out "annual" as a season
+                                   mutate(Season = factor(Season, levels = c("Winter", "Growing Season", "Fall Senescence"))), #lets you determine order of seasons 
+                                  aes(x = factor(Year), y = Net_CH4_adj_dailyflux_budget, fill = Season)) +
+  geom_bar(stat = "identity", position = "dodge",
+aes(alpha = Season)) + #maps opacity to season 
+  scale_alpha_manual(
+  values = c(
+    "Growing Season" = 1,  #sets opacity of each season 
+    "Fall Senescence" = 1,
+    "Winter" = 0.5
+  ),
+  guide = "none" #hides alpha legend 
+)+
+  scale_x_discrete( #lets you customize x-axis labels; changed to reflect "winter_year" budgets*
+  labels = c(
+    "2017" = "2017 - 2018",
+    "2018" = "2018 - 2019",
+    "2019" = "2019 - 2020",
+    "2020" = "2020 - 2021",
+    "2021" = "2021 - 2022",
+    "2022" = "2022 - 2023"
+  )
+)+
+  #labs(title = "Seasonal CH4 Budgets by Year",
+  labs(title = expression(bold(Net~Seasonal~CH[4]~Flux)),
+       x = "Year",
+       fill = "Season",
+       #y = "CO2 Budget (gC/m²/season)") +
+   y = expression(bold(Net~CH[4]~Flux~(gC/m^2/season)))) +
+     scale_fill_manual(values = c("royalblue1", "darkgreen","brown4")) +
+     scale_y_continuous(
+      limits = c(0, 2.5),  # Adjust these limits as needed
+      breaks = seq(0, 2.5, by = 0.5))+
+    theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    #  axis.text.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 12, face = "bold"),
+      axis.title = element_text(size = 14, face = "bold"))
+
+adj_seasonal_budgets_CH4
+
+
+```
+
+
+#Save - winter-adj CH4 based on daily fluxes & winter_year
+```{r}
+# #Save CH4 seasonal budgets 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryearadj_seasonal_budgets_CH4_dailyflux.png", adj_seasonal_budgets_CH4,
+       width = 10, height = 7, dpi = 600)
+```
+
+
+#Plot of budgets with winter-adj CH4 - color by year and sort by season 
+```{r}
+#Seasonal patterns - winter-adj CH4 using daily mean fluxes 
+
+#Seasonal budgets for CH4 based on the winter-adj avg daily flux 
+adj_seasonal_budgets_CH4.2 <- ggplot(adj_C_budgets %>% 
+                                    filter(Season != "Annual") %>% #takes out "annual" as a season
+                                   mutate(Season = factor(Season, levels = c("Growing Season", "Fall Senescence", "Winter"))), #lets you determine order of seasons 
+                                  aes(x = factor(Season), y = Net_CH4_adj_dailyflux_budget, fill = year_factor)) +
+  geom_bar(stat = "identity", position = "dodge",
+aes(alpha = Season)) + #maps opacity to season 
+  scale_alpha_manual(
+  values = c(
+    "Growing Season" = 1,  #sets opacity of each season 
+    "Fall Senescence" = 1,
+    "Winter" = 0.5
+  ),
+  guide = "none" #hides alpha legend 
+)+
+  scale_fill_manual(
+    name = "Year",
+    values = year_colors,
+  labels = c(
+    "2017" = "2017-2018",
+    "2018" = "2018-2019",
+    "2019" = "2019-2020",
+    "2020" = "2020-2021",
+    "2021" = "2021-2022",
+    "2022" = "2022-2023"
+  )
+)+
+#   scale_x_discrete( #lets you customize x-axis labels; changed to reflect "winter_year" budgets*
+#   labels = c(
+#     "2017" = "2017-2018",
+#     "2018" = "2018-2019",
+#     "2019" = "2019-2020",
+#     "2020" = "2020-2021",
+#     "2021" = "2021-2022",
+#     "2022" = "2022-2023"
+#   )
+# )+
+  #labs(title = "Seasonal CH4 Budgets by Year",
+  labs(title = expression(bold(Net~Seasonal~CH[4]~Budget~by~Year)),
+       x = "Season",
+       fill = "Year",
+       #y = "CO2 Budget (gC/m²/season)") +
+   y = expression(bold(Net~CH[4]~Flux~(gC/m^2)))) +
+  
+ # scale_color_manual(values = year_colors) +
+    # scale_fill_manual(values = c("darkgreen","brown4", "royalblue1")) +
+     scale_y_continuous(
+      limits = c(0, 2.5),  # Adjust these limits as needed
+      breaks = seq(0, 2.5, by = 0.5))+
+    theme_bw() +
+  theme(
+    #axis.text.x = element_text(angle = 45, hjust = 1),
+    #  axis.text.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 12, face = "bold"),
+      axis.title = element_text(size = 14, face = "bold"))
+
+adj_seasonal_budgets_CH4.2
+
+
+```
+#Save - winter-adj CH4 based on daily fluxes & winter_year
+```{r}
+# #Save CH4 seasonal budgets 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryearadj_seasonal_budgets_CH4_dailyflux.2.png", adj_seasonal_budgets_CH4.2,
+       width = 10, height = 7, dpi = 600)
+```
+
+
+
+#adj CO2 seasonal budget based on corrected seasonal delineations 
+```{r}
+adj_seasonal_budgets_CO2 <- ggplot(adj_C_budgets %>% 
+                                    filter(Season != "Annual") %>% #takes out "annual" as a season
+                                        mutate(Season = factor(Season, levels = c("Winter", "Growing Season", "Fall Senescence"))), #lets you determine order of seasons
+ aes(x = factor(Year), y = Net_CO2_adj_dailyflux_budget, fill = Season)) +
+
+   geom_bar(stat = "identity", position = "dodge",
+aes(alpha = Season)) + #maps opacity to season 
+  scale_alpha_manual(
+  values = c(
+    "Growing Season" = 1,  #sets opacity of each season 
+    "Fall Senescence" = 1,
+    "Winter" = 0.5
+  ),
+  guide = "none" #hides alpha legend 
+)+
+  scale_x_discrete( #lets you customize x-axis labels; changed to reflect "winter_year" budgets*
+  labels = c(
+    "2017" = "2017 - 2018",
+    "2018" = "2018 - 2019",
+    "2019" = "2019 - 2020",
+    "2020" = "2020 - 2021",
+    "2021" = "2021 - 2022",
+    "2022" = "2022 - 2023"
+  )
+) +
+
+  geom_hline(yintercept=0, colour = "black")+ 
+  labs(title = expression(bold(Net~Seasonal~CO[2]~Flux)),
+       x = "Year",
+        fill = "Season",
+       #y = "CO2 Budget (gC/m²/season)") +
+   y = expression(bold(Net~CO[2]~Flux~(gC/m^2/season)))) +
+  scale_fill_manual(values = c("steelblue1","darkgreen","brown4"))+
+   scale_y_continuous(
+      limits = c(-125, 125),  # Adjust these limits as needed
+      breaks = seq(-125, 125, by = 25))+
+  theme_bw() +
+  theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+    #axis.text.x = element_text(size = 14, face = "bold"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+                                  axis.text = element_text(size = 12, face = "bold"),
+                                  axis.title = element_text(size = 14, face = "bold"))
+
+  print(adj_seasonal_budgets_CO2)
+  
+
+```
+
+
+#Save - winter-adj CH4 based on daily fluxes & winter_year
+```{r}
+# #Save CH4 seasonal budgets 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryearadj_seasonal_budgets_CO2_dailyflux.png", adj_seasonal_budgets_CO2,
+       width = 10, height = 7, dpi = 600)
+```
+
+
+#Annual C budgets with winter_year winter adj from daily flux
+
+####bar graph of seasonal budgets with winter_year-adj daily fluxes
+```{r}
+#bar graph of net CH4, CO2, and total C without labels above bars 
+
+adj_annual_Cbudget_bargraph <- ggplot(adj_C_budgets_long %>%
+                                        filter(Season == "Annual"),
+                                               aes(x = factor(Year), y = flux, fill = flux_type)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  scale_x_discrete( #lets you customize x-axis labels; changed to reflect "winter_year" budgets*
+  labels = c(
+    "2017" = "2017 - 2018",
+    "2018" = "2018 - 2019",
+    "2019" = "2019 - 2020",
+    "2020" = "2020 - 2021",
+    "2021" = "2021 - 2022",
+    "2022" = "2022 - 2023"
+  )
+) +
+  labs(title = "Net Carbon Flux",
+       x = "Year",
+       y = expression(Net~C~Flux~(gC/m^2/year)),
+       fill = "Flux Type") +
+  scale_fill_manual(values = c("salmon", "turquoise", "grey"),
+                    labels = c(expression(CH[4]), expression(CO[2]), "Total C")) +
+   scale_y_continuous(
+        breaks = seq(-10, 40, 10),
+        limits = c(-10, 40)) +  # Slightly increased upper limit to accommodate labels
+  theme_bw()+
+    theme(
+       axis.text.x = element_text(angle = 35, hjust = 1),
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 12, face = "bold"),
+      axis.title = element_text(size = 14, face = "bold"))
+
+adj_annual_Cbudget_bargraph
+
+
+```
+
+#Save annual C budgets 
+```{r}
+#save
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryearadj_yearly_carbon_fluxes.png", adj_annual_Cbudget_bargraph,
+       width = 10, height = 7, dpi = 600)
+```
+
+
+
 
 
 
@@ -1411,13 +1915,6 @@ write_xlsx(seasonal_table_with_gf , "C:/Users/kkent/Documents/Github Flux Networ
 ```{r}
 
 ```
-
-
-
-
-
-
-
 
 
 
@@ -1464,46 +1961,7 @@ library(writexl)
 ```
 
 
-# NEE - daily flux winter-adj
 
-#based on 2018 dailg avg growing season fluxes, winter daily avg CO2 flux can be ~45% of growing season daily avg flux (0.451) --> multiply winter daily avg fluxes by 0.451 & re-calc the daily avg flux to get an adjusted potential winter daily avg flux 
-
-
-```{r}
-#FC in umol/m2/s
-
-# Calculate 0.473 (~47%) of daily average daily NEE (FC_F) during growing season season with standard error
-
-seasonal_NEE_summary_gf_winteradjNEE <- df_avg %>%
-  filter(season == "Growing Season") %>%
-  group_by(year, season) %>%
-  summarize(
-    mean_flux = abs(mean(FC_F*0.451, na.rm = TRUE)),
-    se_flux = sd(FC_F*0.451, na.rm = TRUE)/sqrt(sum(!is.na(FC_F))),
-    n_days = n()  # number of days per season
-  )
-
-#renaming the ~47% of growing season avg variable name 
-seasonal_NEE_summary_gf_winteradjNEE$season[seasonal_NEE_summary_gf_winteradjNEE$season=="Growing Season"] <- "Winter Adj NEE DailyAvg"
-
-
-seasonal_NEE_summary_gf_winteradjNEE 
-
-# Format the results with mean ± SE
-seasonal_NEE_summary_gf_winteradjNEE_formatted <- seasonal_NEE_summary_gf_winteradjNEE  %>%
-  mutate(
-    flux = sprintf("%.2f ± %.2f", mean_flux, se_flux)
-  ) %>%
-  select(season, flux)
-         
-seasonal_NEE_summary_gf_winteradjNEE_formatted
-
-# # Save to Excel
-# library(writexl)
-#write_xlsx(seasonal_NEE_summary_gf_winteradjNEE_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteradj_dailyAvg_NEE_summary_gf.xlsx")
-
-
-```
 
 
 
