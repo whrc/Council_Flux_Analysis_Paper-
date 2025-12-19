@@ -718,10 +718,8 @@ print(seasonal_budgets_winteryear_formatted)
 write_xlsx(seasonal_budgets_winteryear_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_means_budgets_winteryear_12.17.2025.xlsx")
 ```
 
-# % gapfilled - edit 
+# % gapfilled 
 #### comparing HH and df_avg %gapfilled differ by only ~1%, so using df_avg for calculating gf%
-
-
 
 ```{r}
 
@@ -1316,7 +1314,6 @@ write_xlsx(annual_budgets_winteryear_formatted, "C:/Users/kkent/Documents/Github
 ```{r}
 
 gapfill_summary <- df_avg2 %>%
-  # Just group directly by winter_year (which already exists!)
   group_by(winter_year) %>%
   summarise(
     # Total days in this season
@@ -1508,7 +1505,7 @@ print(annual_budgets_calyear_formatted)
 write_xlsx(annual_budgets_calyear_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_met_means_calyear_12.17.2025.xlsx")
 ```
 
-# % gapfilled - edit 
+# % gapfilled
 #### comparing HH and df_avg %gapfilled differ by only ~1%, so using df_avg for calculating gf%
 
 ```{r}
@@ -1542,6 +1539,21 @@ gapfill_summary <- df_avg2 %>%
 
 # Display summary
 print(gapfill_summary)
+
+
+
+#compact table with only %gf for temp and SWC 
+
+gapfill_pct_only <- gapfill_summary %>%
+  select(year, total_days,
+         TA_pct_gapfilled,
+         TS_pct_gapfilled,
+         SWC_nf_pct_missing,
+         SWC_nf_pct_coverage)
+
+print(gapfill_pct_only)
+
+
 
 #=================================================================
 #check
@@ -1577,16 +1589,37 @@ SWC_nf_coverage <- df_avg2 %>%
 SWC_nf_coverage
 
 
-#compact table with only %gf
+#====== coverage of FC and FCH4 by winter_year ============
+#FC & FCH4 % coverage
 
-gapfill_pct_only <- gapfill_summary %>%
-  select(year, total_days,
-         TA_pct_gapfilled,
-         TS_pct_gapfilled,
-         SWC_nf_pct_missing,
-         SWC_nf_pct_coverage)
+FC_FCH4_coverage <- df_avg2 %>%
+  group_by(winter_year, season) %>%
+  summarise(
+    # Total days in this season
+    total_days = n(),
+    
+    # NEE (FC vs FC_F)
+    NEE_measured = sum(!is.na(FC)),
+    NEE_gapfilled = sum(is.na(FC) & !is.na(FC_F)),
+    NEE_pct_gapfilled = round((NEE_gapfilled / total_days) * 100, 1),
+    NEE_pct_coverage = round((NEE_measured / total_days) * 100, 1),
 
-print(gapfill_pct_only)
+    # FCH4 (FCH4 vs FCH4_F)
+    FCH4_measured = sum(!is.na(FCH4)),
+    FCH4_gapfilled = sum(is.na(FCH4) & !is.na(FCH4_F)),
+    FCH4_pct_gapfilled = round((FCH4_gapfilled / total_days) * 100, 1),
+    FCH4_pct_coverage = round((FCH4_measured / total_days) * 100, 1),
+
+    .groups = "drop"
+  ) %>%
+  # Rename to "year" for consistency with other tables
+  rename(year = winter_year)
+    
+FC_FCH4_coverage
+
+FC_FCH4_winter_coverage <- FC_FCH4_coverage %>%
+  filter(season == "Winter")
+FC_FCH4_winter_coverage
 
 
 ```
