@@ -77,7 +77,7 @@ df_avg <- df_avg %>%
     # Set to NA when TS <= 2 or when it's winter season
     SWC_3_nf = case_when(
       season == "Winter" ~ NA_real_,              # Exclude all winter
-      TS_3_gapfilled <= 2 ~ NA_real_,             # Exclude frozen soil
+      TS_3_gapfilled <= 2 ~ NA_real_,             # Exclude frozen soil also (as winter is determined by TA, not TS)
       TRUE ~ SWC_3_1_1                            # Use actual SWC otherwise
     )
   )
@@ -98,6 +98,24 @@ ggplot(df_avg %>%
 ggplot(df_avg) +
   geom_point(aes(x = TS_3_gapfilled, y = SWC_3_1_1)) +
   geom_point(aes(TS_3_gapfilled, y = SWC_3_nf), color = "red", shape = 5)
+
+df_avg_nowinter <- df_avg2 %>%
+  filter(season != "Winter")
+
+df_avg_winter <- df_avg2 %>%
+  filter(season == "Winter")
+
+ggplot(data = df_avg_winter %>%
+         filter(TS_3_gapfilled >= 2)) +
+  geom_point(aes(x = date, y = TS_3_gapfilled))
+
+ggplot(data = df_avg_nowinter %>%
+         filter(TS_3_gapfilled <= 2)) +
+  geom_point(aes(x = date, y = TS_3_gapfilled, color = season))
+
+
+ggplot(data = df_avg) +
+  geom_point(aes(x = TS_3_gapfilled, y = SWC_3_nf, color = season))
 
 
 ```
@@ -1622,6 +1640,7 @@ FC_FCH4_winter_coverage <- FC_FCH4_coverage %>%
 FC_FCH4_winter_coverage
 
 
+
 ```
 
 #merge %gf with seasonal summaries by winter_year
@@ -1733,8 +1752,8 @@ aes(alpha = Season)) + #maps opacity to season
    y = expression(bold(Net~CH[4]~Flux~(gC/m^2/season)))) +
      scale_fill_manual(values = c("royalblue1", "darkgreen","brown4")) +
      scale_y_continuous(
-      limits = c(0, 2.5),  # Adjust these limits as needed
-      breaks = seq(0, 2.5, by = 0.5))+
+      limits = c(0, 2),  # Adjust these limits as needed
+      breaks = seq(0, 2, by = 0.5))+
     theme_bw() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
@@ -1918,8 +1937,8 @@ adj_annual_Cbudget_bargraph <- ggplot(adj_C_budgets_long %>%
   scale_fill_manual(values = c("salmon", "turquoise", "grey"),
                     labels = c(expression(CH[4]), expression(CO[2]), "Total C")) +
    scale_y_continuous(
-        breaks = seq(-10, 40, 10),
-        limits = c(-10, 40)) +  # Slightly increased upper limit to accommodate labels
+        breaks = seq(-10, 35, 5),
+        limits = c(-10, 35)) +  # Slightly increased upper limit to accommodate labels
   theme_bw()+
     theme(
        axis.text.x = element_text(angle = 35, hjust = 1),
