@@ -833,6 +833,7 @@ monthly_plot_light <- ggplot(monthly_env_data, aes(x = month, y = Value, color =
  print(monthly_plot_light)
 
 ```
+
 #save figure 
 ```{r}
  #Save figure 
@@ -2529,6 +2530,14 @@ p_met
 
 
 ```
+
+#Save figure 
+```{r}
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_Table1_MeanMet_winteryear_plot.png", p_met, 
+        width = 7, height = 5, dpi = 600)
+```
+
 #---------------------------------------------------
 
 #******* STATS ******************************
@@ -2572,7 +2581,37 @@ print(mk_results)
 # Soil Temperature (°C)	0.2000000	0.70711422	No trend	
 # Soil Moisture (%)	-0.7333333	0.06028918	No trend / borderline potential trend 
 
+
+#calculate sens slope for SWC-nf borderline trend
+swc_nf_sens.slope <- annual_budgets3 %>%
+  summarise(
+     # Soil Moisture
+    SWC_tau = MannKendall(mean_soil_moisture_nf)$tau,
+    SWC_pval = MannKendall(mean_soil_moisture_nf)$sl,
+   SWC_slope = ifelse(sum(!is.na(mean_soil_moisture_nf)) >= 3, #make sure enough data, no NAs
+                       sens.slope(na.omit(mean_soil_moisture_nf))$estimates,
+                       NA))
+    
+swc_nf_sens.slope #sens slope = -1.7113*
+
+
 ```
+#Annual - LM of TA, TS, SWC-nf to compare with Mann-Kendall timeseries 
+```{r}
+lm_TA <- lm(mean_TA_gapfilled ~ year, data = annual_budgets3)
+summary(lm_TA) #R2 = 0.36, slope = -0.46, p = 0.2
+
+
+lm_TS <- lm(mean_TS_3_gapfilled~ year, data = annual_budgets3)
+summary(lm_TS) #R2 = -0.2; slope = 0.03, p = 0.85 
+
+lm_SWC_nf <- lm(mean_soil_moisture_nf ~ year, data = annual_budgets3)
+summary(lm_SWC_nf) #R2 = 0.6517, slope = -2.01, p = 0.032** SIG, but for small sample size timeseries, the mann-kendall tends to be more appropriate. will report both. 
+
+```
+
+
+
 
 #Seasonal - timeseries of met vars by season among years 
 
