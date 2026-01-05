@@ -46,16 +46,16 @@ Sys.setenv(TZ='UTC')
 ```{r}
 #using the ".2" version to reflect the updated SWC used in RF 
 
-#original half-hourly dataframe 
-df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+#HH data - ver3 has winteryear 
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.3.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-#needs continuous day variable - daily avg, calculated in processing steps
-df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.4.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+#needs continuous day variable - daily avg, updated seasons, SWC-nf, winter-year
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.5.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
 ```
 
 
-#Add WD to df (which has the half-hourly data)
+#Add WD_cardinal to df if not already added (which has the half-hourly data)
 ```{r}
 # Assign cardinal directions based on wind direction in degrees
 df2 <- df %>%
@@ -72,85 +72,288 @@ df2 <- df %>%
       #TRUE ~ NA_character_ # Handle any missing or invalid values -- not needed in this case 
     )
   )
+```
 
+#Save df with cardinal wind directions 
+```{r}
 #Save df with cardinal WD (optional)
-# write.csv(x = df2,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',quote = F,row.names = F)
+write.csv(x = df2,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.3.csv',quote = F,row.names = F)
 ```
 
 
 #Remove NAs and used complete cases of WD, season, FC, FCH4
-
 ```{r}
-
 # Convert wind_direction_cardinal to an ordered factor so that WD appears in order 
 #HH
-df$WD_cardinal2 <- factor(df$WD_cardinal2, 
+df2$WD_cardinal2 <- factor(df2$WD_cardinal2, 
                                       levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))
 #df_avg
 df_avg$WD_cardinal2 <- factor(df_avg$WD_cardinal2, 
                                       levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW"))
 
 #Since there are some days where there are FC measurements but not FCH4 measurements, and vice versa, make separate datasets for FC and FCH4 with complete cases 
-#make complete cases for FC and FCH4
 
-df_avg_FC <- df_avg %>% filter(complete.cases(FC, season))
-df_avg_FCH4 <- df_avg %>% filter(complete.cases(FCH4, season))
+
+df_avg_FC <- df_avg %>% 
+  filter(winter_year != 2016, winter_year != 2023) %>% #remove years with incomplete seasons; only use years with full seasons   
+  filter(complete.cases(FC, season, WD))
+
+df_avg_FCH4 <- df_avg %>% 
+    filter(winter_year != 2016, winter_year != 2023) %>% #remove years with incomplete seasons  
+  filter(complete.cases(FCH4, season, WD))
+
+
+df_FC <- df2 %>% 
+  filter(winter_year != 2016, winter_year != 2023) %>% #remove years with incomplete seasons; only use years with full seasons   
+  filter(complete.cases(FC, season, WD))
+
+df_FCH4 <- df2 %>% 
+    filter(winter_year != 2016, winter_year != 2023) %>% #remove years with incomplete seasons  
+  filter(complete.cases(FCH4, season, WD))
+
 
 #double checking NAs
 sum(is.na(df_avg_FCH4$season))
 
 
 ```
-####Removing Winter - Dataset without winter season 
+
+#HH flux figure by WD 
+
+### FCH4 by WD - HH
 
 ```{r}
-df_nowinter <- df2 %>%
-  filter(season!= "Winter")
 
-#map out the timestamp of the daily avg dataset
-df_nowinter$date <- as.POSIXct(df_nowinter$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
-
-df_nowinter_2017 <- df_nowinter %>% filter(year == "2017") 
-df_nowinter_2018 <- df_nowinter %>% filter(year == "2018") 
-df_nowinter_2019 <- df_nowinter %>% filter(year == "2019") 
-df_nowinter_2020 <- df_nowinter %>% filter(year == "2020") 
-df_nowinter_2021 <- df_nowinter %>% filter(year == "2021") 
-df_nowinter_2022 <- df_nowinter %>% filter(year == "2022") 
-df_nowinter_2023 <- df_nowinter %>% filter(year == "2023") 
+HH_wind_FCH4 <- df2 %>%
+    #filter(winter_year != "2016", winter_year != "2023") %>%
+  dplyr::filter(complete.cases(season, WD, FCH4)) %>%
+  mutate(WD_cardinal = factor(WD_cardinal, 
+                              levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")))
 
 
-#For FC
+ggplot (HH_wind_FCH4, aes(x = date, y = FCH4, color = WD_cardinal )) +
+  geom_point() +
+  facet_wrap(~season, ncol = 3)
 
-df_avg_FC_nowinter <- df_avg_FC %>%
-  filter(season!= "Winter")
 
-#map out the timestamp of the daily avg dataset
-df_avg_FC_nowinter$date <- as.POSIXct(df_avg_FC_nowinter$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
+ggplot(HH_wind_FCH4, #%>%
+     # filter(season == "Growing Season"), 
+      aes(x = date, y = FCH4 * 1/1000, color = WD_cardinal)) +
+  geom_point() + 
+   geom_hline(yintercept = 0)+
+ #scale_x_date(date_breaks = "1 year", date_labels = "%Y")+ #forced labels for each year 
+  #scale_x_date(date_breaks = "6 months", date_labels = "%b %Y")+ #month and year - too crowded 
+  scale_x_date(breaks = as.Date(c("2017-07-14", "2018-01-01", "2019-01-01", 
+                                   "2020-01-01", "2021-01-01", "2022-01-01", "2023-01-01")),
+               date_labels = "%Y") +
+  
+  theme_bw() +
+  theme(
+        # bold the axis titles
+    axis.title = element_text(face = "bold", size = 14),
+    # bold the axis tick labels
+    axis.text  = element_text(face = "bold", size = 12),
+    plot.title = element_text(face="bold", size = 16),
+  legend.text = element_text(size = 12),
+  legend.title = element_text(face = "bold", size = 14))+
+    labs(
+    x = expression(bold("Date")),
+    y = expression(bold("Half-hourly CH"[4] * " Flux ("*mu*mol/m^2/s*")")),
+    color = "Wind Direction",
+    
+    title = expression(bold("CH"[4] ~ "by Wind Direction ")))
 
-df_avg_FC_nowinter_2017 <- df_avg_FC_nowinter %>% filter(year == "2017") 
-df_avg_FC_nowinter_2018 <- df_avg_FC_nowinter %>% filter(year == "2018") 
-df_avg_FC_nowinter_2019 <- df_avg_FC_nowinter %>% filter(year == "2019") 
-df_avg_FC_nowinter_2020 <- df_avg_FC_nowinter %>% filter(year == "2020") 
-df_avg_FC_nowinter_2021 <- df_avg_FC_nowinter %>% filter(year == "2021") 
-df_avg_FC_nowinter_2022 <- df_avg_FC_nowinter %>% filter(year == "2022") 
-df_avg_FC_nowinter_2023 <- df_avg_FC_nowinter %>% filter(year == "2023") 
 
-#for FCH4
 
-df_avg_FCH4_nowinter <- df_avg_FCH4 %>%
-  filter(season!= "Winter")
+```
 
-#map out the timestamp of the daily avg dataset
-df_avg_FCH4_nowinter$date <- as.POSIXct(df_avg_FCH4_nowinter$date, format = "%Y-%m-%d") #tells R the order of the timestamp: yr-month-day 
+### FCH4 by WD - HH
 
-df_avg_FCH4_nowinter_2017 <- df_avg_FCH4_nowinter %>% filter(year == "2017") 
-df_avg_FCH4_nowinter_2018 <- df_avg_FCH4_nowinter %>% filter(year == "2018") 
-df_avg_FCH4_nowinter_2019 <- df_avg_FCH4_nowinter %>% filter(year == "2019") 
-df_avg_FCH4_nowinter_2020 <- df_avg_FCH4_nowinter %>% filter(year == "2020") 
-df_avg_FCH4_nowinter_2021 <- df_avg_FCH4_nowinter %>% filter(year == "2021") 
-df_avg_FCH4_nowinter_2022 <- df_avg_FCH4_nowinter %>% filter(year == "2022") 
-df_avg_FCH4_nowinter_2023 <- df_avg_FCH4_nowinter %>% filter(year == "2023") 
+```{r}
 
+HH_wind_FC<- df2 %>%
+ # filter(winter_year != "2016", winter_year != "2023") %>%
+  dplyr::filter(complete.cases(season, WD, FC)) %>%
+    mutate(WD_cardinal = factor(WD_cardinal, 
+                              levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")))
+
+ggplot (HH_wind_FC, aes(x = date, y = FC, color =WD_cardinal )) +
+  geom_point() +
+  facet_wrap(~season, ncol = 3)
+
+
+
+ggplot(HH_wind_FC, #%>%
+     # filter(season == "Growing Season"), 
+      aes(x = date, y = FC, color = WD_cardinal)) +
+  geom_point() + 
+   geom_hline(yintercept = 0)+
+ #scale_x_date(date_breaks = "1 year", date_labels = "%Y")+ #forced labels for each year 
+  #scale_x_date(date_breaks = "6 months", date_labels = "%b %Y")+ #month and year - too crowded 
+  scale_x_date(breaks = as.Date(c("2017-07-14", "2018-01-01", "2019-01-01", 
+                                   "2020-01-01", "2021-01-01", "2022-01-01", "2023-01-01")),
+               date_labels = "%Y") +
+  
+  theme_bw() +
+  theme(
+        # bold the axis titles
+    axis.title = element_text(face = "bold", size = 14),
+    # bold the axis tick labels
+    axis.text  = element_text(face = "bold", size = 12),
+    plot.title = element_text(face="bold", size = 16),
+  legend.text = element_text(size = 12),
+  legend.title = element_text(face = "bold", size = 14))+
+    labs(
+    x = expression(bold("Date")),
+    y = expression(bold("Half-hourly CO"[2] * " Flux ("*mu*mol/m^2/s*")")),
+    color = "Wind Direction",
+    title = expression(bold("CO"[2] ~ "by Wind Direction ")))
+
+```
+
+#df_avgflux figure by WD 
+
+### FCH4 by WD - daily avg
+
+```{r}
+
+avg_wind_FCH4 <- df_avg_FCH4 %>%
+    #filter(winter_year != "2016", winter_year != "2023") %>%
+  dplyr::filter(complete.cases(season, WD, FCH4)) %>%
+  mutate(WD_cardinal = factor(WD_cardinal, 
+                              levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")))
+
+
+ggplot (avg_wind_FCH4, aes(x = date, y = FCH4, color = WD_cardinal )) +
+  geom_point() +
+  facet_wrap(~season, ncol = 3)
+
+
+p_avg_wind_FCH4 <- ggplot(avg_wind_FCH4, #%>%
+     # filter(season == "Growing Season"), 
+      aes(x = date, y = FCH4 * 1/1000, color = WD_cardinal)) +
+  geom_point() + 
+   geom_hline(yintercept = 0)+
+ #scale_x_date(date_breaks = "1 year", date_labels = "%Y")+ #forced labels for each year 
+  #scale_x_date(date_breaks = "6 months", date_labels = "%b %Y")+ #month and year - too crowded 
+  scale_x_date(breaks = as.Date(c("2017-07-19", "2018-01-01", "2019-01-01", 
+                                   "2020-01-01", "2021-01-01", "2022-01-01", "2023-01-01")),
+               date_labels = "%Y") +
+  
+  theme_bw() +
+  theme(
+        # bold the axis titles
+    axis.title = element_text(face = "bold", size = 14),
+    # bold the axis tick labels
+    axis.text  = element_text(face = "bold", size = 12),
+    plot.title = element_text(face="bold", size = 16),
+  legend.text = element_text(size = 12),
+  legend.title = element_text(face = "bold", size = 14))+
+    labs(
+    x = expression(bold("Date")),
+    y = expression(bold(atop("Daily Average CH"[4] * " Flux", "("*mu*mol/m^2/s*")"))),
+    color = "Wind Direction",
+    
+    title = expression(bold("CH"[4] ~ "by Wind Direction ")))
+
+
+p_avg_wind_FCH4
+
+```
+#save figure 
+```{r}
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/avg_FCH4_WD_timeseries.png", p_avg_wind_FCH4, 
+       width = 8, height = 5, dpi = 600)
+```
+
+
+### FCH4 by WD - daily avg
+
+```{r}
+
+avg_wind_FC <- df_avg_FC %>%
+    #filter(winter_year != "2016", winter_year != "2023") %>%
+  dplyr::filter(complete.cases(season, WD, FC)) %>%
+  mutate(WD_cardinal = factor(WD_cardinal, 
+                              levels = c("N", "NE", "E", "SE", "S", "SW", "W", "NW")))
+
+
+ggplot (avg_wind_FC, aes(x = date, y = FC, color = WD_cardinal )) +
+  geom_point() +
+  facet_wrap(~season, ncol = 3)
+
+
+p_avg_wind_FC <- ggplot(avg_wind_FC, #%>%
+     # filter(season == "Growing Season"), 
+      aes(x = date, y = FC, color = WD_cardinal)) +
+  geom_point() + 
+   geom_hline(yintercept = 0)+
+ #scale_x_date(date_breaks = "1 year", date_labels = "%Y")+ #forced labels for each year 
+  #scale_x_date(date_breaks = "6 months", date_labels = "%b %Y")+ #month and year - too crowded 
+  scale_x_date(breaks = as.Date(c("2017-07-17", "2018-01-01", "2019-01-01", 
+                                   "2020-01-01", "2021-01-01", "2022-01-01", "2023-01-01")),
+               date_labels = "%Y") +
+  scale_y_continuous(breaks = seq(-5, 3, by = 1),
+                     limits = c(-5, 3)) +
+  theme_bw() +
+  theme(
+        # bold the axis titles
+    axis.title = element_text(face = "bold", size = 14),
+    # bold the axis tick labels
+    axis.text  = element_text(face = "bold", size = 12),
+    plot.title = element_text(face="bold", size = 16),
+  legend.text = element_text(size = 12),
+  legend.title = element_text(face = "bold", size = 14))+
+    labs(
+    x = expression(bold("Date")),
+    y = expression(bold(atop("Daily Average CO"[2] * "Flux","("*mu*mol/m^2/s*")"))),
+    color = "Wind Direction",
+    
+    title = expression(bold("CO"[2] ~ "by Wind Direction ")))
+
+
+p_avg_wind_FC
+
+```
+
+
+#save figure 
+```{r}
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/avg_FC_WD_timeseries.png", p_avg_wind_FC, 
+       width = 8, height = 5, dpi = 600)
+```
+
+
+
+#Combine the two figs 
+```{r}
+library(patchwork)
+# Remove legend from first plot, keep it on second, then combine
+
+# # Create modified plots first
+# p1 <- p_avg_wind_FC + theme(legend.position = "none")
+# p2 <- p_avg_wind_FCH4
+# 
+# # Then combine
+# p1 / p2 + 
+#   plot_layout(guides = "collect") +
+#   plot_annotation(title = "Carbon Fluxes by Wind Direction") &
+#   theme(legend.position = "right")
+
+# Stack vertically with shared legend on right
+p_C_WD_combined <- (p_avg_wind_FC + theme(legend.position = "none")) /
+  p_avg_wind_FCH4 + 
+  plot_layout(guides = "collect") +
+ # plot_annotation(title = "Carbon Fluxes by Wind Direction") &
+  theme(legend.position = "right")
+
+p_C_WD_combined
+
+```
+#save figure 
+```{r}
+ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/avg_C_WD_timeseries_combined.png", p_C_WD_combined, 
+       width = 10, height = 7, dpi = 600)
 ```
 
 
@@ -1161,7 +1364,7 @@ ggplot(df_avg_FC %>% filter(complete.cases(TS_3_1_1)), aes(x = WD_cardinal2, y =
 ####streamlines stats assumptions tests from Claude - helps test normality, homogeneity of variance, and whether to use parametric or non-parametric statistical analyses 
 
 ```{r}
-install.packages(c("car", "nortest", "MASS", "quantreg", "Rtools"))
+#install.packages(c("car", "nortest", "MASS", "quantreg", "Rtools"))
 
 # Systematic analysis of flux differences by wind direction
 library(dplyr)
@@ -1483,19 +1686,20 @@ for(result_name in names(all_results)) {
 }
 
 #summary of WD by season for each C flux
-# "FC observations: 775"
+# [1] "FCH4 observations: 580"
+# [1] "FC observations: 821"
 # [1] "\nFCH4 observations by season and wind direction:"
 #                  
 #                     N  NE   E  SE   S  SW   W  NW
-#   Fall Senescence  15   4   1   4   2   4   0  49
-#   Growing Season   59  11   0  29  74  16   1 149
-#   Winter           29  14   0  15   2   2   2  97
+#   Fall Senescence  15   4   1   4   2   4   0  48
+#   Growing Season   59  11   0  29  74  17   1 149
+#   Winter           29  14   0  15   2   2   2  98
 # [1] "\nFC observations by season and wind direction:"
 #                  
 #                     N  NE   E  SE   S  SW   W  NW
-#   Fall Senescence  24   4   8  16   7   4   2  91
-#   Growing Season   70  12   1  46 116  21   1 174
-#   Winter           25  15   1  12   6   2   3 114
+#   Fall Senescence  24   4   8  16   7   4   2  90
+#   Growing Season   74  12   1  60 130  25   1 184
+#   Winter           25  15   1  12   6   2   3 115
 
 
 ```
@@ -1549,11 +1753,6 @@ dunn_result <- dunnTest(FCH4 ~ WD_cardinal2,
                        data = subset(df_avg_FCH4, season == "Growing Season"),
                        method = "bonferroni")  # Adjust for multiple comparisons
 print(dunn_result)
-
-
-
-
-
 
 ```
 
@@ -1810,8 +2009,8 @@ create_flux_summary <- function(fch4_data, fc_data, min_n = 5) {
     group_by(season, WD_cardinal2) %>%
     summarise(
       n_obs_FCH4 = n(),
-      FCH4_mean = round(mean(FCH4, na.rm = TRUE), 3),
-      FCH4_se = round(sd(FCH4, na.rm = TRUE) / sqrt(n()), 3),
+      FCH4_mean = round(mean(FCH4 * (1/1000), na.rm = TRUE), 3), #nmol to umol
+      FCH4_se = round(sd(FCH4 * (1/1000), na.rm = TRUE) / sqrt(n()), 3), #nmol to umol 
       .groups = 'drop'
     ) %>%
     mutate(adequate_n_FCH4 = ifelse(n_obs_FCH4 >= min_n, "Yes", "No"))
@@ -2043,7 +2242,7 @@ fc_winter <- df_avg_FC %>% filter(season == "Winter")
 fc_winter_results <- run_filtered_analysis(fc_winter, "FC", "Winter")
 
 
-#note: FC is in umol/m2/s; FCH4 is in nmol/m2/s
+#note: FC is in umol/m2/s; FCH4 is in nmol/m2/s -> but converted to umol by FCH4 * (1/1000)
 ```
 
 #Confirming that though FC growing season has a sig diff among WD, there were no statistical groupings
@@ -2053,7 +2252,7 @@ test <- fc_growing %>%
   filter(!WD_cardinal2 == "E" & !WD_cardinal2 == "W") #removing the WD with n<5
 
 
-kruskal.test(FC ~ WD_cardinal2, data = test) #p = 0.0059
+kruskal.test(FC ~ WD_cardinal2, data = test) #p = 0.00639
 
 
 dunn_result <- dunnTest(FC ~ WD_cardinal2, 
@@ -2196,7 +2395,7 @@ FCH4_by_WD <- ggplot(df_avg_FCH4_with_n, aes(x = WD_cardinal2, y = FCH4 * 1/1000
   labs(
     x = expression("Wind Direction"),
     y = expression("Daily Average Half-hourly CH"[4] * " Flux ("*mu*mol~m^-2~s^-1*")"),
-    title = expression("Daily Average CO"[2] ~ "by Wind Direction"),
+    title = expression("Daily Average CH"[4] ~ "by Wind Direction"),
     caption = "Directions with reduced opacity have n < 5 observations"
   )
 
@@ -2395,6 +2594,8 @@ cat("This avoids overlap and shows season-specific statistical relationships\n")
 
 
 ```
+
+
 #save figure with statistical lettering 
 ```{r}
 ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/adjFC_by_WD_seasons_stats.png", FC_by_WD_final, 
@@ -3217,6 +3418,18 @@ if(!significant_found) {
 cat("\nAnalysis complete.\n")
 
 ```
+#print summary table 
+```{r}
+print(summary_table)
+
+library(writexl)
+
+write_xlsx(summary_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/C_WD_landscape_summary_table.xlsx")
+
+```
+
+
+
 #Figure with transparent boxes for landscape features with insufficient n to be used in analyses
 ```{r}
 # BOXPLOTS BY LANDSCAPE FEATURE - MATCHING WIND DIRECTION FIGURE STYLE
@@ -3417,7 +3630,7 @@ fch4_growing_letters <- data.frame(
   landscape_short = factor(c("Ponds,\nRiparian", "Tundra,\nRoad", 
                              "Drainage\nChannels", "Tundra,\nWet \nLowlands"),
                           levels = short_labels),
-  letters = c("a", "ab", "b", "ab"),  # Drainage (b) differs from Ponds (a)
+  letters = c("a", "", "b", "b"),  # Drainage (b) differs from Ponds (a), and tundra/wet lowlands (a)
   letter_y = c(0.045, 0.045, 0.045, 0.045)  # Adjust y position as needed
 )
 
@@ -3628,3 +3841,8 @@ ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Pape
 ggsave( "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/FC_by_landfeature_stats.png", p_fc, 
        width = 12, height = 7, dpi = 600)
 ```
+
+
+
+
+
