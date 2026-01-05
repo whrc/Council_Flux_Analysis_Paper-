@@ -1022,7 +1022,7 @@ combined_plot2
 ```
 
 
-#MOSNTER Seasonal plot 2017 - 2023 
+#MONSTER Seasonal plot 2017 - 2023 
 ```{r}
 #Plot of all years 
 
@@ -1204,6 +1204,129 @@ write.csv(x = df_avg2,file = 'C:/Users/kkent/Documents/Council Data/Council BASE
 #save new HH df
 write.csv(x=df, file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv', quote = F, row.names = F)
 ```
+
+#Create Winter_year to group by continuous winters that span across years (ex: 2019-2020)
+
+#### df_avg with daily avg 
+```{r}
+#Use July as a cutoff. Winter_year_2021 uses all DOY assigned "Winter" AFTER July 2021 and all DOY assigned "Winter" in 2022 BEFORE month of July 
+#example: Winter 2021 = Winter obs from July-Dec 2021 + Winter obs from Jan-June 2022
+
+df_avg3 <- df_avg2 %>%
+  mutate(
+    year = year(date),
+    month = month(date),
+    doy = yday(date)
+  )
+
+
+
+# Assign winter_year based on season and July cutoff
+
+
+df_avg3 <- df_avg3 %>%
+  mutate(
+    winter_year = case_when(
+      # For NON-WINTER seasons: use calendar year
+      season != "Winter" ~ year,
+      
+      # For WINTER season AFTER July (months 7-12): THIS year's winter
+      season == "Winter" & month >= 7 ~ year,
+      
+      # For WINTER season BEFORE July (months 1-6): PREVIOUS year's winter
+      season == "Winter" & month < 7 ~ year - 1,
+      
+      # Catch-all
+      TRUE ~ year
+    )
+  )
+
+#Verify
+winter_verification <- df_avg3 %>%
+  filter(season == "Winter") %>%
+  group_by(winter_year) %>%
+  summarise(
+    n_obs = n(),
+    calendar_years = paste(sort(unique(year)), collapse = " & "),
+    months_included = paste(sort(unique(month)), collapse = ", "),
+    start_date = min(date),
+    end_date = max(date),
+    date_range_desc = paste(format(min(date), "%b %d, %Y"), "to", 
+                           format(max(date), "%b %d, %Y")),
+    .groups = "drop"
+  ) %>%
+  arrange(winter_year)
+
+print(winter_verification)
+
+```
+
+#Save dataset with winter_year 
+```{r}
+# # Save as csv
+write.csv(x = df_avg3, file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.5.csv',quote = F,row.names = F)
+
+```
+
+
+#### df with HH 
+```{r}
+#Use July as a cutoff. Winter_year_2021 uses all DOY assigned "Winter" AFTER July 2021 and all DOY assigned "Winter" in 2022 BEFORE month of July 
+#example: Winter 2021 = Winter obs from July-Dec 2021 + Winter obs from Jan-June 2022
+
+df2 <- df %>%
+  mutate(
+    year = year(date),
+    month = month(date),
+    doy = yday(date)
+  )
+
+# Assign winter_year based on season and July cutoff
+df2 <- df2 %>%
+  mutate(
+    winter_year = case_when(
+      # For NON-WINTER seasons: use calendar year
+      season != "Winter" ~ year,
+      
+      # For WINTER season AFTER July (months 7-12): THIS year's winter
+      season == "Winter" & month >= 7 ~ year,
+      
+      # For WINTER season BEFORE July (months 1-6): PREVIOUS year's winter
+      season == "Winter" & month < 7 ~ year - 1,
+      
+      # Catch-all
+      TRUE ~ year
+    )
+  )
+
+#Verify
+winter_verification <- df2 %>%
+  filter(season == "Winter") %>%
+  group_by(winter_year) %>%
+  summarise(
+    n_obs = n(),
+    calendar_years = paste(sort(unique(year)), collapse = " & "),
+    months_included = paste(sort(unique(month)), collapse = ", "),
+    start_date = min(date),
+    end_date = max(date),
+    date_range_desc = paste(format(min(date), "%b %d, %Y"), "to", 
+                           format(max(date), "%b %d, %Y")),
+    .groups = "drop"
+  ) %>%
+  arrange(winter_year)
+
+print(winter_verification)
+
+```
+
+#Save HH dataset with winter_year 
+```{r}
+# # Save as csv
+write.csv(x = df2, file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.3.csv',quote = F,row.names = F)
+
+```
+
+
 
 
 #Function for fast-plotting from Claude
