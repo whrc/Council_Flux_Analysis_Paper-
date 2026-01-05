@@ -1,0 +1,836 @@
+---
+title: "Council_Comparing_C_Budgets_Across_Years"
+output: html_document
+date: "2025-12-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+#install.packages("writexl")
+library(writexl)
+
+#allows you to apply custom axis labels to different panels within the facet wrap directly within ggplot --> need to set scales = "free_x" in facet_wrap for this to work 
+library(ggh4x) 
+
+Sys.setenv(TZ='UTC')
+```
+
+#Notes on diffs in FC and FCH4 measurements
+```{r}
+# sum(is.na(df$FC)) #82174
+# sum(is.na(df$FCH4)) #91231   # difference of 9057 obs for FC vs FCH4
+# 
+# sum(is.na(df_avg$FC)) # 1614
+# sum(is.na(df_avg$FCH4)) # 1855   - diff of 241 obs for FC vs FCH4
+
+```
+
+#winter-adj dataset (calculated based on winter - growing season proportions from 2018)
+
+```{r}
+library(readxl)
+#Here, "year" reflects the winter year, not the calendar year (annual = 2019-2020, for example) 
+adj_C_budgets <- read_xlsx(path ="C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Seasonal_Cbudgets_Table_all_years_for_paper.xlsx", sheet = "R_template_adjWinterYear_C" )
+
+# First, set the factor levels for season to control facet order for all the plots
+adj_C_budgets<- adj_C_budgets %>%
+  mutate(Season = factor(Season, levels = c("Growing Season", "Fall Senescence", "Winter", "Annual")))
+
+# Convert year to factor for consistent color mapping
+adj_C_budgets$year_factor <- as.factor(adj_C_budgets$Year)
+#adj_C_budgets$Season <- as.factor(adj_C_budgets$Season)
+
+# Define consistent year colors
+year_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+
+# Reshape data for plotting
+adj_C_budgets_long<- adj_C_budgets %>%
+  pivot_longer(cols = c(Net_CH4_adj_dailyflux_budget, Net_CO2_adj_dailyflux_budget, Total_Net_C_adj_dailyflux_budget),
+               names_to = "flux_type",
+               values_to = "flux")
+
+
+```
+
+#Seasonal CO2 and CH4 budgets across years 
+
+###Plot budgets across winter years (years)
+```{r}
+
+#== FC =================
+p_FC <- ggplot(adj_C_budgets %>%
+                   filter(Season != "Annual")) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = Net_CO2_adj_dailyflux_budget, color = year_factor, group = Year), 
+           size = 3) +
+
+  # geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+  #             method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+ # facet_wrap(~ season, ncol = 3) +
+  #facet_wrap(~factor(Season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3, scales = "free_x")+
+  facet_wrap(~Season, ncol = 3, scales = "free_x") +
+  
+  scale_color_manual(values = year_colors) +
+  #scale_x_continuous(breaks = 2017:2022) +
+  #custom axis labels that are different among the panels 
+  facetted_pos_scales( 
+    x = list(
+      Season == "Growing Season" ~ scale_x_continuous(breaks = 2017:2022),
+      Season == "Fall Senescence" ~ scale_x_continuous(breaks = 2017:2022),
+      Season == "Winter" ~ scale_x_continuous(breaks = 2017:2022, 
+                                               labels = c("2017 - 2018", "2018 - 2019", 
+                                                         "2019 - 2020", "2020 - 2021", 
+                                                         "2021 - 2022", "2022 - 2023"))
+    )
+  ) +
+  
+  
+  labs(title = expression(bold(CO[2]~Budgets~Across~Years)),
+       x = "Year", 
+      # y = "umol/m2/day") +
+    y = expression(CO[2]~Budget~(gC/m^2))) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_FC
+
+#======== FCH4 ===================
+
+p_FCH4 <- ggplot(adj_C_budgets %>%
+                   filter(Season != "Annual")) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = Net_CH4_adj_dailyflux_budget, color = year_factor, group = Year), 
+             size = 3) +
+
+ # facet_wrap(~ season, ncol = 3) +
+  #facet_wrap(~factor(Season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3, scales = "free_x")+
+    facet_wrap(~Season, ncol = 3, scales = "free_x") +
+  
+  scale_color_manual(values = year_colors) +
+  #scale_x_continuous(breaks = 2017:2022) +
+  
+  #custom axis labels that are different among the panels 
+  facetted_pos_scales( 
+    x = list(
+      Season == "Growing Season" ~ scale_x_continuous(breaks = 2017:2022),
+      Season == "Fall Senescence" ~ scale_x_continuous(breaks = 2017:2022),
+      Season == "Winter" ~ scale_x_continuous(breaks = 2017:2022, 
+                                               labels = c("2017 - 2018", "2018 - 2019", 
+                                                         "2019 - 2020", "2020 - 2021", 
+                                                         "2021 - 2022", "2022 - 2023"))
+    )
+  ) +
+  
+  labs(title = expression(bold(CH[4]~Budgets~Across~Years)),
+       x = "Year", 
+      # y = "nmol/m2/day") +
+   y = expression(CH[4]~Budget~(gC/m^2))) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_FCH4
+```
+
+#save images
+```{r}
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budget_adjFC_by_year.png", p_FC,
+       width = 8, height = 5, dpi = 600)
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budget_adjFCH4_by_year.png", p_FCH4,
+       width = 8, height = 5, dpi = 600)
+```
+
+
+#Arrange into combined fig 
+```{r}
+library(gridExtra)
+library(grid)
+
+# Arrange all your existing plots with the shared legend
+seasonal_Cbudgets_combined <- grid.arrange(
+  arrangeGrob(p_FC, p_FCH4, ncol = 1) #,
+  #legend,
+  #ncol = 2,
+  #widths = c(10, 1.5),
+  #top = textGrob("Seasonal Environmental Trends (2017-2022)", 
+                 #gp = gpar(fontsize = 16, fontface = "bold"))
+)
+
+seasonal_Cbudgets_combined
+```
+
+#Save combined fig 
+```{r}
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_Cbudget_combined.png", seasonal_Cbudgets_combined,
+       width = 7, height = 8, dpi = 600)
+
+```
+
+#Total C by season 
+```{r}
+#== FC =================
+p_TotalC <- ggplot(adj_C_budgets %>%
+                   filter(Season != "Annual")) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = Total_Net_C_adj_dailyflux_budget, color = year_factor, group = Year), 
+           size = 3) +
+
+  # geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+  #             method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+ # facet_wrap(~ season, ncol = 3) +
+  #facet_wrap(~factor(Season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3, scales = "free_x")+
+  facet_wrap(~Season, ncol = 3, scales = "free_x") +
+  
+  scale_color_manual(values = year_colors) +
+  #scale_x_continuous(breaks = 2017:2022) +
+  #custom axis labels that are different among the panels 
+  facetted_pos_scales( 
+    x = list(
+      Season == "Growing Season" ~ scale_x_continuous(breaks = 2017:2022),
+      Season == "Fall Senescence" ~ scale_x_continuous(breaks = 2017:2022),
+      Season == "Winter" ~ scale_x_continuous(breaks = 2017:2022, 
+                                               labels = c("2017 - 2018", "2018 - 2019", 
+                                                         "2019 - 2020", "2020 - 2021", 
+                                                         "2021 - 2022", "2022 - 2023"))
+    )
+  ) +
+  
+  
+  labs(title = expression(bold(Total~C~Budgets~Across~Years)),
+       x = "Year", 
+      # y = "umol/m2/day") +
+    y = expression(Total~Carbon~Budget~(gC/m^2))) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_TotalC
+```
+
+
+
+#Autocorrelation checks on seasonal FC and FCH4 budgets 
+
+#### Autocorr checks - make a df for each season, then test for autocorr of the budgets within that season among years 
+```{r}
+
+#Look at ACF/PCF plots for autocorr among years within each season 
+
+#test by flux and season - create df for each season (include annual)
+FC_gs <- adj_C_budgets%>%
+  filter(Season == "Growing Season") #swap out season 
+
+FC_annual <- adj_C_budgets%>%
+  filter(Season == "Annual")
+
+#autocorrelation - want everything below the blue dotted line 
+acf(FC_gs$Net_CH4_adj_dailyflux_budget, na.action = na.omit, main = "Autocorrelation of variable")
+#partial autocorr - removes effect of intermediate lags, still want everything below blue dotted line 
+pacf(FC_gs$Net_CH4_adj_dailyflux_budget, na.action = na.omit, main = "Partial Autocorrelation")
+
+
+
+#Results: 
+
+#FC:
+#growing: - ok
+#fall: - ok
+#Winter: -ok
+#annual: -ok
+
+#FCH4:
+#growing: -ok
+#fall: - ok
+#Winter: -ok 
+#annual: -ok
+
+#Ljung-Box test for timeseries models / data -- if p<0.05, there is autocorr and residuals are not independent 
+#Box.test(FC_annual$Net_CH4_adj_dailyflux_budget, lag = 20, type = "Ljung-Box") #p<0.001
+
+
+#Durbin watson test for when a model has been fitted - checks if residuals are autocorrelated 
+#DW = 2 = no autocorr; DW < 2 = pos autocorr; DW > 2 = neg autocorr
+
+#install.packages("lmtest")   
+library(lmtest)
+
+lm_test<- lm(Total_Net_C_adj_dailyflux_budget ~ Year, data = FC_annual) #swap out seasonal dataset here*
+dwtest(lm_test)
+acf(residuals(lm_test), main = "ACF of model residuals")
+pacf(residuals(lm_test), main = "ACF of model residuals")
+
+#FCH4
+#fall - p = 0.039** - NOT OK - but the acf looks ok, no lines breaching threshold - still, use autocorr-modified Mann-Kendall for this test. 
+#winter - p = 0.36 - ok
+#growing- p = 0.24 - ok
+#annual - p = 0.14 - ok
+
+#FC
+#fall - p = 0.061 - ok / borderline 
+#winter - p = 0.38 - ok
+#growing- p = 0.34 - ok
+#annual - p = 0.18 - ok
+
+
+#Total C:
+#fall - p = 0.06  - ok / borderline
+#winter - p = 0.38  - ok
+#growing- p = 0.36 - ok
+#annual - p = 0.178  - ok
+```
+*use modified mann-kendall for FCH4 in fall season, see modified mk code below
+
+
+#Mann-Kendall test for timeseries - no autocorr
+```{r}
+library(dplyr)
+library(broom)
+library(Kendall)  # For proper Mann-Kendall timeseries test
+library(trend)    # For Sen's slope
+
+# ============================================================================
+# FUNCTION: Test trends for a variable within each season
+# ============================================================================
+
+test_seasonal_trends <- function(data, var_name, var_label) {
+  
+  results_list <- list()
+  seasons <- unique(data$Season)  # Capital S
+  
+  for (s in seasons) {
+    season_data <- data %>% 
+      filter(Season == s) %>%  # Capital S
+      arrange(Year)  # Capital Y - ensure temporal order!
+    
+    # Extract variable values
+    y_vals <- season_data[[var_name]]
+    x_vals <- season_data$Year  # Capital Y
+    
+    # Skip if too many NAs
+    if (sum(!is.na(y_vals)) < 4) {
+      next
+    }
+    
+    # Linear regression
+    lm_model <- lm(y_vals ~ x_vals)
+    lm_summary <- summary(lm_model)
+    
+    # Test normality of RESIDUALS (not raw data)
+    residuals_vals <- residuals(lm_model)
+    shapiro_p <- shapiro.test(residuals_vals)$p.value
+    
+    # Extract key statistics from linear model
+    slope <- coef(lm_model)[2]
+    slope_se <- summary(lm_model)$coefficients[2, 2]
+    slope_p <- summary(lm_model)$coefficients[2, 4]
+    r_squared <- lm_summary$r.squared
+    adj_r_squared <- lm_summary$adj.r.squared
+    
+    # PROPER Mann-Kendall test for temporal trends
+    mk_test <- MannKendall(y_vals)
+    mk_tau <- as.numeric(mk_test$tau)
+    mk_p <- as.numeric(mk_test$sl)  # significance level (p-value)
+    
+    # Spearman correlation (alternative non-parametric option)
+    spearman_test <- cor.test(x_vals, y_vals, method = "spearman")
+    spearman_rho <- spearman_test$estimate
+    spearman_p <- spearman_test$p.value
+    
+    # Sen's slope (robust trend estimator, pairs well with Mann-Kendall)
+    sens_slope <- NA
+    tryCatch({
+      sens_test <- sens.slope(y_vals)
+      sens_slope <- as.numeric(sens_test$estimates)
+    }, error = function(e) {
+      sens_slope <- NA
+    })
+    
+    # Store results
+    results_list[[s]] <- data.frame(
+      season = s,  # lowercase for output consistency
+      variable = var_label,
+      n_years = length(y_vals),
+      mean_value = mean(y_vals, na.rm = TRUE),
+      
+      # Normality test
+      shapiro_p = shapiro_p,
+      normal = ifelse(shapiro_p > 0.05, "Yes", "No"),
+      
+      # Linear model (parametric)
+      slope = slope,
+      slope_se = slope_se,
+      slope_p = slope_p,
+      r_squared = r_squared,
+      adj_r_squared = adj_r_squared,
+      
+      # Non-parametric tests
+      mann_kendall_tau = mk_tau,
+      mann_kendall_p = mk_p,
+      sens_slope = sens_slope,
+      spearman_rho = spearman_rho,
+      spearman_p = spearman_p,
+      
+      # Significance (using appropriate test)
+      significant = ifelse(shapiro_p > 0.05, 
+                          ifelse(slope_p < 0.05, "Yes*", "No"),
+                          ifelse(mk_p < 0.05, "Yes**", "No")),
+      recommended_test = ifelse(shapiro_p > 0.05, 
+                               "Linear Regression", 
+                               "Mann-Kendall"),
+      
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # Combine all seasons
+  do.call(rbind, results_list)
+}
+
+# ============================================================================
+# RUN TESTS FOR ALL VARIABLES
+# ============================================================================
+
+cat("============================================================\n")
+cat("ANNUAL TREND ANALYSIS BY SEASON (2017-2022)\n")
+cat("============================================================\n\n")
+
+cat("Significance codes:\n")
+cat("* = Linear regression (residuals normal)\n")
+cat("** = Mann-Kendall test (residuals non-normal)\n")
+cat("p < 0.05 = significant trend\n\n")
+
+# FC (CO2)
+cat("\n--- FC (CO2) ---\n")
+FC_results <- test_seasonal_trends(adj_C_budgets, 
+                                    "Net_CO2_adj_dailyflux_budget", 
+                                    "CO2 Budget g/m2")
+
+print(FC_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                     "mann_kendall_tau", "mann_kendall_p", "sens_slope", 
+                     "spearman_rho", "spearman_p", 
+                     "recommended_test", "significant")])
+
+# FCH4 (CH4)
+cat("\n--- FCH4 (CH4) ---\n")
+FCH4_results <- test_seasonal_trends(adj_C_budgets, 
+                                     "Net_CH4_adj_dailyflux_budget", 
+                                     "CH4 Budget g/m2")
+
+print(FCH4_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                       "mann_kendall_tau", "mann_kendall_p", "sens_slope", 
+                       "spearman_rho", "spearman_p",
+                       "recommended_test", "significant")])
+
+# Total C 
+cat("\n--- Total C ---\n")
+TotalC_results <- test_seasonal_trends(adj_C_budgets, 
+                                     "Total_Net_C_adj_dailyflux_budget", 
+                                     "Total C Budget g/m2")
+
+print(TotalC_results[, c("season", "mean_value", "normal", "slope", "slope_p", 
+                       "mann_kendall_tau", "mann_kendall_p", "sens_slope", 
+                       "spearman_rho", "spearman_p",
+                       "recommended_test", "significant")])
+
+# ============================================================================
+# COMBINE ALL RESULTS INTO ONE TABLE
+# ============================================================================
+
+all_results <- rbind(FC_results, FCH4_results, TotalC_results)
+
+cat("\n\n============================================================\n")
+cat("SUMMARY: SIGNIFICANT TRENDS ONLY\n")
+cat("============================================================\n")
+
+significant_trends <- all_results %>%
+  filter(significant %in% c("Yes*", "Yes**")) %>%
+  dplyr::select(variable, season, mean_value, slope, sens_slope,
+         mann_kendall_tau, mann_kendall_p, slope_p, recommended_test, significant)
+
+if (nrow(significant_trends) > 0) {
+  print(significant_trends)
+} else {
+  cat("No statistically significant trends detected at p < 0.05\n")
+}
+
+cat("\n\nInterpretation:\n")
+cat("- Positive slope/tau = increasing trend over time\n")
+cat("- Negative slope/tau = decreasing trend over time\n")
+cat("- slope = parametric trend estimate (flux units/year)\n")
+cat("- sens_slope = Sen's slope (robust non-parametric trend estimate)\n")
+cat("- mann_kendall_tau = strength of monotonic trend (-1 to +1)\n")
+cat("- Use recommended_test column to know which result to report\n")
+
+#Results: no sig diffs in either LM or Mann-kendall 
+```
+
+#save results
+# Save to Excel
+```{r}
+#seasonal
+write_xlsx(all_results, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_C_budgets_timeseries_results.xlsx")
+
+```
+
+
+#Modified mann-kendall for autocorr in FCH4 across years within fall season 
+```{r}
+library(trend)
+library(tidyverse)
+
+# ============================================================================
+# MODIFIED MANN-KENDALL TEST FOR AUTOCORRELATED DATA
+# ============================================================================
+
+# Filter to Fall season CO2 data
+fall_ch4 <- adj_C_budgets %>%
+  filter(Season == "Fall Senescence") %>%
+  arrange(Year)
+
+# Extract the values
+ch4_values <- fall_ch4$Net_CH4_adj_dailyflux_budget
+
+# ============================================================================
+# OPTION 1: Yue-Wang Modified Mann-Kendall (recommended for short series) **
+# ============================================================================
+
+# This version accounts for autocorrelation by adjusting the variance
+mk_modified <- mk.test(ch4_values, continuity = TRUE)
+
+cat("=== Modified Mann-Kendall Test (Yue-Wang) ===\n")
+print(mk_modified)
+
+cat("\nResults:\n")
+cat("  Tau =", round(mk_modified$estimates[1], 3), "\n")
+cat("  p-value =", round(mk_modified$p.value, 4), "\n")
+cat("  Trend:", ifelse(mk_modified$p.value < 0.05,
+                       ifelse(mk_modified$estimates[1] > 0, "Significant increase", "Significant decrease"),
+                       "No significant trend"), "\n")
+
+#Results: tau = -1, p = 1; no sig trend 
+
+# ============================================================================
+# OPTION 2: Hamed-Rao Modified Mann-Kendall (alternative) **commonly used / used in longer series 
+# ============================================================================
+
+# This uses a different correction method; but may not work well with n=6
+
+# install.packages("modifiedmk")
+library(modifiedmk)  
+
+ mk_hamed <- mkttest(ch4_values)
+
+ mk_hamed
+ 
+ #results:
+ # Z-Value Sen's slope           S      Var(S)     P-value         Tau 
+ # 0.00000000 -0.01000000 -1.00000000 28.33333333  1.00000000 -0.06666667
+ #no sig trend 
+ 
+
+# ============================================================================
+# COMPARISON WITH STANDARD MANN-KENDALL
+# ============================================================================
+
+mk_standard <- MannKendall(ch4_values)
+
+cat("\n=== Standard Mann-Kendall (for comparison) ===\n")
+cat("  Tau =", round(mk_standard$tau, 3), "\n")
+cat("  p-value =", round(mk_standard$sl, 4), "\n")
+
+mk_standard
+#results: tau = -0.0667, p =1 *no sig trend 
+
+
+# ============================================================================
+# CALCULATE SEN'S SLOPE (same for all methods)
+# ============================================================================
+
+slope_result <- sens.slope(na.omit(ch4_values))
+
+cat("\n=== Sen's Slope ===\n")
+cat("  Slope =", round(slope_result$estimates, 4), "\n")
+cat("  95% CI: [", round(slope_result$conf.int[1], 4), ",", 
+    round(slope_result$conf.int[2], 4), "]\n")
+
+# === Sen's Slope ===
+#   Slope = -0.01 
+#   95% CI: [ -0.245 , 0.295 ]
+```
+#Annual plots 
+
+#### Seasonal budgets including annual in facet_wrap (I actually don't really like this version)
+
+#Seasonal CO2 with Annual 
+```{r}
+p_FC2 <- ggplot(adj_C_budgets %>%
+                  mutate(Season_ordered = factor(Season, 
+                                                levels = c("Growing Season", "Fall Senescence", "Winter", "Annual")))) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = Net_CO2_adj_dailyflux_budget, color = year_factor, group = Year), 
+             size = 3) +
+  
+  # Use Season_ordered in facet_wrap
+  facet_wrap(~Season_ordered, ncol = 4, scales = "free_x") +
+  
+  scale_color_manual(values = year_colors) +
+  
+  # Reference Season_ordered in facetted_pos_scales
+  facetted_pos_scales( 
+    x = list(
+      Season_ordered == "Growing Season" ~ scale_x_continuous(breaks = 2017:2022),
+      Season_ordered == "Fall Senescence" ~ scale_x_continuous(breaks = 2017:2022),
+      Season_ordered == "Annual" ~ scale_x_continuous(breaks = 2017:2022),
+      Season_ordered == "Winter" ~ scale_x_continuous(breaks = 2017:2022, 
+                                                      labels = c("2017 - 2018", "2018 - 2019", 
+                                                                "2019 - 2020", "2020 - 2021", 
+                                                                "2021 - 2022", "2022 - 2023"))
+    )
+  ) +
+  
+  labs(title = expression(bold(CO[2]~Budgets~Across~Years)),
+       x = "Year", 
+       y = expression(CO[2]~Budget~(gC/m^2))) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+p_FC2
+```
+#Seasonal CH4 with Annual 
+```{r}
+p_FCH42 <- ggplot(adj_C_budgets %>%
+                  mutate(Season_ordered = factor(Season, 
+                                                levels = c("Growing Season", "Fall Senescence", "Winter", "Annual")))) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = Net_CH4_adj_dailyflux_budget, color = year_factor, group = Year), 
+             size = 3) +
+  
+  # Use Season_ordered in facet_wrap
+  facet_wrap(~Season_ordered, ncol = 4, scales = "free_x") +
+  
+  scale_color_manual(values = year_colors) +
+  
+  # Reference Season_ordered in facetted_pos_scales
+  facetted_pos_scales( 
+    x = list(
+      Season_ordered == "Growing Season" ~ scale_x_continuous(breaks = 2017:2022),
+      Season_ordered == "Fall Senescence" ~ scale_x_continuous(breaks = 2017:2022),
+      Season_ordered == "Annual" ~ scale_x_continuous(breaks = 2017:2022),
+      Season_ordered == "Winter" ~ scale_x_continuous(breaks = 2017:2022, 
+                                                      labels = c("2017 - 2018", "2018 - 2019", 
+                                                                "2019 - 2020", "2020 - 2021", 
+                                                                "2021 - 2022", "2022 - 2023"))
+    )
+  ) +
+  
+  labs(title = expression(bold(CH[4]~Budgets~Across~Years)),
+       x = "Year", 
+       y = expression(CH[4]~Budget~(gC/m^2))) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+p_FCH42
+```
+
+#Annual means plot
+
+```{r}
+p_TotalC <- ggplot(adj_C_budgets_long %>%
+                   filter(Season == "Annual")) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = flux, color = year_factor, group = Year), 
+           size = 3) +
+
+  geom_smooth(aes(x = Year, y = flux), 
+               method = "lm",  color = "black", alpha = 0.2, linewidth = 0.8) + #se = TRUE,
+  
+
+    facet_wrap(~factor(flux_type, #lets me rename the flux variables 
+                       levels = c("Net_CO2_adj_dailyflux_budget", "Net_CH4_adj_dailyflux_budget", "Total_Net_C_adj_dailyflux_budget"),
+                       labels = c( "CO2 Budget", "CH4 Budget", "Total C Budget")),
+                  ncol = 3) +
+  
+  scale_color_manual(values = year_colors) +
+  #scale_x_continuous(breaks = 2017:2022) +
+  
+  #custom axis labels that are different among the panels 
+  facetted_pos_scales(x = list(
+                                  scale_x_continuous(
+                                               breaks = 2017:2022, 
+                                               labels = c("2017 - 2018", "2018 - 2019", 
+                                                         "2019 - 2020", "2020 - 2021", 
+                                                         "2021 - 2022", "2022 - 2023")))) +
+  
+  
+  labs(title = "Total C Budgets Across Years",
+       x = "Year", 
+        y = expression(Total~Carbon~Budget~(gC/m^2))) +
+  
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_TotalC
+```
+
+
+#Plot total C by season 
+
+```{r}
+#== FC =================
+p_TotalC_seasonal <- ggplot(adj_C_budgets %>%
+                   filter(Season != "Annual")) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  
+  geom_point(aes(x = Year, y = Net_CO2_adj_dailyflux_budget, color = year_factor, group = Year), 
+           size = 3) +
+
+  # geom_smooth(aes(x = year, y = TA_gapfilled_mean), 
+  #             method = "lm", se = TRUE, color = "black", alpha = 0.2, linewidth = 0.8) +
+  
+  #facet_wrap(~factor(Season, levels = c("Winter", "Growing Season", "Fall Senescence")), ncol = 3, scales = "free_x")+
+  facet_wrap(~Season, ncol = 3, scales = "free_x") +
+  
+  scale_color_manual(values = year_colors) +
+  #scale_x_continuous(breaks = 2017:2022) +
+  #custom axis labels that are different among the panels 
+  facetted_pos_scales( 
+    x = list(
+      Season == "Growing Season" ~ scale_x_continuous(breaks = 2017:2022),
+      Season == "Fall Senescence" ~ scale_x_continuous(breaks = 2017:2022),
+      Season == "Winter" ~ scale_x_continuous(breaks = 2017:2022, 
+                                               labels = c("2017 - 2018", "2018 - 2019", 
+                                                         "2019 - 2020", "2020 - 2021", 
+                                                         "2021 - 2022", "2022 - 2023"))
+    )
+  ) +
+  
+  
+  labs(title = expression(bold(Total~Carbon~Budgets~Across~Years)),
+       x = "Year", 
+      # y = "umol/m2/day") +
+    y = expression(Total~C~Budget~(gC/m^2))) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+p_TotalC_seasonal
+
+```
+#Add seasonal total C fig to seasonal CO2 and CH4 fig
+#Arrange into combined fig 
+```{r}
+library(gridExtra)
+library(grid)
+
+# Arrange all your existing plots with the shared legend
+seasonal_Cbudgets_combined2 <- grid.arrange(
+  arrangeGrob(p_FC, p_FCH4, p_TotalC_seasonal, ncol = 1) #,
+  #legend,
+  #ncol = 2,
+  #widths = c(10, 1.5),
+  #top = textGrob("Seasonal Environmental Trends (2017-2022)", 
+                 #gp = gpar(fontsize = 16, fontface = "bold"))
+)
+
+seasonal_Cbudgets_combined2
+```
+
+#Save combined fig 
+```{r}
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_totalCbudget_combined.png", seasonal_Cbudgets_combined2,
+       width = 9, height = 11, dpi = 600)
+
+```
+
