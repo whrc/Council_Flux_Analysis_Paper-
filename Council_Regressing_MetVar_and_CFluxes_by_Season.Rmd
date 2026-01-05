@@ -1,0 +1,4090 @@
+---
+title: "Regressing_MetVar_and_C_Fluxes"
+output: html_document
+date: "2025-10-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#load packages
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+#install.packages("modifiedmk") #needed for modified mann-kendall, timeseries analyses when there is autocorr 
+
+library(modifiedmk)  # For modified Mann-Kendall when autocorrelation detected
+library(Kendall)
+library(trend)
+library(nlme)  # For GLS models with autocorrelation
+library(lmtest)  # For Durbin-Watson test
+library(grid)
+
+Sys.setenv(TZ='UTC')
+
+#set working directory
+#setwd("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures")
+```
+
+```{r}
+#with gapfilled soil and air temp columns 
+
+# #half-hourly dataframe --> gapfilled - doesn't have winteryear 
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+#daily avg dataframe --> gapfilled - updated seasons, SWC-nf, winteryear 
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.5.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+```
+
+
+#Remove NAs and used complete cases of season, FC, FCH4
+
+```{r}
+#Since there are some days where there are FC measurements but not FCH4 measurements, and vice versa, make separate datasets for FC and FCH4 with complete cases 
+#make complete cases for FC and FCH4
+
+df_avg_FC <- df_avg %>% filter(complete.cases(FC, season))
+df_avg_FCH4 <- df_avg %>% filter(complete.cases(FCH4, season))
+
+#double checking NAs
+sum(is.na(df_avg_FCH4$season))
+
+df_2017 <- df_avg_FC %>%
+  filter(season == "Fall Senescence")
+
+
+```
+
+
+#Seasonal averages for each year, facetwrapped by season 
+
+##prepare seasonal summary dataset by year, set color for each year for consistency across figures 
+```{r}
+# Seasonal Trends Faceted by Season - All Variables
+
+library(ggplot2)
+library(dplyr)
+
+# Prepare seasonal summaries for all variables (2017-2022) - with complete cases FC 
+seasonal_means_FC <- df_avg_FC %>%
+  # filter(year %in% 2017:2022) %>%
+  group_by(winter_year, season) %>%
+  summarise(
+    # ERA5 GF Air temperature (gap-filled)
+    TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TA_gapfilled_se = sd(TA_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TA_gapfilled))),
+    
+    # measured Air temperature 
+    TA_mean = mean(TA, na.rm = TRUE),
+    TA_se = sd(TA, na.rm = TRUE) / sqrt(sum(!is.na(TA))),
+    
+    # ERA5 GF Soil temperature (gap-filled only)
+    TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled_se = sd(TS_3_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_gapfilled))),
+    
+    # Measured Soil temperature 
+    TS_3_mean = mean(TS_3_1_1, na.rm = TRUE),
+    TS_3_se = sd(TS_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_1_1))),
+    
+    # Soil moisture
+    SWC_3_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    SWC_3_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    
+    # VPD
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    
+    # RH - relative humidity 
+    RH_mean = mean(RH, na.rm = TRUE),
+    RH_se = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    
+    # Sensible heat
+    H_mean = mean(H, na.rm = TRUE),
+    H_se = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    
+    # Latent heat
+    LE_mean = mean(LE, na.rm = TRUE),
+    LE_se = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    
+    # Ground heat
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    G_se = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    
+    #Daily avg of HH flux - FC not gf
+    FC_daily_mean = mean(FC), #in units umol/m2/s
+    FC_se = sd(FC) / sqrt(sum(!is.na(FC))),
+    
+     #Daily avg of HH flux - FC_GF
+    FC_GF_mean = mean(FC_F), #in units umol/m2/s
+    FC_GF_se = sd(FC_F) / sqrt(sum(!is.na(FC_F))),
+    
+       #Budgets - not winter proportion adjusted 
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12)), #g/m2
+ 
+    
+    
+    .groups = 'drop'
+  )
+
+# Define consistent year colors
+year_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+# Convert year to factor for consistent color mapping
+#seasonal_means_FC$year_factor <- as.factor(seasonal_means_FC$year)
+seasonal_means_FC$winteryear_factor <- as.factor(seasonal_means_FC$winter_year)
+
+#================= FCH4 ========================
+
+# Prepare seasonal summaries for all variables (2017-2022) - with complete cases FCH4
+seasonal_means_FCH4 <- df_avg_FCH4 %>%
+  # filter(year %in% 2017:2022) %>%
+  group_by(winter_year, season) %>%
+  summarise(
+    # ERA5 GF Air temperature (gap-filled)
+    TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TA_gapfilled_se = sd(TA_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TA_gapfilled))),
+    
+    # measured Air temperature 
+    TA_mean = mean(TA, na.rm = TRUE),
+    TA_se = sd(TA, na.rm = TRUE) / sqrt(sum(!is.na(TA))),
+    
+    # ERA5 GF Soil temperature (gap-filled only)
+    TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled_se = sd(TS_3_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_gapfilled))),
+    
+    # Measured Soil temperature 
+    TS_3_mean = mean(TS_3_1_1, na.rm = TRUE),
+    TS_3_se = sd(TS_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_1_1))),
+    
+    # Soil moisture
+    SWC_3_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    SWC_3_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    
+    # VPD
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    
+    # RH - relative humidity 
+    RH_mean = mean(RH, na.rm = TRUE),
+    RH_se = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    
+    # Sensible heat
+    H_mean = mean(H, na.rm = TRUE),
+    H_se = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    
+    # Latent heat
+    LE_mean = mean(LE, na.rm = TRUE),
+    LE_se = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    
+    # Ground heat
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    G_se = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    
+    #Daily avg of HH flux - FCH4 not gf
+    FCH4_daily_mean = mean(FCH4 * 1/1000), #in units umol/m2/s
+    FCH4_se = sd(FCH4 * 1/1000) / sqrt(sum(!is.na(FCH4))),
+    
+    #Daily avg of HH flux - FCH4 GF
+    FCH4_GF_mean = mean(FCH4_F * 1/1000), #in units umol/m2/s
+    FCH4_GF_se = sd(FCH4_F * 1/1000) / sqrt(sum(!is.na(FCH4_F))),
+   
+    
+       #Budgets - not winter proportion adjusted 
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12)), #g/m2
+ 
+    
+    
+    .groups = 'drop'
+  )
+
+# Define consistent year colors
+year_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+# Convert year to factor for consistent color mapping
+#seasonal_means_FCH4$year_factor <- as.factor(seasonal_means_FCH4$year)
+seasonal_means_FCH4$winteryear_factor <- as.factor(seasonal_means_FCH4$winter_year)
+```
+
+
+
+
+#Temporal co-trends (do years with higher VPD also have higher fluxes, for example - year-to-year relationship) - coding help from Claude
+```{r}
+# TEMPORAL CO-TREND ANALYSIS
+# Testing if years with higher/lower met variables also have higher/lower fluxes
+# Uses seasonal means (n=6 years per season)
+
+library(dplyr)
+library(ggplot2)
+library(broom)
+
+# ============================================================================
+# PREPARE SEASONAL MEAN DATA
+# ============================================================================
+
+# # Calculate seasonal means for FCH4 and all met variables
+fch4_seasonal_means <- df_avg_FCH4 %>%
+  #filter(year %in% 2017:2022) %>%
+  group_by(winter_year, season) %>%
+  summarise(
+    FCH4_mean = mean(FCH4, na.rm = TRUE),
+    TA_gf_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TS_gf_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    RH_mean = mean(RH, na.rm = TRUE),
+    H_mean = mean(H, na.rm = TRUE),
+    LE_mean = mean(LE, na.rm = TRUE),
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  )
+# 
+# # Calculate seasonal means for FC and all met variables
+fc_seasonal_means <- df_avg_FC %>%
+ # filter(year %in% 2017:2022) %>%
+  group_by(winter_year, season) %>%
+  summarise(
+    FC_mean = mean(FC, na.rm = TRUE),
+    TA_gf_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TS_gf_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    RH_mean = mean(RH, na.rm = TRUE),
+    H_mean = mean(H, na.rm = TRUE),
+    LE_mean = mean(LE, na.rm = TRUE),
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# ============================================================================
+# FUNCTION: Analyze temporal co-trends
+# ============================================================================
+
+analyze_cotrend <- function(data, flux_var, met_var, flux_label, met_label, season_name) {
+  
+  # Filter to specific season
+  season_data <- data %>%
+    filter(season == season_name) %>%
+    select(winter_year, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    filter(complete.cases(.))
+  
+  if(nrow(season_data) < 4) {
+    return(NULL)
+  }
+  
+  # Linear model
+  lm_model <- lm(flux ~ met, data = season_data)
+  lm_summary <- summary(lm_model)
+  
+  # Test residuals normality
+  residuals_vals <- residuals(lm_model)
+  shapiro_p <- if(nrow(season_data) >= 3) shapiro.test(residuals_vals)$p.value else NA
+  
+  # Extract statistics
+  slope <- coef(lm_model)[2]
+  slope_p <- lm_summary$coefficients[2, 4]
+  r_squared <- lm_summary$r.squared
+  adj_r_squared <- lm_summary$adj.r.squared
+  
+  # Spearman correlation
+  spearman_test <- cor.test(season_data$met, season_data$flux, method = "spearman")
+  spearman_rho <- spearman_test$estimate
+  spearman_p <- spearman_test$p.value
+  
+  # Kendall's tau
+  kendall_test <- cor.test(season_data$met, season_data$flux, method = "kendall")
+  kendall_tau <- kendall_test$estimate
+  kendall_p <- kendall_test$p.value
+  
+  list(
+    season = season_name,
+    flux_var = flux_label,
+    met_var = met_label,
+    n = nrow(season_data),
+    slope = slope,
+    slope_p = slope_p,
+    r_squared = r_squared,
+    adj_r_squared = adj_r_squared,
+    shapiro_p = shapiro_p,
+    spearman_rho = spearman_rho,
+    spearman_p = spearman_p,
+    kendall_tau = kendall_tau,
+    kendall_p = kendall_p,
+    model = lm_model,
+    data = season_data
+  )
+}
+
+# ============================================================================
+# RUN CO-TREND ANALYSES
+# ============================================================================
+
+cat("============================================================\n")
+cat("TEMPORAL CO-TREND ANALYSIS (2017-2022)\n")
+cat("Testing if inter-annual trends in fluxes correspond to\n")
+cat("inter-annual trends in meteorological variables\n")
+cat("Using seasonal means (n=6 years per season)\n")
+cat("============================================================\n\n")
+
+# Define met variables
+met_vars <- list(
+  list(var = "TA_gf_mean", label = "Air Temp GF"),
+  list(var = "TS_gf_mean", label = "Soil Temp GF"),
+  list(var = "SWC_mean", label = "Soil Moisture"),
+  list(var = "VPD_mean", label = "VPD"),
+  list(var = "RH_mean", label = "RH"),
+  list(var = "H_mean", label = "Sensible Heat"),
+  list(var = "LE_mean", label = "Latent Heat"),
+  list(var = "G_mean", label = "Soil Heat Flux")
+)
+
+seasons <- c("Winter", "Growing Season", "Fall Senescence")
+
+# FCH4 co-trends
+fch4_cotrend_results <- list()
+for(season in seasons) {
+  for(met in met_vars) {
+    result <- analyze_cotrend(
+      fch4_seasonal_means, "FCH4_mean", met$var,
+      "FCH4", met$label, season
+    )
+    if(!is.null(result)) {
+      fch4_cotrend_results[[paste(season, met$label, sep = "_")]] <- result
+    }
+  }
+}
+
+# FC co-trends
+fc_cotrend_results <- list()
+for(season in seasons) {
+  for(met in met_vars) {
+    result <- analyze_cotrend(
+      fc_seasonal_means, "FC_mean", met$var,
+      "FC", met$label, season
+    )
+    if(!is.null(result)) {
+      fc_cotrend_results[[paste(season, met$label, sep = "_")]] <- result
+    }
+  }
+}
+
+# ============================================================================
+# CREATE SUMMARY TABLE
+# ============================================================================
+
+create_cotrend_summary <- function(results_list, flux_name) {
+  
+  summary_df <- data.frame()
+  
+  for(result in results_list) {
+    if(!is.null(result)) {
+      summary_df <- rbind(summary_df, data.frame(
+        flux = flux_name,
+        season = result$season,
+        met_variable = result$met_var,
+        n = result$n,
+        slope = round(result$slope, 4),
+        slope_p = round(result$slope_p, 4),
+        adj_r2 = round(result$adj_r_squared, 3),
+        kendall_tau = round(result$kendall_tau, 3),
+        kendall_p = round(result$kendall_p, 4),
+        spearman_rho = round(result$spearman_rho, 3),
+        spearman_p = round(result$spearman_p, 4),
+        residuals_normal = ifelse(!is.na(result$shapiro_p) && result$shapiro_p > 0.05, "Yes", "No"),
+        significant = case_when(
+          !is.na(result$shapiro_p) && result$shapiro_p > 0.05 && result$slope_p < 0.05 ~ "Yes (LM)",
+          result$kendall_p < 0.05 ~ "Yes (Kendall)",
+          TRUE ~ "No"
+        )
+      ))
+    }
+  }
+  
+  return(summary_df)
+}
+
+# Create summary tables
+fch4_cotrend_summary <- create_cotrend_summary(fch4_cotrend_results, "FCH4")
+fc_cotrend_summary <- create_cotrend_summary(fc_cotrend_results, "FC")
+
+# Combine
+all_cotrend_summary <- rbind(fch4_cotrend_summary, fc_cotrend_summary)
+
+# Print all results
+cat("\n============================================================\n")
+cat("SUMMARY: ALL TEMPORAL CO-TRENDS\n")
+cat("============================================================\n\n")
+
+print(all_cotrend_summary)
+
+# Significant co-trends
+cat("\n\n============================================================\n")
+cat("SIGNIFICANT TEMPORAL CO-TRENDS (p < 0.05)\n")
+cat("============================================================\n\n")
+
+significant_cotrends <- all_cotrend_summary %>%
+  filter(significant != "No") %>%
+  arrange(flux, season, met_variable)
+
+if(nrow(significant_cotrends) > 0) {
+  print(significant_cotrends)
+  
+  cat("\n\nInterpretation:\n")
+  cat("- These relationships show inter-annual co-variation\n")
+  cat("- Positive slope: Years with higher met variable had higher flux\n")
+  cat("- Negative slope: Years with higher met variable had lower flux\n")
+
+  
+} else {
+  cat("No significant temporal co-trends detected at p < 0.05\n")
+}
+
+#Nearly all tests found no sig slopes 
+
+#NOTE: since n is very low (n = 6, or 5), tests assessing assumptions of normality, homog of var are very weak. Better to side with the non-parametric approach. If both agree, great - if they disagree, go with the kendall test or spearman corr. So in this case, two relationships came out sig in lm, but were not sig in kendall's test or spearman corr, so I'm considering them not sig * 
+```
+
+
+#Within-season relationships (on days when x var is higher, are fluxes also higher?) -coding help from Claude
+
+
+```{r}
+# REGRESSION ANALYSIS: Carbon Fluxes vs Meteorological Variables
+# Testing if temporal trends in met variables correspond to trends in C fluxes
+# Analysis by season for 2017-2022
+
+library(dplyr)
+library(ggplot2)
+library(broom)
+
+# ============================================================================
+# FUNCTION: Analyze flux-meteorology relationships by season
+# ============================================================================
+
+analyze_flux_met_relationship <- function(data, flux_var, met_var, 
+                                         flux_label, met_label, 
+                                         season_name, met_units) {
+  
+  # Filter to specific season and years
+  season_data <- data %>%
+    #filter(year %in% 2017:2022, season == season_name) %>%
+    select(winter_year, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    filter(complete.cases(.))
+  
+  if(nrow(season_data) < 10) {
+    cat("\nInsufficient data for", season_name, "-", met_label, "\n")
+    return(NULL)
+  }
+  
+  # Fit linear model: flux ~ meteorological variable
+  lm_model <- lm(flux ~ met, data = season_data)
+  lm_summary <- summary(lm_model)
+  
+  # Test residuals for normality
+  residuals_vals <- residuals(lm_model)
+  shapiro_p <- shapiro.test(residuals_vals)$p.value
+  
+  # Extract statistics
+  slope <- coef(lm_model)[2]
+  slope_se <- lm_summary$coefficients[2, 2]
+  slope_p <- lm_summary$coefficients[2, 4]
+  r_squared <- lm_summary$r.squared
+  adj_r_squared <- lm_summary$adj.r.squared
+  
+  # Spearman correlation as non-parametric alternative
+  spearman_test <- cor.test(season_data$met, season_data$flux, method = "spearman")
+  spearman_rho <- spearman_test$estimate
+  spearman_p <- spearman_test$p.value
+  
+    # Kendall's tau
+  kendall_test <- cor.test(season_data$met, season_data$flux, method = "kendall")
+  kendall_tau <- kendall_test$estimate
+  kendall_p <- kendall_test$p.value
+  
+  #Results
+  list(
+    season = season_name,
+    flux_var = flux_label,
+    met_var = met_label,
+    n = nrow(season_data),
+    slope = slope,
+    slope_p = slope_p,
+    r_squared = r_squared,
+    adj_r_squared = adj_r_squared,
+    shapiro_p = shapiro_p,
+    spearman_rho = spearman_rho,
+    spearman_p = spearman_p,
+    kendall_tau = kendall_tau,
+    kendall_p = kendall_p,
+    model = lm_model,
+    data = season_data
+  )
+}
+
+# ============================================================================
+# FUNCTION: Run analysis for all met variables
+# ============================================================================
+
+run_comprehensive_analysis <- function(data, flux_var, flux_label, flux_units) {
+  
+  # Define meteorological variables to test
+  met_vars <- list(
+    list(var = "TA_gapfilled", label = "Air Temp GF", units = "°C"),
+    list(var = "TS_3_gapfilled", label = "Soil Temp GF", units = "°C"),
+    list(var = "SWC_3_1_1", label = "Soil Moisture", units = "%"),
+    list(var = "VPD", label = "VPD", units = "hPa"),
+    list(var = "RH", label = "Relative Humidity", units = "%"),
+    list(var = "H", label = "Sensible Heat", units = "W/m²"),
+    list(var = "LE", label = "Latent Heat", units = "W/m²"),
+    list(var = "G_1_1_1", label = "Soil Heat Flux", units = "W/m²")
+  )
+  
+  seasons <- c("Winter", "Growing Season", "Fall Senescence")
+  
+  results_list <- list()
+  
+  for(season in seasons) {
+    for(met in met_vars) {
+      result <- analyze_flux_met_relationship(
+        data, flux_var, met$var, 
+        flux_label, met$label, 
+        season, met$units
+      )
+      
+      if(!is.null(result)) {
+        results_list[[paste(season, met$label, sep = "_")]] <- result
+      }
+    }
+  }
+  
+  return(results_list)
+}
+
+# ============================================================================
+# RUN ANALYSES
+# ============================================================================
+
+cat("============================================================\n")
+cat("CARBON FLUX vs METEOROLOGICAL VARIABLE REGRESSIONS\n")
+cat("Testing relationships within each season (2017-2022)\n")
+cat("============================================================\n\n")
+
+# Analyze FCH4
+cat("\n--- ANALYZING CH4 FLUX ---\n")
+fch4_results <- run_comprehensive_analysis(
+  df_avg_FCH4, "FCH4", "CH₄ Flux", "nmol/m²/s"
+)
+
+# Analyze FC (NEE)
+cat("\n--- ANALYZING CO2 FLUX (NEE) ---\n")
+fc_results <- run_comprehensive_analysis(
+  df_avg_FC, "FC", "CO₂ Flux", "µmol/m²/s"
+)
+
+# ============================================================================
+# CREATE SUMMARY TABLE
+# ============================================================================
+
+create_summary_table <- function(results_list, flux_name) {
+  
+  summary_df <- data.frame()
+  
+  for(result in results_list) {
+    if(!is.null(result)) {
+      summary_df <- rbind(summary_df, data.frame(
+        flux = flux_name,
+        season = result$season,
+        met_variable = result$met_var,
+        n = result$n,
+        slope = round(result$slope, 4),
+        slope_p = round(result$slope_p, 4),
+        adj_r2 = round(result$adj_r_squared, 3),
+        kendall_tau = round(result$kendall_tau, 3),
+        kendall_p = round(result$kendall_p, 4),
+        spearman_rho = round(result$spearman_rho, 3),
+        spearman_p = round(result$spearman_p, 4),
+        residuals_normal = ifelse(!is.na(result$shapiro_p) && result$shapiro_p > 0.05, "Yes", "No"),
+        significant = case_when(
+          !is.na(result$shapiro_p) && result$shapiro_p > 0.05 && result$slope_p < 0.05 ~ "Yes (LM)",
+          result$kendall_p < 0.05 ~ "Yes (Kendall)",
+          TRUE ~ "No"
+        )
+      ))
+    }
+  }
+  
+  return(summary_df)
+}
+
+# Create summary tables
+fch4_summary <- create_summary_table(fch4_results, "FCH4")
+fc_summary <- create_summary_table(fc_results, "FC")
+
+# Combine
+all_summary <- rbind(fch4_summary, fc_summary)
+
+# Print results
+cat("\n\n============================================================\n")
+cat("SUMMARY: ALL FLUX-METEOROLOGY RELATIONSHIPS\n")
+cat("============================================================\n\n")
+
+print(all_summary)
+
+# Highlight significant relationships
+cat("\n\n============================================================\n")
+cat("SIGNIFICANT RELATIONSHIPS (p < 0.05)\n")
+cat("============================================================\n\n")
+
+significant_results <- all_summary %>%
+  filter(significant != "No") %>%
+  arrange(flux, season, met_variable)
+
+if(nrow(significant_results) > 0) {
+  print(significant_results)
+  
+  cat("\n\nInterpretation:\n")
+  cat("- Positive slope: Flux increases as met variable increases\n")
+  cat("- Negative slope: Flux decreases as met variable increases\n")
+  cat("- Strong relationships (|rho| or R² > 0.5) indicate important drivers\n")
+  
+} else {
+  cat("No significant relationships detected at p < 0.05\n")
+}
+
+# Export summary table
+ # write.csv(all_summary, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/flux_meteorology_regression_summary.csv", row.names = FALSE)
+
+
+
+#many relationships significant - this points to autocorrelation. Can try to avg by week, or month, to reduce autocorr...
+
+ #checking / testing 
+print(all_summary)
+lm_test <- lm(FC ~ RH, data = df_avg_FC %>% filter(season == "Winter"))
+summary(lm_test)
+```
+
+#Autocorr checks - make a df for each season, then test the relationship you're planning to analyze. Within winter months, is FCH4 related to VPD? --> 
+Within winter data, are the residuals from FCH4 ~ VPD autocorrelated?
+```{r}
+#test by flux and season - yep, all autocorr
+df_avg_FCH4_winter <- df_avg_FCH4 %>%
+  filter(season == "Winter")
+#autocorrelation - want everything below the blue dotted line 
+acf(df_avg_FCH4_winter$FCH4, na.action = na.omit, main = "Autocorrelation of variable")
+#partial autocorr - removes effect of intermediate lags, still want everything below blue dotted line 
+pacf(df_avg_FCH4_winter$FCH4, na.action = na.omit, main = "Partial Autocorrelation")
+
+
+
+#Results: yep severely autocorrelated 
+
+
+#Ljung-Box test for timeseries models / data -- if p<0.05, there is autocorr and residuals are not independent 
+Box.test(df_avg_FC$FC, lag = 20, type = "Ljung-Box") #p<0.001
+Box.test(df_avg_FCH4$FCH4, lag = 20, type = "Ljung-Box") #p<0.001
+
+#Durbin watson test for when a model has been fitted - checks if residuals are autocorrelated - DW = 2 = no autocorr, DW < 2 = pos autocorr, DW > 2 = neg autocorr
+#install.packages("lmtest")   
+library(lmtest)
+
+lm_test<- lm(FCH4 ~ VPD, data = df_avg_FCH4_winter)
+dwtest(lm_test)
+acf(residuals(lm_test), main = "ACF of model residuals")
+
+#FCH4
+#VPD - autocorr 
+
+```
+*weekly still heavily autocorrelated; in monthly some variables were autocorrelated 
+
+# ========= coding help from claude ===============
+
+
+#checking autocorr within season - streamlined function by Claude 
+```{r}
+# AUTOCORRELATION CHECK FOR FLUX TEMPORAL TRENDS
+# Testing if FC and FCH4 show temporal autocorrelation across years (by season)
+
+library(dplyr)
+library(lmtest)  # For Durbin-Watson test
+
+cat("============================================================\n")
+cat("AUTOCORRELATION CHECK: FLUX TEMPORAL TRENDS BY SEASON\n")
+cat("============================================================\n\n")
+
+# ============================================================================
+# FUNCTION: Check autocorrelation for flux temporal trend
+# ============================================================================
+
+check_flux_autocorrelation <- function(data, flux_var, flux_label) {
+  
+  results_list <- list()
+  seasons <- unique(data$season)
+  
+  for(s in seasons) {
+    # Filter by season and arrange by year
+    season_data <- data %>%
+      filter(season == s) %>%
+      arrange(winter_year)
+    
+    flux_vals <- season_data[[flux_var]]
+    years <- season_data$winter_year
+    
+    # Need at least 4 observations
+    if(length(flux_vals) < 4 || sum(!is.na(flux_vals)) < 4) {
+      cat("Skipping", flux_label, "-", s, ": insufficient data\n")
+      next
+    }
+    
+    # Fit linear model: flux ~ year
+    lm_model <- lm(flux_vals ~ years)
+    
+    # Durbin-Watson test on residuals
+    dw_test <- dwtest(lm_model)
+    
+    # ACF lag-1 autocorrelation
+    acf_result <- acf(flux_vals, lag.max = 1, plot = FALSE)
+    lag1_acf <- acf_result$acf[2]
+    
+    # Also check residuals autocorrelation
+    residuals_vals <- residuals(lm_model)
+    acf_resid <- acf(residuals_vals, lag.max = 1, plot = FALSE)
+    lag1_resid_acf <- acf_resid$acf[2]
+    
+    # Interpretation
+    autocorr_detected_dw <- dw_test$p.value < 0.05
+    autocorr_detected_acf <- abs(lag1_acf) > 0.3
+    
+    results_list[[s]] <- data.frame(
+      flux = flux_label,
+      season = s,
+      n = length(flux_vals),
+      
+      # Durbin-Watson test
+      dw_statistic = as.numeric(dw_test$statistic),
+      dw_p_value = as.numeric(dw_test$p.value),
+      dw_autocorr = ifelse(autocorr_detected_dw, "Yes", "No"),
+      
+      # ACF on raw data
+      lag1_acf = lag1_acf,
+      acf_autocorr = ifelse(autocorr_detected_acf, "Yes", "No"),
+      
+      # ACF on residuals
+      lag1_resid_acf = lag1_resid_acf,
+      
+      # Overall assessment
+      autocorrelation_present = ifelse(autocorr_detected_dw | autocorr_detected_acf, 
+                                      "YES", "NO"),
+      
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  return(do.call(rbind, results_list))
+}
+
+# ============================================================================
+# RUN AUTOCORRELATION CHECKS
+# ============================================================================
+
+cat("\n--- FC (CO₂ Flux) AUTOCORRELATION BY SEASON ---\n\n")
+fc_autocorr <- check_flux_autocorrelation(seasonal_means_FC, "FC_daily_mean", "CO₂ Flux")
+print(fc_autocorr)
+
+cat("\n\n--- FCH4 (CH₄ Flux) AUTOCORRELATION BY SEASON ---\n\n")
+fch4_autocorr <- check_flux_autocorrelation(seasonal_means_FCH4, "FCH4_daily_mean", "CH₄ Flux")
+print(fch4_autocorr)
+
+# ============================================================================
+# VISUAL CHECK: Plot ACF for each season
+# ============================================================================
+
+cat("\n\n--- GENERATING ACF PLOTS ---\n")
+
+library(ggplot2)
+library(gridExtra)
+
+plot_acf_by_season <- function(data, flux_var, flux_label) {
+  
+  seasons <- unique(data$season)
+  plot_list <- list()
+  
+  for(s in seasons) {
+    season_data <- data %>%
+      filter(season == s) %>%
+      arrange(winter_year) %>%
+      pull(!!sym(flux_var))
+    
+    if(length(season_data) < 4) next
+    
+    # Calculate ACF
+    acf_result <- acf(season_data, lag.max = 3, plot = FALSE)
+    
+    # Create data frame for plotting
+    acf_df <- data.frame(
+      lag = 1:length(acf_result$acf[-1]),
+      acf = acf_result$acf[-1]
+    )
+    
+    # Create plot
+    p <- ggplot(acf_df, aes(x = lag, y = acf)) +
+      geom_hline(yintercept = 0, color = "black") +
+      geom_hline(yintercept = c(-0.3, 0.3), linetype = "dashed", color = "blue", alpha = 0.5) +
+      geom_hline(yintercept = c(-1.96/sqrt(length(season_data)), 
+                                1.96/sqrt(length(season_data))), 
+                linetype = "dashed", color = "red") +
+      geom_segment(aes(xend = lag, yend = 0), linewidth = 2, color = "#2166ac") +
+      geom_point(size = 3, color = "#2166ac") +
+      labs(
+        title = paste0(flux_label, " - ", s),
+        subtitle = paste0("n = ", length(season_data), " years"),
+        x = "Lag (years)",
+        y = "Autocorrelation"
+      ) +
+      theme_bw() +
+      theme(
+        plot.title = element_text(face = "bold", size = 11),
+        plot.subtitle = element_text(size = 9)
+      ) +
+      annotate("text", x = max(acf_df$lag), y = 0.3, 
+               label = "Threshold (|r| > 0.3)", 
+               hjust = 1, vjust = -0.5, size = 3, color = "blue") +
+      annotate("text", x = max(acf_df$lag), y = 1.96/sqrt(length(season_data)), 
+               label = "95% CI", 
+               hjust = 1, vjust = -0.5, size = 3, color = "red")
+    
+    plot_list[[s]] <- p
+  }
+  
+  return(plot_list)
+}
+
+# Generate ACF plots for FC
+fc_acf_plots <- plot_acf_by_season(seasonal_means_FC, "FC_daily_mean", "CO₂ Flux")
+if(length(fc_acf_plots) > 0) {
+  fc_combined <- grid.arrange(grobs = fc_acf_plots, ncol = 2)
+  cat("Displaying CO₂ flux ACF plots\n")
+}
+
+# Generate ACF plots for FCH4
+fch4_acf_plots <- plot_acf_by_season(seasonal_means_FCH4, "FCH4_daily_mean", "CH₄ Flux")
+if(length(fch4_acf_plots) > 0) {
+  fch4_combined <- grid.arrange(grobs = fch4_acf_plots, ncol = 2)
+  cat("Displaying CH₄ flux ACF plots\n")
+}
+
+# ============================================================================
+# SUMMARY
+# ============================================================================
+
+cat("\n\n============================================================\n")
+cat("SUMMARY\n")
+cat("============================================================\n\n")
+
+cat("INTERPRETATION:\n")
+cat("- Durbin-Watson test: Tests for autocorrelation in residuals\n")
+cat("  * DW p < 0.05 = significant autocorrelation detected\n")
+cat("- Lag-1 ACF: Direct autocorrelation coefficient\n")
+cat("  * |ACF| > 0.3 = moderate to strong autocorrelation\n")
+cat("- Blue dashed lines in plots = |r| = 0.3 threshold\n")
+cat("- Red dashed lines in plots = 95% confidence interval\n\n")
+
+cat("COMBINED RESULTS:\n\n")
+
+cat("CO₂ Flux Autocorrelation:\n")
+if(exists("fc_autocorr")) {
+  print(fc_autocorr[, c("season", "n", "dw_p_value", "lag1_acf", "autocorrelation_present")])
+}
+
+cat("\n\nCH₄ Flux Autocorrelation:\n")
+if(exists("fch4_autocorr")) {
+  print(fch4_autocorr[, c("season", "n", "dw_p_value", "lag1_acf", "autocorrelation_present")])
+}
+
+cat("\n\nRECOMMENDATION:\n")
+cat("If autocorrelation is present (YES), you should:\n")
+cat("1. Use modified Mann-Kendall for trend tests (if n is large enough)\n")
+cat("2. Report results with caution if n < 10\n")
+cat("3. Consider that p-values may be too optimistic\n")
+```
+
+** Seems the FC and FCH4 data are autocorrelated but n=6 is too small to use the modified mann-kendall test....will have to discuss other options with team / when paper goes into review with collaborators?
+
+
+
+#Overall flux-met relationships (all data) - using GLS here for autocorrelated data. First check for autocorr, normality, and homogeneity of var - if all ok, use linear reg. If not, use gls. This streamlined code from Claude uses a decision tree: if assumptions are met and there is no autocorr, use linear reg; if assumptions are met and there is autocorr, use gls; if assumptions are not met, use kendall-tau rank corr 
+
+-this code uses a logic hierarchy I asked Claude to build in: FIRST check assumptions (normality,homog of var), SECOND test for autocorr 
+
+
+
+#Seasonal relationships and autocorr 
+```{r}
+# ============================================================================
+# Within-Season Analysis: Flux-Meteorological Variable Relationships
+# ============================================================================
+#Analyze relationships between CO2/CH4 fluxes and meteorological variables separately within winter, growing season, and fall senescence 
+
+
+library(tidyverse)
+library(nlme)
+library(lmtest)
+library(car)  # For Levene's test
+
+# ----------------------------------------------------------------------------
+# FUNCTION: Comprehensive within-season relationship analysis
+# ----------------------------------------------------------------------------
+
+analyze_within_season <- function(input_data, flux_var, met_var, season_name,
+                                 flux_label, met_label) {
+  
+  cat("\n========================================\n")
+  cat("Analyzing:", flux_label, "~", met_label, "in", season_name, "\n")
+  cat("========================================\n\n")
+  
+  # Filter for this season only
+  season_data <- input_data %>%
+    dplyr::filter(!is.na(!!sym(flux_var)), !is.na(!!sym(met_var))) %>%
+    dplyr::select(winter_year, DOY, season, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    dplyr::arrange(winter_year, DOY)
+  
+  n_obs <- nrow(season_data)
+  
+  if(n_obs < 15) {
+    cat("Insufficient data (n =", n_obs, "). Skipping.\n")
+    return(NULL)
+  }
+  
+  cat("Number of observations:", n_obs, "\n\n")
+  
+  # -------------------------------------------------------------------------
+  # STEP 1: Visual inspection - plot the relationship
+  # -------------------------------------------------------------------------
+  
+  cat("STEP 1: Visual Inspection\n")
+  
+  visual_plot <- ggplot(season_data, aes(x = met, y = flux)) +
+    geom_point(aes(color = as.factor(winter_year)), size = 2, alpha = 0.7) +
+    geom_smooth(method = "loess", se = TRUE, color = "black") +
+    geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "dashed") +
+    labs(title = paste(flux_label, "~", met_label, "-", season_name),
+         x = met_label, y = flux_label, color = "Year") +
+    theme_bw()
+  
+  print(visual_plot)
+  
+  # Assess if relationship appears monotonic
+  cat("\n→ Visually assess: Is relationship monotonic? (Check plot)\n\n")
+  
+  # -------------------------------------------------------------------------
+  # STEP 2: Fit linear model and check assumptions
+  # -------------------------------------------------------------------------
+  
+  cat("STEP 2: Linear Model Assumptions\n\n")
+  
+  lm_model <- lm(flux ~ met, data = season_data)
+  residuals_vals <- residuals(lm_model)
+  
+  # 2a. Normality (Shapiro-Wilk)
+  # Shapiro test only works with n between 3 and 5000
+  if(length(residuals_vals) >= 3 && length(residuals_vals) <= 5000) {
+    shapiro_test <- shapiro.test(residuals_vals)
+    shapiro_p <- shapiro_test$p.value
+    normal <- shapiro_p > 0.05
+    
+    cat(sprintf("  Shapiro-Wilk (normality):     p = %.4f", shapiro_p))
+    if(normal) {
+      cat(" ✓ Normal\n")
+    } else {
+      cat(" ✗ Non-normal\n")
+    }
+  } else {
+    cat("  Shapiro-Wilk: Sample size out of range (n =", length(residuals_vals), ")\n")
+    shapiro_p <- NA
+    normal <- NA  # Can't determine
+  }
+  
+  # 2b. Homogeneity of variance (Breusch-Pagan)
+  bp_test <- bptest(lm_model)
+  bp_p <- bp_test$p.value
+  homosced <- bp_p > 0.05
+  
+  cat(sprintf("  Breusch-Pagan (homoscedast.): p = %.4f", bp_p))
+  if(homosced) {
+    cat(" ✓ Homoscedastic\n")
+  } else {
+    cat(" ✗ Heteroscedastic\n")
+  }
+  
+  # 2c. Levene's test (alternative to BP)
+  # Group by year for Levene's test
+  levene_test <- leveneTest(flux ~ as.factor(winter_year), data = season_data)
+  levene_p <- levene_test$`Pr(>F)`[1]
+  
+  cat(sprintf("  Levene's test (homoscedast.): p = %.4f\n", levene_p))
+  
+  # QQ plot for visual normality check
+  cat("\n  QQ Plot created (check visual output)\n\n")
+  
+  qq_plot <- ggplot(data.frame(resid = residuals_vals), aes(sample = resid)) +
+    stat_qq() +
+    stat_qq_line(color = "red") +
+    labs(title = paste("QQ Plot:", season_name)) +
+    theme_bw()
+  
+  print(qq_plot)
+  
+  lm_assumptions_met <- !is.na(normal) && normal && homosced
+  
+  # -------------------------------------------------------------------------
+  # STEP 3: Check for autocorrelation
+  # -------------------------------------------------------------------------
+  
+  cat("\nSTEP 3: Autocorrelation Check\n\n")
+  
+  dw_test <- dwtest(lm_model)
+  dw_stat <- as.numeric(dw_test$statistic)
+  dw_p <- dw_test$p.value
+  autocorr_detected <- dw_p < 0.05
+  
+  cat(sprintf("  Durbin-Watson test:           DW = %.4f, p = %.4f", dw_stat, dw_p))
+  if(autocorr_detected) {
+    cat(" ✗ Autocorrelation detected\n\n")
+  } else {
+    cat(" ✓ No autocorrelation\n\n")
+  }
+  
+  # -------------------------------------------------------------------------
+  # STEP 4-6: Apply decision tree
+  # -------------------------------------------------------------------------
+  
+  cat("DECISION TREE:\n\n")
+  
+  lm_slope <- coef(lm_model)[2]
+  lm_p <- summary(lm_model)$coefficients[2, 4]
+  lm_r2 <- summary(lm_model)$r.squared
+  
+  # Initialize result variables
+  kendall_tau <- NA
+  kendall_p <- NA
+  gls_ar1_slope <- NA
+  gls_ar1_p <- NA
+  gls_ar1_autocorr_resolved <- NA
+  gls_ar2_slope <- NA
+  gls_ar2_p <- NA
+  gls_ar2_autocorr_resolved <- NA
+  weighted_gls_slope <- NA
+  weighted_gls_p <- NA
+  weighted_gls_autocorr_resolved <- NA
+  lme_slope <- NA
+  lme_p <- NA
+  lme_autocorr_resolved <- NA
+  
+  # DECISION PATH 1: Assumptions met, no autocorrelation → Linear regression
+  if(lm_assumptions_met && !autocorr_detected) {
+    
+    cat("✓ Path 1: All assumptions met, no autocorrelation\n")
+    cat("  → Using Linear Regression\n\n")
+    
+    recommended_method <- "Linear Regression"
+    recommended_stat <- lm_slope
+    recommended_p <- lm_p
+    recommended_r2 <- lm_r2
+    
+    cat(sprintf("  Slope: %.6f\n", lm_slope))
+    cat(sprintf("  P-value: %.4f\n", lm_p))
+    cat(sprintf("  R²: %.4f\n", lm_r2))
+    
+  # DECISION PATH 2: Assumptions violated, no autocorrelation → Kendall's tau
+  } else if(!lm_assumptions_met && !autocorr_detected) {
+    
+    cat("⚠ Path 2: Assumptions violated, but no autocorrelation\n")
+    cat("  → Using Kendall's tau\n\n")
+    
+    kendall_test <- cor.test(season_data$met, season_data$flux, method = "kendall")
+    kendall_tau <- kendall_test$estimate
+    kendall_p <- kendall_test$p.value
+    
+    recommended_method <- "Kendall's tau"
+    recommended_stat <- kendall_tau
+    recommended_p <- kendall_p
+    recommended_r2 <- NA
+    
+    cat(sprintf("  Tau: %.4f\n", kendall_tau))
+    cat(sprintf("  P-value: %.4f\n", kendall_p))
+    
+  # DECISION PATH 3: Assumptions violated + autocorrelation → GLS with AR structures
+  } else if(!lm_assumptions_met && autocorr_detected) {
+    
+    cat("⚠ Path 3: Assumptions violated AND autocorrelation detected\n")
+    cat("  → Trying GLS with AR(1)\n\n")
+    
+    # Try GLS AR(1)
+    tryCatch({
+      gls_ar1 <- gls(flux ~ met, 
+                     data = season_data,
+                     correlation = corAR1(form = ~ 1),
+                     method = "REML")
+      
+      gls_ar1_slope <- coef(gls_ar1)[2]
+      gls_ar1_p <- summary(gls_ar1)$tTable[2, 4]
+      
+      # Check autocorrelation
+      gls_ar1_resid <- residuals(gls_ar1, type = "normalized")
+      gls_ar1_dw <- dwtest(gls_ar1_resid ~ 1)
+      gls_ar1_autocorr_resolved <- gls_ar1_dw$p.value > 0.05
+      
+      cat(sprintf("  AR(1) Slope: %.6f, p = %.4f\n", gls_ar1_slope, gls_ar1_p))
+      cat(sprintf("  Autocorr resolved: %s (DW p = %.4f)\n\n", 
+                  ifelse(gls_ar1_autocorr_resolved, "YES", "NO"),
+                  gls_ar1_dw$p.value))
+      
+      if(!gls_ar1_autocorr_resolved) {
+        # Try AR(2)
+        cat("  → Autocorrelation persists, trying AR(2)\n\n")
+        
+        tryCatch({
+          gls_ar2 <- gls(flux ~ met, 
+                         data = season_data,
+                         correlation = corARMA(form = ~ 1, p = 2, q = 0),
+                         method = "REML")
+          
+          gls_ar2_slope <- coef(gls_ar2)[2]
+          gls_ar2_p <- summary(gls_ar2)$tTable[2, 4]
+          
+          # Check autocorrelation
+          gls_ar2_resid <- residuals(gls_ar2, type = "normalized")
+          gls_ar2_dw <- dwtest(gls_ar2_resid ~ 1)
+          gls_ar2_autocorr_resolved <- gls_ar2_dw$p.value > 0.05
+          
+          cat(sprintf("  AR(2) Slope: %.6f, p = %.4f\n", gls_ar2_slope, gls_ar2_p))
+          cat(sprintf("  Autocorr resolved: %s (DW p = %.4f)\n\n",
+                      ifelse(gls_ar2_autocorr_resolved, "YES", "NO"),
+                      gls_ar2_dw$p.value))
+          
+          if(!gls_ar2_autocorr_resolved) {
+            # Try weighted GLS
+            cat("  → Trying Weighted GLS (varIdent by year)\n\n")
+            
+            tryCatch({
+              weighted_gls <- gls(flux ~ met,
+                                 data = season_data,
+                                 weights = varIdent(form = ~ 1 | winter_year),
+                                 correlation = corAR1(form = ~ 1),
+                                 method = "REML")
+              
+              weighted_gls_slope <- coef(weighted_gls)[2]
+              weighted_gls_p <- summary(weighted_gls)$tTable[2, 4]
+              
+              weighted_gls_resid <- residuals(weighted_gls, type = "normalized")
+              weighted_gls_dw <- dwtest(weighted_gls_resid ~ 1)
+              weighted_gls_autocorr_resolved <- weighted_gls_dw$p.value > 0.05
+              
+              cat(sprintf("  Weighted GLS Slope: %.6f, p = %.4f\n", 
+                         weighted_gls_slope, weighted_gls_p))
+              cat(sprintf("  Autocorr resolved: %s\n\n",
+                         ifelse(weighted_gls_autocorr_resolved, "YES", "NO")))
+              
+              recommended_method <- "Weighted GLS"
+              recommended_stat <- weighted_gls_slope
+              recommended_p <- weighted_gls_p
+              
+            }, error = function(e) {
+              cat("  Weighted GLS failed\n\n")
+              recommended_method <<- "GLS AR(2) (autocorr persists)"
+              recommended_stat <<- gls_ar2_slope
+              recommended_p <<- gls_ar2_p
+            })
+            
+          } else {
+            recommended_method <- "GLS with AR(2)"
+            recommended_stat <- gls_ar2_slope
+            recommended_p <- gls_ar2_p
+          }
+          
+        }, error = function(e) {
+          cat("  AR(2) failed, using AR(1)\n\n")
+          recommended_method <<- "GLS with AR(1)"
+          recommended_stat <<- gls_ar1_slope
+          recommended_p <<- gls_ar1_p
+        })
+        
+      } else {
+        recommended_method <- "GLS with AR(1)"
+        recommended_stat <- gls_ar1_slope
+        recommended_p <- gls_ar1_p
+      }
+      
+    }, error = function(e) {
+      cat("  GLS AR(1) failed, using Kendall's tau\n\n")
+      
+      kendall_test <- cor.test(season_data$met, season_data$flux, method = "kendall")
+      kendall_tau <<- kendall_test$estimate
+      kendall_p <<- kendall_test$p.value
+      
+      recommended_method <<- "Kendall's tau (GLS failed, autocorr warning)"
+      recommended_stat <<- kendall_tau
+      recommended_p <<- kendall_p
+    })
+    
+    recommended_r2 <- NA
+    
+  # DECISION PATH 4: Assumptions met, but autocorrelation → GLS AR structures
+  } else {
+    
+    cat("⚠ Path 4: Assumptions met, but autocorrelation detected\n")
+    cat("  → Trying GLS with AR(1)\n\n")
+    
+    # Same GLS approach as Path 3
+    tryCatch({
+      gls_ar1 <- gls(flux ~ met, 
+                     data = season_data,
+                     correlation = corAR1(form = ~ 1),
+                     method = "REML")
+      
+      gls_ar1_slope <- coef(gls_ar1)[2]
+      gls_ar1_p <- summary(gls_ar1)$tTable[2, 4]
+      gls_ar1_resid <- residuals(gls_ar1, type = "normalized")
+      gls_ar1_dw <- dwtest(gls_ar1_resid ~ 1)
+      gls_ar1_autocorr_resolved <- gls_ar1_dw$p.value > 0.05
+      
+      cat(sprintf("  AR(1) Slope: %.6f, p = %.4f\n", gls_ar1_slope, gls_ar1_p))
+      cat(sprintf("  Autocorr resolved: %s\n\n",
+                  ifelse(gls_ar1_autocorr_resolved, "YES", "NO")))
+      
+      if(gls_ar1_autocorr_resolved) {
+        recommended_method <- "GLS with AR(1)"
+        recommended_stat <- gls_ar1_slope
+        recommended_p <- gls_ar1_p
+      } else {
+        # Try AR(2) if AR(1) didn't work
+        cat("  → Trying AR(2)\n\n")
+        gls_ar2 <- gls(flux ~ met, 
+                       data = season_data,
+                       correlation = corARMA(form = ~ 1, p = 2, q = 0),
+                       method = "REML")
+        
+        gls_ar2_slope <- coef(gls_ar2)[2]
+        gls_ar2_p <- summary(gls_ar2)$tTable[2, 4]
+        
+        recommended_method <- "GLS with AR(2)"
+        recommended_stat <- gls_ar2_slope
+        recommended_p <- gls_ar2_p
+      }
+      
+    }, error = function(e) {
+      cat("  GLS failed, using linear regression with caution\n\n")
+      recommended_method <<- "Linear Regression (autocorr detected)"
+      recommended_stat <<- lm_slope
+      recommended_p <<- lm_p
+    })
+    
+    recommended_r2 <- NA
+  }
+  
+  # -------------------------------------------------------------------------
+  # Compile results
+  # -------------------------------------------------------------------------
+  
+  result <- data.frame(
+    flux_variable = flux_label,
+    met_variable = met_label,
+    season = season_name,
+    n_obs = n_obs,
+    
+    # Assumptions
+    shapiro_p = shapiro_p,
+    normal = normal,
+    bp_p = bp_p,
+    homoscedastic = homosced,
+    levene_p = levene_p,
+    dw_stat = dw_stat,
+    dw_p = dw_p,
+    autocorr_detected = autocorr_detected,
+    lm_assumptions_met = lm_assumptions_met,
+    
+    # Model results
+    lm_slope = lm_slope,
+    lm_p = lm_p,
+    lm_r2 = lm_r2,
+    
+    kendall_tau = kendall_tau,
+    kendall_p = kendall_p,
+    
+    gls_ar1_slope = gls_ar1_slope,
+    gls_ar1_p = gls_ar1_p,
+    gls_ar1_autocorr_resolved = gls_ar1_autocorr_resolved,
+    
+    gls_ar2_slope = gls_ar2_slope,
+    gls_ar2_p = gls_ar2_p,
+    gls_ar2_autocorr_resolved = gls_ar2_autocorr_resolved,
+    
+    weighted_gls_slope = weighted_gls_slope,
+    weighted_gls_p = weighted_gls_p,
+    weighted_gls_autocorr_resolved = weighted_gls_autocorr_resolved,
+    
+    # Recommendation
+    recommended_method = recommended_method,
+    recommended_stat = recommended_stat,
+    recommended_p = recommended_p,
+    recommended_r2 = ifelse(is.na(recommended_r2), NA, recommended_r2),
+    significant = ifelse(recommended_p < 0.05, 
+                        paste0("Yes (", recommended_method, ")"),
+                        "No"),
+    
+    stringsAsFactors = FALSE
+  )
+  
+  cat("\n========================================\n")
+  cat("FINAL RECOMMENDATION:", recommended_method, "\n")
+  cat(sprintf("Statistic: %.4f, P-value: %.4f\n", recommended_stat, recommended_p))
+  cat("========================================\n\n")
+  
+  return(result)
+}
+
+# ----------------------------------------------------------------------------
+# RUN ANALYSIS FOR ALL SEASONS AND VARIABLES
+# ----------------------------------------------------------------------------
+
+# Define met variables to test
+met_vars <- list(
+  list(var = "TA_gapfilled", label = "Air Temp"),
+  list(var = "TS_3_gapfilled", label = "Soil Temp"),
+  list(var = "SWC_3_1_1", label = "Soil Moisture"),
+  list(var = "VPD", label = "VPD"),
+  list(var = "RH", label = "RH"),
+  list(var = "LE", label = "Latent Heat"),
+  list(var = "H", label = "Sensible Heat"),
+  list(var = "G_1_1_1", label = "Soil Heat Flux")
+)
+
+# Get unique seasons from FC data (excluding NA)
+seasons <- unique(df_avg_FC$season)
+seasons <- seasons[!is.na(seasons)]
+
+cat("\nSeasons found:", paste(seasons, collapse = ", "), "\n\n")
+
+cat("\n############################################################\n")
+cat("# WITHIN-SEASON ANALYSIS: CO2 FLUX\n")
+cat("############################################################\n")
+
+fc_results <- list()
+
+for(season_name in seasons) {
+  for(met in met_vars) {
+    
+    # Filter for this season
+    season_subset <- df_avg_FC %>% dplyr::filter(season == season_name)
+    
+    result <- analyze_within_season(
+      input_data = season_subset,
+      flux_var = "FC",  # Measured CO2 flux (not gapfilled)
+      met_var = met$var,
+      season_name = season_name,
+      flux_label = "CO2 Flux",
+      met_label = met$label
+    )
+    
+    if(!is.null(result)) {
+      fc_results[[paste(season_name, met$label, sep = "_")]] <- result
+    }
+  }
+}
+
+fc_results_df <- do.call(rbind, fc_results)
+rownames(fc_results_df) <- NULL
+
+cat("\n############################################################\n")
+cat("# WITHIN-SEASON ANALYSIS: CH4 FLUX\n")
+cat("############################################################\n")
+
+fch4_results <- list()
+
+for(season_name in seasons) {
+  for(met in met_vars) {
+    
+    # Filter for this season
+    season_subset <- df_avg_FCH4 %>% dplyr::filter(season == season_name)
+    
+    result <- analyze_within_season(
+      input_data = season_subset,
+      flux_var = "FCH4",  # Measured CH4 flux (not gapfilled)
+      met_var = met$var,
+      season_name = season_name,
+      flux_label = "CH4 Flux",
+      met_label = met$label
+    )
+    
+    if(!is.null(result)) {
+      fch4_results[[paste(season_name, met$label, sep = "_")]] <- result
+    }
+  }
+}
+
+fch4_results_df <- do.call(rbind, fch4_results)
+rownames(fch4_results_df) <- NULL
+
+# ----------------------------------------------------------------------------
+# SUMMARY TABLES
+# ----------------------------------------------------------------------------
+
+cat("\n############################################################\n")
+cat("# SUMMARY: SIGNIFICANT RELATIONSHIPS\n")
+cat("############################################################\n\n")
+
+# CO2 significant relationships
+cat("=== CO2 FLUX ===\n")
+fc_sig <- fc_results_df %>%
+  dplyr::filter(grepl("Yes", significant)) %>%
+  dplyr::select(season, met_variable, recommended_method, 
+                recommended_stat, recommended_p, significant)
+
+if(nrow(fc_sig) > 0) {
+  print(fc_sig)
+} else {
+  cat("No significant relationships found\n")
+}
+
+cat("\n=== CH4 FLUX ===\n")
+fch4_sig <- fch4_results_df %>%
+  dplyr::filter(grepl("Yes", significant)) %>%
+  dplyr::select(season, met_variable, recommended_method,
+                recommended_stat, recommended_p, significant)
+
+if(nrow(fch4_sig) > 0) {
+  print(fch4_sig)
+} else {
+  cat("No significant relationships found\n")
+}
+
+```
+
+#Seasonal figs 
+```{r}
+# ============================================================================
+# Figures for Significant Within-Season Relationships
+# ============================================================================
+
+
+library(tidyverse)
+library(nlme)
+library(gridExtra)
+library(grid)
+library(cowplot)
+
+# Define winter_year colors
+winter_year_colors <- c(
+  "2017" = "#E41A1C", "2018" = "#377EB8", "2019" = "#4DAF4A",
+  "2020" = "#984EA3", "2021" = "#FF7F00", "2022" = "#A65628"
+)
+
+# Define units for met variables
+met_units <- list(
+  "Air Temp" = "°C",
+  "Soil Temp" = "°C",
+  "Soil Moisture" = "%",
+  "VPD" = "hPa",
+  "RH" = "%",
+  "Latent Heat" = "W/m²",
+  "Sensible Heat" = "W/m²",
+  "Soil Heat Flux" = "W/m²"
+)
+
+# ----------------------------------------------------------------------------
+# FUNCTION: Create within-season plot with stats
+# ----------------------------------------------------------------------------
+
+create_season_plot <- function(input_data, flux_var, met_var, season_name,
+                               flux_label, met_label, 
+                               gls_slope, gls_p, gls_r2,
+                               show_legend = FALSE) {
+  
+  # Get data for this season
+  plot_data <- input_data %>%
+    dplyr::filter(season == season_name) %>%
+    dplyr::filter(!is.na(!!sym(flux_var)), !is.na(!!sym(met_var))) %>%
+    dplyr::select(winter_year, DOY, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    dplyr::mutate(winter_year = as.factor(winter_year))
+  
+  # Fit GLS AR(1) model
+  gls_model <- gls(flux ~ met,
+                   data = plot_data,
+                   correlation = corAR1(form = ~ 1),
+                   method = "REML")
+  
+  # Create prediction grid
+  pred_grid <- data.frame(
+    met = seq(min(plot_data$met), max(plot_data$met), length.out = 100)
+  )
+  
+  predictions <- predict(gls_model, newdata = pred_grid, se.fit = TRUE)
+  pred_grid$fitted <- predictions
+  
+  # Calculate SE
+  X <- model.matrix(~ met, data = pred_grid)
+  vcov_matrix <- vcov(gls_model)
+  pred_grid$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+  pred_grid$lower <- pred_grid$fitted - 1.96 * pred_grid$se
+  pred_grid$upper <- pred_grid$fitted + 1.96 * pred_grid$se
+  
+  # Get units
+  met_unit <- met_units[[met_label]]
+  if(is.null(met_unit)) met_unit <- ""
+  
+  # Create plot
+  p <- ggplot(plot_data, aes(x = met, y = flux)) +
+    
+    # Confidence band
+    geom_ribbon(data = pred_grid,
+                aes(x = met, ymin = lower, ymax = upper),
+                fill = "#4DAF4A", alpha = 0.2, inherit.aes = FALSE) +
+    
+    # Fitted line (green for GLS)
+    geom_line(data = pred_grid,
+              aes(x = met, y = fitted),
+              color = "#4DAF4A", linewidth = 1,
+              inherit.aes = FALSE) +
+    
+    # Points by winter_year
+    geom_point(aes(color = winter_year), size = 2, alpha = 0.7) +
+    
+    scale_color_manual(values = winter_year_colors, name = "Year") +
+    
+    labs(
+      x = if(met_unit != "") paste0(met_label, " (", met_unit, ")") else met_label,
+      y = flux_label,
+      title = paste(season_name)
+    ) +
+    
+    theme_bw(base_size = 12) +
+    theme(
+      panel.grid.minor = element_blank(),
+      legend.position = if(show_legend) "right" else "none",
+      legend.background = element_rect(fill = "white", color = "black"),
+      plot.title = element_text(size = 11, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 10, face = "bold"),
+      axis.text = element_text(size = 9)
+    )
+  
+  # Add stats in upper right
+  if(gls_p < 0.001) {
+    p_text <- "p < 0.001"
+  } else if(gls_p < 0.01) {
+    p_text <- sprintf("p = %.3f", gls_p)
+  } else {
+    p_text <- sprintf("p = %.2f", gls_p)
+  }
+  
+  stats_text <- paste0(
+    "GLS with AR(1)\n",
+    "R² = ", sprintf("%.3f", gls_r2), "\n",
+    "Slope = ", sprintf("%.4f", gls_slope), "\n",
+    p_text
+  )
+  
+  x_range <- range(plot_data$met)
+  y_range <- range(plot_data$flux)
+  
+  # Upper right position
+  x_pos <- x_range[2] - 0.05 * diff(x_range)
+  y_pos <- y_range[2] - 0.05 * diff(y_range)
+  
+  p <- p +
+    annotate("text",
+             x = x_pos, y = y_pos,
+             label = stats_text,
+             hjust = 1, vjust = 1,
+             size = 3, fontface = "plain",
+             color = "black", lineheight = 0.9)
+  
+  return(p)
+}
+
+# ----------------------------------------------------------------------------
+# EXTRACT SIGNIFICANT RELATIONSHIPS AND CREATE FIGURES
+# ----------------------------------------------------------------------------
+
+# Filter for significant relationships using GLS AR(1)
+fc_sig <- fc_results_df %>%
+  dplyr::filter(grepl("Yes", significant)) %>%
+  dplyr::filter(grepl("GLS", recommended_method)) %>%
+  dplyr::mutate(
+    gls_slope_use = ifelse(!is.na(gls_ar1_slope), gls_ar1_slope, gls_ar2_slope),
+    gls_p_use = ifelse(!is.na(gls_ar1_p), gls_ar1_p, gls_ar2_p)
+  )
+
+fch4_sig <- fch4_results_df %>%
+  dplyr::filter(grepl("Yes", significant)) %>%
+  dplyr::filter(grepl("GLS", recommended_method)) %>%
+  dplyr::mutate(
+    gls_slope_use = ifelse(!is.na(gls_ar1_slope), gls_ar1_slope, gls_ar2_slope),
+    gls_p_use = ifelse(!is.na(gls_ar1_p), gls_ar1_p, gls_ar2_p)
+  )
+
+cat("CO2 significant relationships:", nrow(fc_sig), "\n")
+cat("CH4 significant relationships:", nrow(fch4_sig), "\n\n")
+
+# ----------------------------------------------------------------------------
+# CREATE PLOTS FOR EACH FLUX × SEASON COMBINATION
+# ----------------------------------------------------------------------------
+
+# Get unique seasons
+seasons <- unique(c(fc_sig$season, fch4_sig$season))
+
+# CO2 plots by season
+fc_plots_by_season <- list()
+
+for(season_name in seasons) {
+  
+  season_data <- fc_sig %>% dplyr::filter(season == season_name)
+  
+  if(nrow(season_data) == 0) next
+  
+  cat("Creating CO2 plots for", season_name, ":", nrow(season_data), "relationships\n")
+  
+  plots <- list()
+  
+  for(i in 1:nrow(season_data)) {
+    
+    row <- season_data[i, ]
+    
+    # Map met_variable to column name
+    met_col <- met_vars[[which(sapply(met_vars, function(x) x$label == row$met_variable))]]$var
+    
+    # Calculate pseudo R² from slope and data
+    season_subset <- df_avg_FC %>%
+      dplyr::filter(season == season_name) %>%
+      dplyr::filter(!is.na(FC), !is.na(!!sym(met_col))) %>%
+      dplyr::select(FC, met = !!sym(met_col))
+    
+    gls_temp <- gls(FC ~ met,
+                    data = season_subset,
+                    correlation = corAR1(form = ~ 1),
+                    method = "REML")
+    
+    fitted_vals <- fitted(gls_temp)
+    gls_r2 <- cor(season_subset$FC, fitted_vals)^2
+    
+    p <- create_season_plot(
+      input_data = df_avg_FC,
+      flux_var = "FC",
+      met_var = met_col,
+      season_name = season_name,
+      flux_label = expression(paste("CO"[2], " Flux (µmol m"^-2, " s"^-1, ")")),
+      met_label = row$met_variable,
+      gls_slope = row$gls_slope_use,
+      gls_p = row$gls_p_use,
+      gls_r2 = gls_r2,
+      show_legend = FALSE
+    )
+    
+    plots[[row$met_variable]] <- p
+  }
+  
+  fc_plots_by_season[[season_name]] <- plots
+}
+
+# CH4 plots by season
+fch4_plots_by_season <- list()
+
+for(season_name in seasons) {
+  
+  season_data <- fch4_sig %>% dplyr::filter(season == season_name)
+  
+  if(nrow(season_data) == 0) next
+  
+  cat("Creating CH4 plots for", season_name, ":", nrow(season_data), "relationships\n")
+  
+  plots <- list()
+  
+  for(i in 1:nrow(season_data)) {
+    
+    row <- season_data[i, ]
+    
+    # Map met_variable to column name
+    met_col <- met_vars[[which(sapply(met_vars, function(x) x$label == row$met_variable))]]$var
+    
+    # Calculate pseudo R²
+    season_subset <- df_avg_FCH4 %>%
+      dplyr::filter(season == season_name) %>%
+      dplyr::filter(!is.na(FCH4), !is.na(!!sym(met_col))) %>%
+      dplyr::select(FCH4, met = !!sym(met_col))
+    
+    gls_temp <- gls(FCH4 ~ met,
+                    data = season_subset,
+                    correlation = corAR1(form = ~ 1),
+                    method = "REML")
+    
+    fitted_vals <- fitted(gls_temp)
+    gls_r2 <- cor(season_subset$FCH4, fitted_vals)^2
+    
+    p <- create_season_plot(
+      input_data = df_avg_FCH4,
+      flux_var = "FCH4",
+      met_var = met_col,
+      season_name = season_name,
+      flux_label = expression(paste("CH"[4], " Flux (nmol m"^-2, " s"^-1, ")")),
+      met_label = row$met_variable,
+      gls_slope = row$gls_slope_use,
+      gls_p = row$gls_p_use,
+      gls_r2 = gls_r2,
+      show_legend = FALSE
+    )
+    
+    plots[[row$met_variable]] <- p
+  }
+  
+  fch4_plots_by_season[[season_name]] <- plots
+}
+
+# ----------------------------------------------------------------------------
+# CREATE COMBINED FIGURES BY SEASON
+# ----------------------------------------------------------------------------
+
+# Extract legend
+if(length(fc_plots_by_season) > 0 && length(fc_plots_by_season[[1]]) > 0) {
+  p_legend_temp <- create_season_plot(
+    input_data = df_avg_FC,
+    flux_var = "FC",
+    met_var = "TA_gapfilled",
+    season_name = names(fc_plots_by_season)[1],
+    flux_label = expression(paste("CO"[2], " Flux")),
+    met_label = "Air Temp",
+    gls_slope = 0, gls_p = 0.05, gls_r2 = 0.5,
+    show_legend = TRUE
+  )
+  shared_legend <- get_legend(p_legend_temp)
+}
+
+# CO2 combined figures
+fc_combined_figures <- list()
+
+for(season_name in names(fc_plots_by_season)) {
+  
+  plots <- fc_plots_by_season[[season_name]]
+  n_plots <- length(plots)
+  
+  if(n_plots == 0) next
+  
+  # Determine grid layout
+  ncols <- min(3, n_plots)
+  nrows <- ceiling(n_plots / ncols)
+  
+  # Create title
+  title <- textGrob(
+    paste0("CO₂ Flux - ", season_name, ": Significant Relationships"),
+    gp = gpar(fontsize = 16, fontface = "bold")
+  )
+  
+  # Arrange plots
+  plots_grid <- arrangeGrob(
+    grobs = plots,
+    ncol = ncols,
+    nrow = nrows,
+    top = title
+  )
+  
+  # Add legend
+  combined <- arrangeGrob(
+    plots_grid,
+    shared_legend,
+    ncol = 2,
+    widths = c(10, 1)
+  )
+  
+  fc_combined_figures[[season_name]] <- combined
+  
+  # Display
+  grid.newpage()
+  grid.draw(combined)
+  
+  cat("Created CO2 figure for", season_name, "\n")
+}
+
+# CH4 combined figures
+fch4_combined_figures <- list()
+
+for(season_name in names(fch4_plots_by_season)) {
+  
+  plots <- fch4_plots_by_season[[season_name]]
+  n_plots <- length(plots)
+  
+  if(n_plots == 0) next
+  
+  ncols <- min(3, n_plots)
+  nrows <- ceiling(n_plots / ncols)
+  
+  title <- textGrob(
+    paste0("CH₄ Flux - ", season_name, ": Significant Relationships"),
+    gp = gpar(fontsize = 16, fontface = "bold")
+  )
+  
+  plots_grid <- arrangeGrob(
+    grobs = plots,
+    ncol = ncols,
+    nrow = nrows,
+    top = title
+  )
+  
+  combined <- arrangeGrob(
+    plots_grid,
+    shared_legend,
+    ncol = 2,
+    widths = c(10, 1)
+  )
+  
+  fch4_combined_figures[[season_name]] <- combined
+  
+  grid.newpage()
+  grid.draw(combined)
+  
+  cat("Created CH4 figure for", season_name, "\n")
+}
+
+
+```
+
+#multivariate test exploration 
+```{r}
+# Start with ecological rationale
+gls(FC ~ TA_gapfilled + TS_3_gapfilled + SWC_3_1_1,  # Temperature + moisture controls
+    data = df_avg_FC,
+    correlation = corAR1(form = ~ 1),
+    method = "REML")
+
+#check vif 
+```
+
+
+#adjusting seasonal figs 
+```{r}
+# ============================================================================
+# Customizeable Within-Season Figures (Individual + Combined)
+# ============================================================================
+# Create individual figures with easy customization for stats placement and combine figures with legend in empty grid space
+
+library(tidyverse)
+library(nlme)
+library(gridExtra)
+library(grid)
+library(cowplot)
+
+# Year colors
+winter_year_colors <- c(
+  "2017" = "#E41A1C", "2018" = "#377EB8", "2019" = "#4DAF4A",
+  "2020" = "#984EA3", "2021" = "#FF7F00", "2022" = "#A65628"
+)
+
+# Met variable units
+met_units <- list(
+  "Air Temp" = "°C", "Soil Temp" = "°C", "Soil Moisture" = "%",
+  "VPD" = "hPa", "RH" = "%", "Latent Heat" = "W/m²",
+  "Sensible Heat" = "W/m²", "Soil Heat Flux" = "W/m²"
+)
+
+# ----------------------------------------------------------------------------
+# FUNCTION: Create individual plot with customizable stats position
+# ----------------------------------------------------------------------------
+
+create_custom_plot <- function(input_data, flux_var, met_var, season_name,
+                               flux_label, met_label,
+                               gls_slope, gls_p, gls_r2,
+                               show_legend = FALSE,
+                               show_title = TRUE,
+                               stats_x_pos = 0.95,  # 0-1, fraction of x-range from left
+                               stats_y_pos = 0.95,  # 0-1, fraction of y-range from bottom
+                               stats_hjust = 1,     # 0=left, 0.5=center, 1=right
+                               stats_vjust = 1) {   # 0=bottom, 0.5=center, 1=top
+  
+  # Get data
+  plot_data <- input_data %>%
+    dplyr::filter(season == season_name) %>%
+    dplyr::filter(!is.na(!!sym(flux_var)), !is.na(!!sym(met_var))) %>%
+    dplyr::select(winter_year, DOY, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    dplyr::mutate(winter_year = as.factor(winter_year))
+  
+  # Fit GLS AR(1)
+  gls_model <- gls(flux ~ met, data = plot_data,
+                   correlation = corAR1(form = ~ 1), method = "REML")
+  
+  # Predictions
+  pred_grid <- data.frame(met = seq(min(plot_data$met), max(plot_data$met), length.out = 100))
+  pred_grid$fitted <- predict(gls_model, newdata = pred_grid)
+  
+  X <- model.matrix(~ met, data = pred_grid)
+  vcov_matrix <- vcov(gls_model)
+  pred_grid$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+  pred_grid$lower <- pred_grid$fitted - 1.96 * pred_grid$se
+  pred_grid$upper <- pred_grid$fitted + 1.96 * pred_grid$se
+  
+  # Get units
+  met_unit <- met_units[[met_label]]
+  if(is.null(met_unit)) met_unit <- ""
+  
+  # Create plot
+  p <- ggplot(plot_data, aes(x = met, y = flux)) +
+    geom_ribbon(data = pred_grid, aes(x = met, ymin = lower, ymax = upper),
+                fill = "#4DAF4A", alpha = 0.2, inherit.aes = FALSE) +
+    geom_line(data = pred_grid, aes(x = met, y = fitted),
+              color = "#4DAF4A", linewidth = 1, inherit.aes = FALSE) +
+    geom_point(aes(color = winter_year), size = 2, alpha = 0.7) +
+    scale_color_manual(values = winter_year_colors, name = "Year") +
+    labs(
+      x = if(met_unit != "") paste0(met_label, " (", met_unit, ")") else met_label,
+      y = flux_label,
+      title = if(show_title) season_name else NULL
+    ) +
+    theme_bw(base_size = 12) +
+    theme(
+      panel.grid.minor = element_blank(),
+      legend.position = if(show_legend) "right" else "none",
+      legend.background = element_rect(fill = "white", color = "black"),
+      plot.title = if(show_title) element_text(size = 11, face = "bold", hjust = 0.5) else element_blank(),
+      axis.title = element_text(size = 10, face = "bold"),
+      axis.text = element_text(size = 9)
+    )
+  
+  # ========================================================================
+  # CUSTOMIZABLE STATS ANNOTATION
+  # ========================================================================
+  # Adjust these parameters to move stats text:
+  # - stats_x_pos: 0 (left) to 1 (right)
+  # - stats_y_pos: 0 (bottom) to 1 (top)
+  # - stats_hjust: 0 (left-align), 0.5 (center), 1 (right-align)
+  # - stats_vjust: 0 (bottom-align), 0.5 (middle), 1 (top-align)
+  # ========================================================================
+  
+  if(gls_p < 0.001) {
+    p_text <- "p < 0.001"
+  } else if(gls_p < 0.01) {
+    p_text <- sprintf("p = %.3f", gls_p)
+  } else {
+    p_text <- sprintf("p = %.2f", gls_p)
+  }
+  
+  stats_text <- paste0(
+    "R² = ", sprintf("%.3f", gls_r2), "\n",
+    "Slope = ", sprintf("%.4f", gls_slope), "\n",
+    p_text
+  )
+  
+  x_range <- range(plot_data$met)
+  y_range <- range(plot_data$flux)
+  
+  x_pos <- x_range[1] + stats_x_pos * diff(x_range)
+  y_pos <- y_range[1] + stats_y_pos * diff(y_range)
+  
+  p <- p +
+    annotate("text", x = x_pos, y = y_pos, label = stats_text,
+             hjust = stats_hjust, vjust = stats_vjust,
+             size = 3, fontface = "plain", color = "black", lineheight = 0.9)
+  
+  return(p)
+}
+
+# ----------------------------------------------------------------------------
+# GET SIGNIFICANT RELATIONSHIPS
+# ----------------------------------------------------------------------------
+
+fc_sig <- fc_results_df %>%
+  dplyr::filter(grepl("Yes", significant)) %>%
+  dplyr::filter(grepl("GLS", recommended_method)) %>%
+  dplyr::mutate(
+    gls_slope_use = ifelse(!is.na(gls_ar1_slope), gls_ar1_slope, gls_ar2_slope),
+    gls_p_use = ifelse(!is.na(gls_ar1_p), gls_ar1_p, gls_ar2_p)
+  )
+
+fch4_sig <- fch4_results_df %>%
+  dplyr::filter(grepl("Yes", significant)) %>%
+  dplyr::filter(grepl("GLS", recommended_method)) %>%
+  dplyr::mutate(
+    gls_slope_use = ifelse(!is.na(gls_ar1_slope), gls_ar1_slope, gls_ar2_slope),
+    gls_p_use = ifelse(!is.na(gls_ar1_p), gls_ar1_p, gls_ar2_p)
+  )
+
+# Get seasons
+seasons <- unique(c(fc_sig$season, fch4_sig$season))
+
+cat("\n=== Creating individual figures ===\n\n")
+
+# ----------------------------------------------------------------------------
+# CREATE INDIVIDUAL CO2 PLOTS
+# ----------------------------------------------------------------------------
+
+fc_individual_plots <- list()
+plot_counter <- 1
+
+for(season_name in seasons) {
+  
+  season_data <- fc_sig %>% dplyr::filter(season == season_name)
+  if(nrow(season_data) == 0) next
+  
+  for(i in 1:nrow(season_data)) {
+    
+    row <- season_data[i, ]
+    met_col <- met_vars[[which(sapply(met_vars, function(x) x$label == row$met_variable))]]$var
+    
+    # Calculate R²
+    season_subset <- df_avg_FC %>%
+      dplyr::filter(season == season_name) %>%
+      dplyr::filter(!is.na(FC), !is.na(!!sym(met_col))) %>%
+      dplyr::select(FC, met = !!sym(met_col))
+    
+    gls_temp <- gls(FC ~ met, data = season_subset,
+                    correlation = corAR1(form = ~ 1), method = "REML")
+    gls_r2 <- cor(season_subset$FC, fitted(gls_temp))^2
+    
+    # Create plot name
+    plot_name <- paste0("fc_", gsub(" ", "_", tolower(season_name)), "_",
+                       gsub(" ", "_", tolower(row$met_variable)))
+    
+    # Create plot (no title for combined plots, will add overall title)
+    p <- create_custom_plot(
+      input_data = df_avg_FC,
+      flux_var = "FC",
+      met_var = met_col,
+      season_name = season_name,
+      flux_label = expression(paste("CO"[2], " Flux (µmol m"^-2, " s"^-1, ")")),
+      met_label = row$met_variable,
+      gls_slope = row$gls_slope_use,
+      gls_p = row$gls_p_use,
+      gls_r2 = gls_r2,
+      show_legend = FALSE,
+      show_title = FALSE,  # No individual titles for combined plots
+      # CUSTOMIZE THESE FOR EACH PLOT:
+      stats_x_pos = 0.95,   # Try 0.05 for left, 0.95 for right
+      stats_y_pos = 0.95,   # Try 0.05 for bottom, 0.95 for top
+      stats_hjust = 1,      # 1=right-align, 0=left-align
+      stats_vjust = 1       # 1=top-align, 0=bottom-align
+    )
+    
+    fc_individual_plots[[plot_name]] <- p
+    
+    cat("Created:", plot_name, "\n")
+  }
+}
+
+# ----------------------------------------------------------------------------
+# CREATE INDIVIDUAL CH4 PLOTS
+# ----------------------------------------------------------------------------
+
+fch4_individual_plots <- list()
+
+for(season_name in seasons) {
+  
+  season_data <- fch4_sig %>% dplyr::filter(season == season_name)
+  if(nrow(season_data) == 0) next
+  
+  for(i in 1:nrow(season_data)) {
+    
+    row <- season_data[i, ]
+    met_col <- met_vars[[which(sapply(met_vars, function(x) x$label == row$met_variable))]]$var
+    
+    season_subset <- df_avg_FCH4 %>%
+      dplyr::filter(season == season_name) %>%
+      dplyr::filter(!is.na(FCH4), !is.na(!!sym(met_col))) %>%
+      dplyr::select(FCH4, met = !!sym(met_col))
+    
+    gls_temp <- gls(FCH4 ~ met, data = season_subset,
+                    correlation = corAR1(form = ~ 1), method = "REML")
+    gls_r2 <- cor(season_subset$FCH4, fitted(gls_temp))^2
+    
+    plot_name <- paste0("fch4_", gsub(" ", "_", tolower(season_name)), "_",
+                       gsub(" ", "_", tolower(row$met_variable)))
+    
+    p <- create_custom_plot(
+      input_data = df_avg_FCH4,
+      flux_var = "FCH4",
+      met_var = met_col,
+      season_name = season_name,
+      flux_label = expression(paste("CH"[4], " Flux (nmol m"^-2, " s"^-1, ")")),
+      met_label = row$met_variable,
+      gls_slope = row$gls_slope_use,
+      gls_p = row$gls_p_use,
+      gls_r2 = gls_r2,
+      show_legend = FALSE,
+      show_title = FALSE,
+      stats_x_pos = 0.95,
+      stats_y_pos = 0.95,
+      stats_hjust = 1,
+      stats_vjust = 1
+    )
+    
+    fch4_individual_plots[[plot_name]] <- p
+    
+    cat("Created:", plot_name, "\n")
+  }
+}
+
+cat("\n=== Individual plots created ===\n")
+cat("Access them with: fc_individual_plots$plot_name or fch4_individual_plots$plot_name\n\n")
+
+# ----------------------------------------------------------------------------
+# CREATE COMBINED FIGURES WITH LEGEND IN EMPTY SPACE
+# ----------------------------------------------------------------------------
+
+cat("\n=== Creating combined figures ===\n\n")
+
+# Create a plot with legend for extraction
+if(length(fc_individual_plots) > 0) {
+  p_legend_source <- create_custom_plot(
+    input_data = df_avg_FC, flux_var = "FC", met_var = "TA_gapfilled",
+    season_name = seasons[1],
+    flux_label = expression(paste("CO"[2])), met_label = "Air Temp",
+    gls_slope = 0, gls_p = 0.05, gls_r2 = 0.5,
+    show_legend = TRUE, show_title = FALSE
+  )
+  shared_legend <- get_legend(p_legend_source)
+}
+
+# CO2 Combined Figures
+fc_combined_by_season <- list()
+
+for(season_name in seasons) {
+  
+  # Get plots for this season
+  season_plots <- fc_individual_plots[grepl(paste0("fc_", gsub(" ", "_", tolower(season_name))), 
+                                            names(fc_individual_plots))]
+  
+  if(length(season_plots) == 0) next
+  
+  n_plots <- length(season_plots)
+  ncols <- 3
+  nrows <- ceiling(n_plots / ncols)
+  total_spaces <- ncols * nrows
+  
+  # Create title with proper subscript
+  title <- textGrob(
+    paste("CO2 Flux -", season_name, ": Significant Relationships"),
+    gp = gpar(fontsize = 16, fontface = "bold")
+  )
+  
+  # Add empty grobs to fill grid + legend
+  all_grobs <- season_plots
+  empty_spaces <- total_spaces - n_plots
+  
+  # If there's exactly 1 empty space, put legend there
+  if(empty_spaces == 1) {
+    all_grobs[[n_plots + 1]] <- shared_legend
+    
+    combined <- arrangeGrob(
+      grobs = all_grobs,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+  } else {
+    # Multiple empty spaces or none - legend on side
+    plots_grid <- arrangeGrob(
+      grobs = season_plots,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+    
+    combined <- arrangeGrob(
+      plots_grid, shared_legend,
+      ncol = 2, widths = c(10, 1.5)
+    )
+  }
+  
+  fc_combined_by_season[[season_name]] <- combined
+  
+  grid.newpage()
+  grid.draw(combined)
+  
+  cat("Created CO2 combined figure for", season_name, "\n")
+}
+
+# CH4 Combined Figures
+fch4_combined_by_season <- list()
+
+for(season_name in seasons) {
+  
+  season_plots <- fch4_individual_plots[grepl(paste0("fch4_", gsub(" ", "_", tolower(season_name))),
+                                              names(fch4_individual_plots))]
+  
+  if(length(season_plots) == 0) next
+  
+  n_plots <- length(season_plots)
+  ncols <- 3
+  nrows <- ceiling(n_plots / ncols)
+  total_spaces <- ncols * nrows
+  
+  title <- textGrob(
+    paste("CH4 Flux -", season_name, ": Significant Relationships"),
+    gp = gpar(fontsize = 16, fontface = "bold")
+  )
+  
+  all_grobs <- season_plots
+  empty_spaces <- total_spaces - n_plots
+  
+  if(empty_spaces == 1 && season_name != "Winter") {
+    # Put legend in empty space (except for Winter per your request)
+    all_grobs[[n_plots + 1]] <- shared_legend
+    
+    combined <- arrangeGrob(
+      grobs = all_grobs,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+  } else {
+    # Legend on side (including Winter)
+    plots_grid <- arrangeGrob(
+      grobs = season_plots,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+    
+    combined <- arrangeGrob(
+      plots_grid, shared_legend,
+      ncol = 2, widths = c(10, 1.5)
+    )
+  }
+  
+  fch4_combined_by_season[[season_name]] <- combined
+  
+  grid.newpage()
+  grid.draw(combined)
+  
+  cat("Created CH4 combined figure for", season_name, "\n")
+}
+
+cat("\n=== All combined figures created! ===\n\n")
+
+
+```
+
+
+#adj 2
+```{r}
+# ============================================================================
+# Customizeable Within-Season Figures (Individual + Combined)
+# ============================================================================
+#Create individual figures with easy customization for stats placement and combine figures with legend in empty grid space
+
+
+library(tidyverse)
+library(nlme)
+library(gridExtra)
+library(grid)
+library(cowplot)
+
+# winter_year colors
+winter_year_colors <- c(
+  "2017" = "#E41A1C", "2018" = "#377EB8", "2019" = "#4DAF4A",
+  "2020" = "#984EA3", "2021" = "#FF7F00", "2022" = "#A65628"
+)
+
+# Met variable units
+met_units <- list(
+  "Air Temp" = "°C", "Soil Temp" = "°C", "Soil Moisture" = "%",
+  "VPD" = "hPa", "RH" = "%", "Latent Heat" = "W/m²",
+  "Sensible Heat" = "W/m²", "Soil Heat Flux" = "W/m²"
+)
+
+# ----------------------------------------------------------------------------
+# FUNCTION: Create individual plot with customizable stats position
+# ----------------------------------------------------------------------------
+
+create_custom_plot <- function(input_data, flux_var, met_var, season_name,
+                               flux_label, met_label,
+                               gls_slope, gls_p, gls_r2,
+                               show_legend = FALSE,
+                               show_title = TRUE,
+                               stats_x_pos = 0.95,  # 0-1, fraction of x-range from left
+                               stats_y_pos = 0.95,  # 0-1, fraction of y-range from bottom
+                               stats_hjust = 1,     # 0=left, 0.5=center, 1=right
+                               stats_vjust = 1) {   # 0=bottom, 0.5=center, 1=top
+  
+  # Get data
+  plot_data <- input_data %>%
+    dplyr::filter(season == season_name) %>%
+    dplyr::filter(!is.na(!!sym(flux_var)), !is.na(!!sym(met_var))) %>%
+    dplyr::select(winter_year, DOY, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    dplyr::mutate(winter_year = as.factor(winter_year))
+  
+  # Fit GLS AR(1)
+  gls_model <- gls(flux ~ met, data = plot_data,
+                   correlation = corAR1(form = ~ 1), method = "REML")
+  
+  # Predictions
+  pred_grid <- data.frame(met = seq(min(plot_data$met), max(plot_data$met), length.out = 100))
+  pred_grid$fitted <- predict(gls_model, newdata = pred_grid)
+  
+  X <- model.matrix(~ met, data = pred_grid)
+  vcov_matrix <- vcov(gls_model)
+  pred_grid$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+  pred_grid$lower <- pred_grid$fitted - 1.96 * pred_grid$se
+  pred_grid$upper <- pred_grid$fitted + 1.96 * pred_grid$se
+  
+  # Get units
+  met_unit <- met_units[[met_label]]
+  if(is.null(met_unit)) met_unit <- ""
+  
+  # Create plot
+  p <- ggplot(plot_data, aes(x = met, y = flux)) +
+    geom_ribbon(data = pred_grid, aes(x = met, ymin = lower, ymax = upper),
+                fill = "#4DAF4A", alpha = 0.2, inherit.aes = FALSE) +
+    geom_line(data = pred_grid, aes(x = met, y = fitted),
+              color = "#4DAF4A", linewidth = 1, inherit.aes = FALSE) +
+    geom_point(aes(color = winter_year), size = 2, alpha = 0.7) +
+    scale_color_manual(values = winter_year_colors, name = "Year") +
+    labs(
+      x = if(met_unit != "") paste0(met_label, " (", met_unit, ")") else met_label,
+      y = flux_label,
+      title = if(show_title) season_name else NULL
+    ) +
+    theme_bw(base_size = 12) +
+    theme(
+      panel.grid.minor = element_blank(),
+      legend.position = if(show_legend) "right" else "none",
+      legend.background = element_rect(fill = "white", color = "black"),
+      plot.title = if(show_title) element_text(size = 11, face = "bold", hjust = 0.5) else element_blank(),
+      axis.title = element_text(size = 10, face = "bold"),
+      axis.text = element_text(size = 9)
+    )
+  
+  # ========================================================================
+  # CUSTOMIZABLE STATS ANNOTATION
+  # ========================================================================
+  # Adjust these parameters to move stats text:
+  # - stats_x_pos: 0 (left) to 1 (right)
+  # - stats_y_pos: 0 (bottom) to 1 (top)
+  # - stats_hjust: 0 (left-align), 0.5 (center), 1 (right-align)
+  # - stats_vjust: 0 (bottom-align), 0.5 (middle), 1 (top-align)
+  # ========================================================================
+  
+  if(gls_p < 0.001) {
+    p_text <- "p < 0.001"
+  } else if(gls_p < 0.01) {
+    p_text <- sprintf("p = %.3f", gls_p)
+  } else {
+    p_text <- sprintf("p = %.2f", gls_p)
+  }
+  
+  stats_text <- paste0(
+    "R² = ", sprintf("%.3f", gls_r2), "\n",
+    "Slope = ", sprintf("%.4f", gls_slope), "\n",
+    p_text
+  )
+  
+  x_range <- range(plot_data$met)
+  y_range <- range(plot_data$flux)
+  
+  x_pos <- x_range[1] + stats_x_pos * diff(x_range)
+  y_pos <- y_range[1] + stats_y_pos * diff(y_range)
+  
+  p <- p +
+    annotate("text", x = x_pos, y = y_pos, label = stats_text,
+             hjust = stats_hjust, vjust = stats_vjust,
+             size = 3, fontface = "plain", color = "black", lineheight = 0.9)
+  
+  return(p)
+}
+
+# ----------------------------------------------------------------------------
+# GET SIGNIFICANT RELATIONSHIPS
+# ----------------------------------------------------------------------------
+
+fc_sig <- fc_results_df %>%
+  dplyr::filter(grepl("Yes", significant)) %>%
+  dplyr::filter(grepl("GLS", recommended_method)) %>%
+  dplyr::mutate(
+    gls_slope_use = ifelse(!is.na(gls_ar1_slope), gls_ar1_slope, gls_ar2_slope),
+    gls_p_use = ifelse(!is.na(gls_ar1_p), gls_ar1_p, gls_ar2_p)
+  )
+
+fch4_sig <- fch4_results_df %>%
+  dplyr::filter(grepl("Yes", significant)) %>%
+  dplyr::filter(grepl("GLS", recommended_method)) %>%
+  dplyr::mutate(
+    gls_slope_use = ifelse(!is.na(gls_ar1_slope), gls_ar1_slope, gls_ar2_slope),
+    gls_p_use = ifelse(!is.na(gls_ar1_p), gls_ar1_p, gls_ar2_p)
+  )
+
+# Get seasons
+seasons <- unique(c(fc_sig$season, fch4_sig$season))
+
+cat("\n=== Creating individual figures ===\n\n")
+
+# ----------------------------------------------------------------------------
+# CREATE INDIVIDUAL CO2 PLOTS
+# ----------------------------------------------------------------------------
+
+fc_individual_plots <- list()
+plot_counter <- 1
+
+for(season_name in seasons) {
+  
+  season_data <- fc_sig %>% dplyr::filter(season == season_name)
+  if(nrow(season_data) == 0) next
+  
+  for(i in 1:nrow(season_data)) {
+    
+    row <- season_data[i, ]
+    met_col <- met_vars[[which(sapply(met_vars, function(x) x$label == row$met_variable))]]$var
+    
+    # Calculate R²
+    season_subset <- df_avg_FC %>%
+      dplyr::filter(season == season_name) %>%
+      dplyr::filter(!is.na(FC), !is.na(!!sym(met_col))) %>%
+      dplyr::select(FC, met = !!sym(met_col))
+    
+    gls_temp <- gls(FC ~ met, data = season_subset,
+                    correlation = corAR1(form = ~ 1), method = "REML")
+    gls_r2 <- cor(season_subset$FC, fitted(gls_temp))^2
+    
+    # Create plot name
+    plot_name <- paste0("fc_", gsub(" ", "_", tolower(season_name)), "_",
+                       gsub(" ", "_", tolower(row$met_variable)))
+    
+    # Create plot (no title for combined plots, will add overall title)
+    p <- create_custom_plot(
+      input_data = df_avg_FC,
+      flux_var = "FC",
+      met_var = met_col,
+      season_name = season_name,
+      flux_label = expression(paste("CO"[2], " Flux (µmol m"^-2, " s"^-1, ")")),
+      met_label = row$met_variable,
+      gls_slope = row$gls_slope_use,
+      gls_p = row$gls_p_use,
+      gls_r2 = gls_r2,
+      show_legend = FALSE,
+      show_title = FALSE,  # No individual titles for combined plots
+      # CUSTOMIZE THESE FOR EACH PLOT:
+      stats_x_pos = 0.95,   # Try 0.05 for left, 0.95 for right
+      stats_y_pos = 0.95,   # Try 0.05 for bottom, 0.95 for top
+      stats_hjust = 1,      # 1=right-align, 0=left-align
+      stats_vjust = 1       # 1=top-align, 0=bottom-align
+    )
+    
+    fc_individual_plots[[plot_name]] <- p
+    
+    cat("Created:", plot_name, "\n")
+  }
+}
+
+# ----------------------------------------------------------------------------
+# CREATE INDIVIDUAL CH4 PLOTS
+# ----------------------------------------------------------------------------
+
+fch4_individual_plots <- list()
+
+for(season_name in seasons) {
+  
+  season_data <- fch4_sig %>% dplyr::filter(season == season_name)
+  if(nrow(season_data) == 0) next
+  
+  for(i in 1:nrow(season_data)) {
+    
+    row <- season_data[i, ]
+    met_col <- met_vars[[which(sapply(met_vars, function(x) x$label == row$met_variable))]]$var
+    
+    season_subset <- df_avg_FCH4 %>%
+      dplyr::filter(season == season_name) %>%
+      dplyr::filter(!is.na(FCH4), !is.na(!!sym(met_col))) %>%
+      dplyr::select(FCH4, met = !!sym(met_col))
+    
+    gls_temp <- gls(FCH4 ~ met, data = season_subset,
+                    correlation = corAR1(form = ~ 1), method = "REML")
+    gls_r2 <- cor(season_subset$FCH4, fitted(gls_temp))^2
+    
+    plot_name <- paste0("fch4_", gsub(" ", "_", tolower(season_name)), "_",
+                       gsub(" ", "_", tolower(row$met_variable)))
+    
+    p <- create_custom_plot(
+      input_data = df_avg_FCH4,
+      flux_var = "FCH4",
+      met_var = met_col,
+      season_name = season_name,
+      flux_label = expression(paste("CH"[4], " Flux (nmol m"^-2, " s"^-1, ")")),
+      met_label = row$met_variable,
+      gls_slope = row$gls_slope_use,
+      gls_p = row$gls_p_use,
+      gls_r2 = gls_r2,
+      show_legend = FALSE,
+      show_title = FALSE,
+      stats_x_pos = 0.95,
+      stats_y_pos = 0.95,
+      stats_hjust = 1,
+      stats_vjust = 1
+    )
+    
+    fch4_individual_plots[[plot_name]] <- p
+    
+    cat("Created:", plot_name, "\n")
+  }
+}
+
+cat("\n=== Individual plots created ===\n")
+cat("Access them with: fc_individual_plots$plot_name or fch4_individual_plots$plot_name\n\n")
+
+# ----------------------------------------------------------------------------
+# CREATE COMBINED FIGURES WITH LEGEND IN EMPTY SPACE
+# ----------------------------------------------------------------------------
+
+cat("\n=== Creating combined figures ===\n\n")
+
+# Create a plot with legend for extraction
+if(length(fc_individual_plots) > 0) {
+  p_legend_source <- create_custom_plot(
+    input_data = df_avg_FC, flux_var = "FC", met_var = "TA_gapfilled",
+    season_name = seasons[1],
+    flux_label = expression(paste("CO"[2])), met_label = "Air Temp",
+    gls_slope = 0, gls_p = 0.05, gls_r2 = 0.5,
+    show_legend = TRUE, show_title = FALSE
+  )
+  shared_legend <- get_legend(p_legend_source)
+}
+
+# CO2 Combined Figures
+fc_combined_by_season <- list()
+
+for(season_name in seasons) {
+  
+  # Get plots for this season
+  season_plots <- fc_individual_plots[grepl(paste0("fc_", gsub(" ", "_", tolower(season_name))), 
+                                            names(fc_individual_plots))]
+  
+  if(length(season_plots) == 0) next
+  
+  n_plots <- length(season_plots)
+  ncols <- 3
+  nrows <- ceiling(n_plots / ncols)
+  total_spaces <- ncols * nrows
+  
+  # Create title with proper subscript
+  title <- textGrob(
+    paste("CO2 Flux -", season_name, ": Significant Relationships"),
+    gp = gpar(fontsize = 16, fontface = "bold")
+  )
+  
+  # Add empty grobs to fill grid + legend
+  all_grobs <- season_plots
+  empty_spaces <- total_spaces - n_plots
+  
+  # If there's exactly 1 empty space, put legend there
+  if(empty_spaces == 1) {
+    all_grobs[[n_plots + 1]] <- shared_legend
+    
+    combined <- arrangeGrob(
+      grobs = all_grobs,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+  } else {
+    # Multiple empty spaces or none - legend on side
+    plots_grid <- arrangeGrob(
+      grobs = season_plots,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+    
+    combined <- arrangeGrob(
+      plots_grid, shared_legend,
+      ncol = 2, widths = c(10, 1.5)
+    )
+  }
+  
+  fc_combined_by_season[[season_name]] <- combined
+  
+  grid.newpage()
+  grid.draw(combined)
+  
+  cat("Created CO2 combined figure for", season_name, "\n")
+}
+
+# CH4 Combined Figures
+fch4_combined_by_season <- list()
+
+for(season_name in seasons) {
+  
+  season_plots <- fch4_individual_plots[grepl(paste0("fch4_", gsub(" ", "_", tolower(season_name))),
+                                              names(fch4_individual_plots))]
+  
+  if(length(season_plots) == 0) next
+  
+  n_plots <- length(season_plots)
+  ncols <- 3
+  nrows <- ceiling(n_plots / ncols)
+  total_spaces <- ncols * nrows
+  
+  title <- textGrob(
+    paste("CH4 Flux -", season_name, ": Significant Relationships"),
+    gp = gpar(fontsize = 16, fontface = "bold")
+  )
+  
+  all_grobs <- season_plots
+  empty_spaces <- total_spaces - n_plots
+  
+  if(empty_spaces == 1 && season_name != "Winter") {
+    # Put legend in empty space (except for Winter per your request)
+    all_grobs[[n_plots + 1]] <- shared_legend
+    
+    combined <- arrangeGrob(
+      grobs = all_grobs,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+  } else {
+    # Legend on side (including Winter)
+    plots_grid <- arrangeGrob(
+      grobs = season_plots,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+    
+    combined <- arrangeGrob(
+      plots_grid, shared_legend,
+      ncol = 2, widths = c(10, 1.5)
+    )
+  }
+  
+  fch4_combined_by_season[[season_name]] <- combined
+  
+  grid.newpage()
+  grid.draw(combined)
+  
+  cat("Created CH4 combined figure for", season_name, "\n")
+}
+
+cat("\n=== All combined figures created! ===\n\n")
+
+
+
+
+
+if(length(fc_combined_by_season) > 0) {
+  cat("  CO2:\n")
+  for(season in names(fc_combined_by_season)) {
+    n_plots <- length(grep(tolower(gsub(" ", "_", season)), names(fc_individual_plots), value = TRUE))
+    cat(sprintf("    - %s (%d plots)\n", season, n_plots))
+  }
+}
+if(length(fch4_combined_by_season) > 0) {
+  cat("  CH4:\n")
+  for(season in names(fch4_combined_by_season)) {
+    n_plots <- length(grep(tolower(gsub(" ", "_", season)), names(fch4_individual_plots), value = TRUE))
+    cat(sprintf("    - %s (%d plots)\n", season, n_plots))
+  }
+}
+
+
+```
+
+#adjusting figs 3
+```{r}
+# ============================================================================
+# Customizable Within-Season Figures (Individual + Combined)
+# ============================================================================
+
+
+library(tidyverse)
+library(nlme)
+library(gridExtra)
+library(grid)
+library(cowplot)
+
+# winter_year colors
+winter_year_colors <- c(
+  "2017" = "#E41A1C", "2018" = "#377EB8", "2019" = "#4DAF4A",
+  "2020" = "#984EA3", "2021" = "#FF7F00", "2022" = "#A65628"
+)
+
+# Met variable units
+met_units <- list(
+  "Air Temp" = "°C", "Soil Temp" = "°C", "Soil Moisture" = "%",
+  "VPD" = "hPa", "RH" = "%", "Latent Heat" = "W/m²",
+  "Sensible Heat" = "W/m²", "Soil Heat Flux" = "W/m²"
+)
+
+# ----------------------------------------------------------------------------
+# FUNCTION: Create individual plot with customizable stats position
+# ----------------------------------------------------------------------------
+
+create_custom_plot <- function(input_data, flux_var, met_var, season_name,
+                               flux_label, met_label,
+                               gls_slope, gls_p, gls_r2,
+                               show_legend = FALSE,
+                               show_title = TRUE,
+                               stats_x_pos = 0.95,  # 0-1, fraction of x-range from left
+                               stats_y_pos = 0.95,  # 0-1, fraction of y-range from bottom
+                               stats_hjust = 1,     # 0=left, 0.5=center, 1=right
+                               stats_vjust = 1) {   # 0=bottom, 0.5=center, 1=top
+  
+  # Get data
+  plot_data <- input_data %>%
+    dplyr::filter(season == season_name) %>%
+    dplyr::filter(!is.na(!!sym(flux_var)), !is.na(!!sym(met_var))) %>%
+    dplyr::select(winter_year, DOY, flux = !!sym(flux_var), met = !!sym(met_var)) %>%
+    dplyr::mutate(winter_year = as.factor(winter_year))
+  
+  # Fit GLS AR(1)
+  gls_model <- gls(flux ~ met, data = plot_data,
+                   correlation = corAR1(form = ~ 1), method = "REML")
+  
+  # Predictions
+  pred_grid <- data.frame(met = seq(min(plot_data$met), max(plot_data$met), length.out = 100))
+  pred_grid$fitted <- predict(gls_model, newdata = pred_grid)
+  
+  X <- model.matrix(~ met, data = pred_grid)
+  vcov_matrix <- vcov(gls_model)
+  pred_grid$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+  pred_grid$lower <- pred_grid$fitted - 1.96 * pred_grid$se
+  pred_grid$upper <- pred_grid$fitted + 1.96 * pred_grid$se
+  
+  # Get units
+  met_unit <- met_units[[met_label]]
+  if(is.null(met_unit)) met_unit <- ""
+  
+  # Create plot
+  p <- ggplot(plot_data, aes(x = met, y = flux)) +
+    geom_ribbon(data = pred_grid, aes(x = met, ymin = lower, ymax = upper),
+                fill = "#4DAF4A", alpha = 0.2, inherit.aes = FALSE) +
+    geom_line(data = pred_grid, aes(x = met, y = fitted),
+              color = "#4DAF4A", linewidth = 1, inherit.aes = FALSE) +
+    geom_point(aes(color = winter_year), size = 2, alpha = 0.7) +
+    scale_color_manual(values = winter_year_colors, name = "Year") +
+    labs(
+      x = if(met_unit != "") paste0(met_label, " (", met_unit, ")") else met_label,
+      y = flux_label,
+      title = if(show_title) season_name else NULL
+    ) +
+    theme_bw(base_size = 12) +
+    theme(
+      panel.grid.minor = element_blank(),
+      legend.position = if(show_legend) "right" else "none",
+      legend.background = element_rect(fill = "white", color = "black"),
+      plot.title = if(show_title) element_text(size = 11, face = "bold", hjust = 0.5) else element_blank(),
+      axis.title = element_text(size = 10, face = "bold"),
+      axis.text = element_text(size = 9)
+    )
+  
+  # ========================================================================
+  # CUSTOMIZABLE STATS ANNOTATION
+  # ========================================================================
+  # Adjust these parameters to move stats text:
+  # - stats_x_pos: 0 (left) to 1 (right)
+  # - stats_y_pos: 0 (bottom) to 1 (top)
+  # - stats_hjust: 0 (left-align), 0.5 (center), 1 (right-align)
+  # - stats_vjust: 0 (bottom-align), 0.5 (middle), 1 (top-align)
+  # ========================================================================
+  
+  if(gls_p < 0.001) {
+    p_text <- "p < 0.001"
+  } else if(gls_p < 0.01) {
+    p_text <- sprintf("p = %.3f", gls_p)
+  } else {
+    p_text <- sprintf("p = %.2f", gls_p)
+  }
+  
+  stats_text <- paste0(
+    "R² = ", sprintf("%.3f", gls_r2), "\n",
+    "Slope = ", sprintf("%.4f", gls_slope), "\n",
+    p_text
+  )
+  
+  x_range <- range(plot_data$met)
+  y_range <- range(plot_data$flux)
+  
+  x_pos <- x_range[1] + stats_x_pos * diff(x_range)
+  y_pos <- y_range[1] + stats_y_pos * diff(y_range)
+  
+  p <- p +
+    annotate("text", x = x_pos, y = y_pos, label = stats_text,
+             hjust = stats_hjust, vjust = stats_vjust,
+             size = 3, fontface = "plain", color = "black", lineheight = 0.9)
+  
+  return(p)
+}
+
+# ----------------------------------------------------------------------------
+# GET SIGNIFICANT RELATIONSHIPS
+# ----------------------------------------------------------------------------
+
+fc_sig <- fc_results_df %>%
+  dplyr::filter(grepl("Yes", significant)) %>%
+  dplyr::filter(grepl("GLS", recommended_method)) %>%
+  dplyr::mutate(
+    gls_slope_use = ifelse(!is.na(gls_ar1_slope), gls_ar1_slope, gls_ar2_slope),
+    gls_p_use = ifelse(!is.na(gls_ar1_p), gls_ar1_p, gls_ar2_p)
+  )
+
+fch4_sig <- fch4_results_df %>%
+  dplyr::filter(grepl("Yes", significant)) %>%
+  dplyr::filter(grepl("GLS", recommended_method)) %>%
+  dplyr::mutate(
+    gls_slope_use = ifelse(!is.na(gls_ar1_slope), gls_ar1_slope, gls_ar2_slope),
+    gls_p_use = ifelse(!is.na(gls_ar1_p), gls_ar1_p, gls_ar2_p)
+  )
+
+# Get seasons
+seasons <- unique(c(fc_sig$season, fch4_sig$season))
+
+cat("\n=== Creating individual figures ===\n\n")
+
+# ----------------------------------------------------------------------------
+# CREATE INDIVIDUAL CO2 PLOTS
+# ----------------------------------------------------------------------------
+
+fc_individual_plots <- list()
+plot_counter <- 1
+
+for(season_name in seasons) {
+  
+  season_data <- fc_sig %>% dplyr::filter(season == season_name)
+  if(nrow(season_data) == 0) next
+  
+  for(i in 1:nrow(season_data)) {
+    
+    row <- season_data[i, ]
+    met_col <- met_vars[[which(sapply(met_vars, function(x) x$label == row$met_variable))]]$var
+    
+    # Calculate R²
+    season_subset <- df_avg_FC %>%
+      dplyr::filter(season == season_name) %>%
+      dplyr::filter(!is.na(FC), !is.na(!!sym(met_col))) %>%
+      dplyr::select(FC, met = !!sym(met_col))
+    
+    gls_temp <- gls(FC ~ met, data = season_subset,
+                    correlation = corAR1(form = ~ 1), method = "REML")
+    gls_r2 <- cor(season_subset$FC, fitted(gls_temp))^2
+    
+    # Create plot name
+    plot_name <- paste0("fc_", gsub(" ", "_", tolower(season_name)), "_",
+                       gsub(" ", "_", tolower(row$met_variable)))
+    
+    # Create plot (no title for combined plots, will add overall title)
+    p <- create_custom_plot(
+      input_data = df_avg_FC,
+      flux_var = "FC",
+      met_var = met_col,
+      season_name = season_name,
+      flux_label = expression(paste("CO"[2], " Flux (µmol m"^-2, " s"^-1, ")")),
+      met_label = row$met_variable,
+      gls_slope = row$gls_slope_use,
+      gls_p = row$gls_p_use,
+      gls_r2 = gls_r2,
+      show_legend = FALSE,
+      show_title = FALSE,  # No individual titles for combined plots
+      # CUSTOMIZE THESE FOR EACH PLOT:
+      stats_x_pos = 0.95,   # Try 0.05 for left, 0.95 for right
+      stats_y_pos = 0.95,   # Try 0.05 for bottom, 0.95 for top
+      stats_hjust = 1,      # 1=right-align, 0=left-align
+      stats_vjust = 1       # 1=top-align, 0=bottom-align
+    )
+    
+    fc_individual_plots[[plot_name]] <- p
+    
+    cat("Created:", plot_name, "\n")
+  }
+}
+
+# ----------------------------------------------------------------------------
+# CREATE INDIVIDUAL CH4 PLOTS
+# ----------------------------------------------------------------------------
+
+fch4_individual_plots <- list()
+
+for(season_name in seasons) {
+  
+  season_data <- fch4_sig %>% dplyr::filter(season == season_name)
+  if(nrow(season_data) == 0) next
+  
+  for(i in 1:nrow(season_data)) {
+    
+    row <- season_data[i, ]
+    met_col <- met_vars[[which(sapply(met_vars, function(x) x$label == row$met_variable))]]$var
+    
+    season_subset <- df_avg_FCH4 %>%
+      dplyr::filter(season == season_name) %>%
+      dplyr::filter(!is.na(FCH4), !is.na(!!sym(met_col))) %>%
+      dplyr::select(FCH4, met = !!sym(met_col))
+    
+    gls_temp <- gls(FCH4 ~ met, data = season_subset,
+                    correlation = corAR1(form = ~ 1), method = "REML")
+    gls_r2 <- cor(season_subset$FCH4, fitted(gls_temp))^2
+    
+    plot_name <- paste0("fch4_", gsub(" ", "_", tolower(season_name)), "_",
+                       gsub(" ", "_", tolower(row$met_variable)))
+    
+    p <- create_custom_plot(
+      input_data = df_avg_FCH4,
+      flux_var = "FCH4",
+      met_var = met_col,
+      season_name = season_name,
+      flux_label = expression(paste("CH"[4], " Flux (nmol m"^-2, " s"^-1, ")")),
+      met_label = row$met_variable,
+      gls_slope = row$gls_slope_use,
+      gls_p = row$gls_p_use,
+      gls_r2 = gls_r2,
+      show_legend = FALSE,
+      show_title = FALSE,
+      stats_x_pos = 0.95,
+      stats_y_pos = 0.95,
+      stats_hjust = 1,
+      stats_vjust = 1
+    )
+    
+    fch4_individual_plots[[plot_name]] <- p
+    
+    cat("Created:", plot_name, "\n")
+  }
+}
+
+
+# ----------------------------------------------------------------------------
+# CREATE COMBINED FIGURES WITH LEGEND IN EMPTY SPACE
+# ----------------------------------------------------------------------------
+
+cat("\n=== Creating combined figures ===\n\n")
+
+# Create a plot with legend for extraction
+if(length(fc_individual_plots) > 0) {
+  p_legend_source <- create_custom_plot(
+    input_data = df_avg_FC, flux_var = "FC", met_var = "TA_gapfilled",
+    season_name = seasons[1],
+    flux_label = expression(paste("CO"[2])), met_label = "Air Temp",
+    gls_slope = 0, gls_p = 0.05, gls_r2 = 0.5,
+    show_legend = TRUE, show_title = FALSE
+  )
+  shared_legend <- get_legend(p_legend_source)
+}
+
+# CO2 Combined Figures
+fc_combined_by_season <- list()
+
+for(season_name in seasons) {
+  
+  # Get plots for this season
+  season_plots <- fc_individual_plots[grepl(paste0("fc_", gsub(" ", "_", tolower(season_name))), 
+                                            names(fc_individual_plots))]
+  
+  if(length(season_plots) == 0) next
+  
+  n_plots <- length(season_plots)
+  ncols <- 3
+  nrows <- ceiling(n_plots / ncols)
+  total_spaces <- ncols * nrows
+  
+  # Create title with proper subscript
+  title <- textGrob(
+    paste("CO2 Flux -", season_name, ": Significant Relationships"),
+    gp = gpar(fontsize = 16, fontface = "bold")
+  )
+  
+  # Add empty grobs to fill grid + legend
+  all_grobs <- season_plots
+  empty_spaces <- total_spaces - n_plots
+  
+  # If there's exactly 1 empty space, put legend there
+  if(empty_spaces == 1) {
+    all_grobs[[n_plots + 1]] <- shared_legend
+    
+    combined <- arrangeGrob(
+      grobs = all_grobs,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+  } else {
+    # Multiple empty spaces or none - legend on side
+    plots_grid <- arrangeGrob(
+      grobs = season_plots,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+    
+    combined <- arrangeGrob(
+      plots_grid, shared_legend,
+      ncol = 2, widths = c(10, 1.5)
+    )
+  }
+  
+  fc_combined_by_season[[season_name]] <- combined
+  
+  grid.newpage()
+  grid.draw(combined)
+  
+  cat("Created CO2 combined figure for", season_name, "\n")
+}
+
+# CH4 Combined Figures
+fch4_combined_by_season <- list()
+
+for(season_name in seasons) {
+  
+  season_plots <- fch4_individual_plots[grepl(paste0("fch4_", gsub(" ", "_", tolower(season_name))),
+                                              names(fch4_individual_plots))]
+  
+  if(length(season_plots) == 0) next
+  
+  n_plots <- length(season_plots)
+  ncols <- 3
+  nrows <- ceiling(n_plots / ncols)
+  total_spaces <- ncols * nrows
+  
+  title <- textGrob(
+    paste("CH4 Flux -", season_name, ": Significant Relationships"),
+    gp = gpar(fontsize = 16, fontface = "bold")
+  )
+  
+  all_grobs <- season_plots
+  empty_spaces <- total_spaces - n_plots
+  
+  if(empty_spaces == 1 && season_name != "Winter") {
+    # Put legend in empty space (except for Winter per your request)
+    all_grobs[[n_plots + 1]] <- shared_legend
+    
+    combined <- arrangeGrob(
+      grobs = all_grobs,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+  } else {
+    # Legend on side (including Winter)
+    plots_grid <- arrangeGrob(
+      grobs = season_plots,
+      ncol = ncols,
+      nrow = nrows,
+      top = title
+    )
+    
+    combined <- arrangeGrob(
+      plots_grid, shared_legend,
+      ncol = 2, widths = c(10, 1.5)
+    )
+  }
+  
+  fch4_combined_by_season[[season_name]] <- combined
+  
+  grid.newpage()
+  grid.draw(combined)
+  
+  cat("Created CH4 combined figure for", season_name, "\n")
+}
+
+
+# ----------------------------------------------------------------------------
+# SAVE INDIVIDUAL AND COMBINED PLOTS
+# ----------------------------------------------------------------------------
+
+# CO2 - Growing Season
+# Adjust width/height based on number of plots in grid
+# if("Growing Season" %in% names(fc_combined_by_season)) {
+#   ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Seasonal_FC_Met_Relationships_Growing_Season_combined.png",
+#          plot = fc_combined_by_season[["Growing Season"]],
+#          width = 14, height = 8, dpi = 300, bg = "white")
+#}
+
+# CO2 - Fall Senescence
+# if("Fall Senescence" %in% names(fc_combined_by_season)) {
+#   ggsave("figures/combined/FC_Fall_Senescence_combined.png",
+#          plot = fc_combined_by_season[["Fall Senescence"]],
+#          width = 14, height = 8, dpi = 300, bg = "white")
+# }
+
+# CO2 - Winter
+# if("Winter" %in% names(fc_combined_by_season)) {
+#   ggsave("figures/combined/FC_Winter_combined.png",
+#          plot = fc_combined_by_season[["Winter"]],
+#          width = 14, height = 8, dpi = 300, bg = "white")
+# }
+
+#CH4 - Growing Season
+# if("Growing Season" %in% names(fch4_combined_by_season)) {
+#   ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Seasonal_FCH4_Met_Relationships_Growing_Season_combined.png",
+#          plot = fch4_combined_by_season[["Growing Season"]],
+#          width = 14, height = 6, dpi = 300, bg = "white")
+# }
+
+# CH4 - Fall Senescence
+# if("Fall Senescence" %in% names(fch4_combined_by_season)) {
+#   ggsave("figures/combined/FCH4_Fall_Senescence_combined.png",
+#          plot = fch4_combined_by_season[["Fall Senescence"]],
+#          width = 14, height = 6, dpi = 300, bg = "white")
+# }
+
+# CH4 - Winter
+# if("Winter" %in% names(fch4_combined_by_season)) {
+#   ggsave("figures/combined/FCH4_Winter_combined.png",
+#          plot = fch4_combined_by_season[["Winter"]],
+#          width = 14, height = 6, dpi = 300, bg = "white")
+# }
+
+
+```
+
+#Growing Season only 
+
+###Create datasets for FC and FCH4 with only growing season 
+```{r}
+df_avg_FC_growing <- df_avg_FC %>%
+  filter(season == "Growing Season")
+
+df_avg_FCH4_growing <- df_avg_FCH4 %>%
+  filter(season == "Growing Season")
+
+# Define year colors for consistency across all plots
+year_colors <- c(
+  "2017" = "#E41A1C", "2018" = "#377EB8", "2019" = "#4DAF4A",
+  "2020" = "#984EA3", "2021" = "#FF7F00", "2022" = "#A65628"
+)
+```
+
+
+
+###FCH4 - individual plots 
+```{r}
+# Load required libraries
+library(tidyverse)  # For data manipulation and ggplot2
+library(nlme)       # For GLS models with AR(1) correlation structure
+
+# Set global theme for all plots (optional - makes text bigger by default)
+theme_set(theme_bw(base_size = 14))
+
+
+# ============================================================================
+# METHANE (CH4) FLUX RELATIONSHIPS - GROWING SEASON (DAILY AVERAGES)
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Plot 1: CH4 Flux vs Soil Moisture
+# ----------------------------------------------------------------------------
+
+# First, fit the GLS model with AR(1) autocorrelation structure
+# AR(1) accounts for temporal correlation in time series data
+
+model_CH4_SWC <- gls(FCH4 ~ SWC_3_1_1, 
+                     data = df_avg_FCH4_growing,
+                     correlation = corAR1(form = ~ 1),  # AR(1) correlation
+                     na.action = na.omit)
+
+# Extract model statistics for the plot
+slope_CH4_SWC <- summary(model_CH4_SWC)$tTable["SWC_3_1_1", "Value"]  # Slope
+p_CH4_SWC <- summary(model_CH4_SWC)$tTable["SWC_3_1_1", "p-value"]  # P-value
+
+# Calculate pseudo R-squared for GLS (correlation between observed and fitted)
+# This gives us an R² equivalent for GLS models
+fitted_vals <- fitted(model_CH4_SWC)
+observed_vals <- df_avg_FCH4_growing$FCH4[!is.na(df_avg_FCH4_growing$FCH4) & 
+                                            !is.na(df_avg_FCH4_growing$SWC_3_1_1)]
+r2_pseudo_CH4_SWC <- cor(observed_vals, fitted_vals)^2
+
+# Create prediction data for the fitted line
+# This spans the range of soil moisture values in your data
+pred_data_CH4_SWC <- data.frame(
+  SWC_3_1_1 = seq(min(df_avg_FCH4_growing$SWC_3_1_1, na.rm = TRUE),
+                  max(df_avg_FCH4_growing$SWC_3_1_1, na.rm = TRUE),
+                  length.out = 100)  # 100 points for smooth line
+)
+
+# Get predictions from the GLS model
+# For GLS, predict() returns a simple vector of fitted values
+pred_vals_CH4_SWC <- predict(model_CH4_SWC, newdata = pred_data_CH4_SWC)
+pred_data_CH4_SWC$fit <- pred_vals_CH4_SWC
+
+# Calculate proper SE using the variance-covariance matrix
+X <- model.matrix(~ SWC_3_1_1, data = pred_data_CH4_SWC)
+vcov_matrix <- vcov(model_CH4_SWC)
+pred_data_CH4_SWC$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_CH4_SWC$lower <- pred_data_CH4_SWC$fit - 1.96 * pred_data_CH4_SWC$se
+pred_data_CH4_SWC$upper <- pred_data_CH4_SWC$fit + 1.96 * pred_data_CH4_SWC$se
+
+
+# Create the plot
+plot_CH4_SWC <- ggplot(df_avg_FCH4_growing, aes(x = SWC_3_1_1, y = FCH4)) +
+  # Add confidence interval ribbon (semi-transparent)
+  geom_ribbon(data = pred_data_CH4_SWC, 
+              aes(x = SWC_3_1_1, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  # Add fitted line
+  geom_line(data = pred_data_CH4_SWC, 
+            aes(x = SWC_3_1_1, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  # Add data points colored by year (smaller points since we have many more now!)
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  # Add statistics text box in upper left corner
+  annotate("text", 
+           x = min(df_avg_FCH4_growing$SWC_3_1_1, na.rm = TRUE) + 
+             0.05 * diff(range(df_avg_FCH4_growing$SWC_3_1_1, na.rm = TRUE)),
+           y = max(df_avg_FCH4_growing$FCH4, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.2f\nSlope = %.2f\np = %.3f", 
+                          r2_pseudo_CH4_SWC, slope_CH4_SWC, p_CH4_SWC),
+           hjust = 0, vjust = 1, size = 5, fontface = "bold") +
+  # Axis labels with proper formatting
+  labs(x = "Soil Moisture (%)", 
+       y = expression(bold("CH"[4]*" Flux (nmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  # Use custom year colors
+  scale_color_manual(values = year_colors) +
+  # Clean theme with larger text
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    legend.position = "right",
+    panel.grid.minor = element_blank()  # Remove minor gridlines for cleaner look
+  )
+
+# Display the plot
+print(plot_CH4_SWC)
+
+
+
+# ----------------------------------------------------------------------------
+# Plot 2: CH4 Flux vs VPD (Vapor Pressure Deficit)
+# ----------------------------------------------------------------------------
+
+
+model_CH4_VPD <- gls(FCH4 ~ VPD, 
+                     data = df_avg_FCH4_growing,
+                     correlation = corAR1(form = ~ 1),
+                     na.action = na.omit)
+
+slope_CH4_VPD <- summary(model_CH4_VPD)$tTable["VPD", "Value"]
+p_CH4_VPD <- summary(model_CH4_VPD)$tTable["VPD", "p-value"]
+
+fitted_vals <- fitted(model_CH4_VPD)
+observed_vals <- df_avg_FCH4_growing$FCH4[!is.na(df_avg_FCH4_growing$FCH4) & 
+                                            !is.na(df_avg_FCH4_growing$VPD)]
+r2_pseudo_CH4_VPD <- cor(observed_vals, fitted_vals)^2
+
+pred_data_CH4_VPD <- data.frame(
+  VPD = seq(min(df_avg_FCH4_growing$VPD, na.rm = TRUE),
+            max(df_avg_FCH4_growing$VPD, na.rm = TRUE),
+            length.out = 100)
+)
+
+
+
+pred_vals_CH4_VPD <- predict(model_CH4_VPD, newdata = pred_data_CH4_VPD)
+pred_data_CH4_VPD$fit <- pred_vals_CH4_VPD
+#SE for line 
+X <- model.matrix(~ VPD, data = pred_data_CH4_VPD)
+vcov_matrix <- vcov(model_CH4_VPD)
+pred_data_CH4_VPD$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_CH4_VPD$lower <- pred_data_CH4_VPD$fit - 1.96 * pred_data_CH4_VPD$se
+pred_data_CH4_VPD$upper <- pred_data_CH4_VPD$fit + 1.96 * pred_data_CH4_VPD$se
+
+#Plot
+plot_CH4_VPD <- ggplot(df_avg_FCH4_growing, aes(x = VPD, y = FCH4)) +
+  geom_ribbon(data = pred_data_CH4_VPD, 
+              aes(x = VPD, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_data_CH4_VPD, 
+            aes(x = VPD, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  annotate("text", 
+           x = max(df_avg_FCH4_growing$VPD, na.rm = TRUE) + 
+             0.05 * diff(range(df_avg_FCH4_growing$VPD, na.rm = TRUE)),
+           y = max(df_avg_FCH4_growing$FCH4, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.2f\nSlope = %.2f\np = %.3f", 
+                          r2_pseudo_CH4_VPD, slope_CH4_VPD, p_CH4_VPD),
+           hjust = 1, vjust = 1, size = 5, fontface = "bold") +
+  labs(x = "VPD (hPa)", 
+       y = expression(bold("CH"[4]*" Flux (nmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  scale_color_manual(values = year_colors) +
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+print(plot_CH4_VPD)
+
+
+# ----------------------------------------------------------------------------
+# Plot 3: CH4 Flux vs RH (Relative Humidity)
+# ----------------------------------------------------------------------------
+
+
+model_CH4_RH <- gls(FCH4 ~ RH, 
+                    data = df_avg_FCH4_growing,
+                    correlation = corAR1(form = ~ 1),
+                    na.action = na.omit)
+
+slope_CH4_RH <- summary(model_CH4_RH)$tTable["RH", "Value"]
+p_CH4_RH <- summary(model_CH4_RH)$tTable["RH", "p-value"]
+
+fitted_vals <- fitted(model_CH4_RH)
+observed_vals <- df_avg_FCH4_growing$FCH4[!is.na(df_avg_FCH4_growing$FCH4) & 
+                                            !is.na(df_avg_FCH4_growing$RH)]
+r2_pseudo_CH4_RH <- cor(observed_vals, fitted_vals)^2
+
+pred_data_CH4_RH <- data.frame(
+  RH = seq(min(df_avg_FCH4_growing$RH, na.rm = TRUE),
+           max(df_avg_FCH4_growing$RH, na.rm = TRUE),
+           length.out = 100)
+)
+
+pred_vals_CH4_RH <- predict(model_CH4_RH, newdata = pred_data_CH4_RH)
+pred_data_CH4_RH$fit <- pred_vals_CH4_RH
+
+#SE for line 
+X <- model.matrix(~ RH, data = pred_data_CH4_RH)
+vcov_matrix <- vcov(model_CH4_RH)
+pred_data_CH4_RH$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_CH4_RH$lower <- pred_data_CH4_RH$fit - 1.96 * pred_data_CH4_RH$se
+pred_data_CH4_RH$upper <- pred_data_CH4_RH$fit + 1.96 * pred_data_CH4_RH$se
+
+#Plot
+plot_CH4_RH <- ggplot(df_avg_FCH4_growing, aes(x = RH, y = FCH4)) +
+  geom_ribbon(data = pred_data_CH4_RH, 
+              aes(x = RH, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_data_CH4_RH, 
+            aes(x = RH, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  annotate("text", 
+           x = min(df_avg_FCH4_growing$RH, na.rm = TRUE) + 
+             0.05 * diff(range(df_avg_FCH4_growing$RH, na.rm = TRUE)),
+           y = max(df_avg_FCH4_growing$FCH4, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.2f\nSlope = %.2f\np < 0.001", 
+                          r2_pseudo_CH4_RH, slope_CH4_RH),
+           hjust = 0, vjust = 1, size = 5, fontface = "bold") +
+  labs(x = "RH (%)", 
+       y = expression(bold("CH"[4]*" Flux (nmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  scale_color_manual(values = year_colors) +
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+print(plot_CH4_RH)
+
+
+# ----------------------------------------------------------------------------
+# Plot 4: CH4 Flux vs Sensible Heat Flux (H)
+# ----------------------------------------------------------------------------
+
+model_CH4_H <- gls(FCH4 ~ H, 
+                   data = df_avg_FCH4_growing,
+                   correlation = corAR1(form = ~ 1),
+                   na.action = na.omit)
+
+slope_CH4_H <- summary(model_CH4_H)$tTable["H", "Value"]
+p_CH4_H <- summary(model_CH4_H)$tTable["H", "p-value"]
+
+fitted_vals <- fitted(model_CH4_H)
+observed_vals <- df_avg_FCH4_growing$FCH4[!is.na(df_avg_FCH4_growing$FCH4) & 
+                                            !is.na(df_avg_FCH4_growing$H)]
+r2_pseudo_CH4_H <- cor(observed_vals, fitted_vals)^2
+
+pred_data_CH4_H <- data.frame(
+  H = seq(min(df_avg_FCH4_growing$H, na.rm = TRUE),
+          max(df_avg_FCH4_growing$H, na.rm = TRUE),
+          length.out = 100)
+)
+
+pred_vals_CH4_H <- predict(model_CH4_H, newdata = pred_data_CH4_H)
+pred_data_CH4_H$fit <- pred_vals_CH4_H
+
+#SE for line
+X <- model.matrix(~ H, data = pred_data_CH4_H)
+vcov_matrix <- vcov(model_CH4_H)
+pred_data_CH4_H$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_CH4_H$lower <- pred_data_CH4_H$fit - 1.96 * pred_data_CH4_H$se
+pred_data_CH4_H$upper <- pred_data_CH4_H$fit + 1.96 * pred_data_CH4_H$se
+
+#plot
+plot_CH4_H <- ggplot(df_avg_FCH4_growing, aes(x = H, y = FCH4)) +
+  geom_ribbon(data = pred_data_CH4_H, 
+              aes(x = H, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_data_CH4_H, 
+            aes(x = H, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  annotate("text", 
+           x = max(df_avg_FCH4_growing$H, na.rm = TRUE) + 
+             0.05 * diff(range(df_avg_FCH4_growing$H, na.rm = TRUE)),
+           y = max(df_avg_FCH4_growing$FCH4, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.2f\nSlope = %.2f\np = %.3f", 
+                          r2_pseudo_CH4_H, slope_CH4_H, p_CH4_H),
+           hjust = 1, vjust = 1, size = 5, fontface = "bold") +
+  labs(x = expression(bold("Sensible Heat Flux (W m"^-2*")")), 
+       y = expression(bold("CH"[4]*" Flux (nmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  scale_color_manual(values = year_colors) +
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+print(plot_CH4_H)
+
+
+
+
+# ----------------------------------------------------------------------------
+# Plot 5: CH4 Flux vs Soil Heat Flux (G)
+# ----------------------------------------------------------------------------
+
+model_CH4_G <- gls(FCH4 ~ G_1_1_1, 
+                   data = df_avg_FCH4_growing,
+                   correlation = corAR1(form = ~ 1),
+                   na.action = na.omit)
+
+slope_CH4_G <- summary(model_CH4_G)$tTable["G_1_1_1", "Value"]
+p_CH4_G <- summary(model_CH4_G)$tTable["G_1_1_1", "p-value"]
+
+fitted_vals <- fitted(model_CH4_G)
+observed_vals <- df_avg_FCH4_growing$FCH4[!is.na(df_avg_FCH4_growing$FCH4) & 
+                                            !is.na(df_avg_FCH4_growing$G_1_1_1)]
+r2_pseudo_CH4_G <- cor(observed_vals, fitted_vals)^2
+
+pred_data_CH4_G <- data.frame(
+  G_1_1_1 = seq(min(df_avg_FCH4_growing$G_1_1_1, na.rm = TRUE),
+                max(df_avg_FCH4_growing$G_1_1_1, na.rm = TRUE),
+                length.out = 100)
+)
+
+pred_vals_CH4_G <- predict(model_CH4_G, newdata = pred_data_CH4_G)
+pred_data_CH4_G$fit <- pred_vals_CH4_G
+
+#SE for line
+X <- model.matrix(~ G_1_1_1, data = pred_data_CH4_G)
+vcov_matrix <- vcov(model_CH4_G)
+pred_data_CH4_G$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_CH4_G$lower <- pred_data_CH4_G$fit - 1.96 * pred_data_CH4_G$se
+pred_data_CH4_G$upper <- pred_data_CH4_G$fit + 1.96 * pred_data_CH4_G$se
+
+
+#Make legend large here, this is the legend you'll extract for the combined plot 
+plot_CH4_G <- ggplot(df_avg_FCH4_growing, aes(x = G_1_1_1, y = FCH4)) +
+  geom_ribbon(data = pred_data_CH4_G, 
+              aes(x = G_1_1_1, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_data_CH4_G, 
+            aes(x = G_1_1_1, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  annotate("text", 
+           x = max(df_avg_FCH4_growing$G_1_1_1, na.rm = TRUE) + 
+             0.05 * diff(range(df_avg_FCH4_growing$G_1_1_1, na.rm = TRUE)),
+           y = max(df_avg_FCH4_growing$FCH4, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.2f\nSlope = %.2f\np = %.3f", 
+                          r2_pseudo_CH4_G, slope_CH4_G, p_CH4_G),
+           hjust = 1, vjust = 1, size = 5, fontface = "bold") +
+  labs(x = expression(bold("Soil Heat Flux (W m"^-2*")")), #have to bold within expression as when you use expressions, bolding the axis titles won't work 
+       y = expression(bold("CH"[4]*" Flux (nmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  scale_color_manual(values = year_colors) +
+  guides(color = guide_legend(override.aes = list(size = 5)))+
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.text = element_text(size = 16, face = "bold"),
+    legend.position = "right",
+    legend.key.size = unit(1.2, "cm"),  # NEW LINE - makes boxes bigger
+    panel.grid.minor = element_blank()
+  )
+
+print(plot_CH4_G)
+
+
+```
+#### FCH4 combined fig
+```{r}
+library(gridExtra)
+library(grid)
+
+# First, extract the legend from one of the plots
+get_legend <- function(myplot) {
+  tmp <- ggplot_gtable(ggplot_build(myplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+# Extract legend from one plot
+legend_plot <- get_legend(plot_CH4_G)
+
+
+# Remove legends from all individual plots
+plot_CH4_SWC_no_leg <- plot_CH4_SWC + theme(legend.position = "none")
+plot_CH4_VPD_no_leg <- plot_CH4_VPD + theme(legend.position = "none")
+plot_CH4_RH_no_leg <- plot_CH4_RH + theme(legend.position = "none")
+plot_CH4_H_no_leg <- plot_CH4_H + theme(legend.position = "none")
+plot_CH4_G_no_leg <- plot_CH4_G + theme(legend.position = "none")
+
+# Combine plots with legend in 6th position (3 columns x 2 rows)
+combined_CH4 <- grid.arrange(
+  plot_CH4_SWC_no_leg, 
+  plot_CH4_VPD_no_leg, 
+  plot_CH4_RH_no_leg,
+  plot_CH4_H_no_leg, 
+  plot_CH4_G_no_leg, 
+  legend_plot,
+  ncol = 3, 
+  nrow = 2,
+  top = textGrob(expression(bold("CH"[4]*" Flux - Growing Season: Significant Relationships")), 
+                 gp = gpar(fontsize = 20))
+
+)
+
+# Display
+print(combined_CH4)
+
+
+```
+
+#Save combined_CH4
+```{r}
+  ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Seasonal_FCH4_Met_Relationships_Growing_Season_combined_winteryear.png", combined_CH4,
+         width = 14, height = 8, dpi = 600) 
+```
+
+
+#### FC - individual plots 
+
+```{r}
+# Define year colors for consistency across all plots
+year_colors <- c(
+  "2017" = "#E41A1C", "2018" = "#377EB8", "2019" = "#4DAF4A",
+  "2020" = "#984EA3", "2021" = "#FF7F00", "2022" = "#A65628"
+)
+
+# ============================================================================
+# CO2 FLUX RELATIONSHIPS - GROWING SEASON (DAILY AVERAGES)
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Plot 1: CO2 Flux vs Air Temperature
+# ----------------------------------------------------------------------------
+
+
+model_FC_TA <- gls(FC ~ TA_gapfilled, 
+                   data = df_avg_FC_growing,
+                   correlation = corAR1(form = ~ 1),
+                   na.action = na.omit)
+
+slope_FC_TA <- summary(model_FC_TA)$tTable["TA_gapfilled", "Value"]
+p_FC_TA <- summary(model_FC_TA)$tTable["TA_gapfilled", "p-value"]
+
+fitted_vals <- fitted(model_FC_TA)
+observed_vals <- df_avg_FC_growing$FC[!is.na(df_avg_FC_growing$FC) & 
+                                       !is.na(df_avg_FC_growing$TA_gapfilled)]
+r2_pseudo_FC_TA <- cor(observed_vals, fitted_vals)^2
+
+pred_data_FC_TA <- data.frame(
+  TA_gapfilled = seq(min(df_avg_FC_growing$TA_gapfilled, na.rm = TRUE),
+                     max(df_avg_FC_growing$TA_gapfilled, na.rm = TRUE),
+                     length.out = 100)
+)
+
+pred_vals_FC_TA <- predict(model_FC_TA, newdata = pred_data_FC_TA)
+pred_data_FC_TA$fit <- pred_vals_FC_TA
+
+#SE for line 
+X <- model.matrix(~ TA_gapfilled, data = pred_data_FC_TA)
+vcov_matrix <- vcov(model_FC_TA)
+pred_data_FC_TA$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_FC_TA$lower <- pred_data_FC_TA$fit - 1.96 * pred_data_FC_TA$se
+pred_data_FC_TA$upper <- pred_data_FC_TA$fit + 1.96 * pred_data_FC_TA$se
+
+#Plot
+plot_FC_TA <- ggplot(df_avg_FC_growing, aes(x = TA_gapfilled, y = FC)) +
+  geom_ribbon(data = pred_data_FC_TA, 
+              aes(x = TA_gapfilled, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_data_FC_TA, 
+            aes(x = TA_gapfilled, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  annotate("text", 
+           x = max(df_avg_FC_growing$TA_gapfilled, na.rm = TRUE) - 
+             0.05 * diff(range(df_avg_FC_growing$TA_gapfilled, na.rm = TRUE)),
+           y = max(df_avg_FC_growing$FC, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.2f\nSlope = %.2f\np = %.3f", 
+                          r2_pseudo_FC_TA, slope_FC_TA, p_FC_TA),
+           hjust = 1, vjust = 1, size = 5, fontface = "bold") +
+  labs(x = "Air Temp GF (°C)", 
+       y = expression(bold("CO"[2]*" Flux (µmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  scale_color_manual(values = year_colors) +
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+print(plot_FC_TA)
+
+
+
+
+# ----------------------------------------------------------------------------
+# Plot 2: CO2 Flux vs Soil Temperature
+# ----------------------------------------------------------------------------
+# Negative relationship - warmer soil = more CO2 uptake
+
+model_FC_TS <- gls(FC ~ TS_3_gapfilled, 
+                   data = df_avg_FC_growing,
+                   correlation = corAR1(form = ~ 1),
+                   na.action = na.omit)
+
+slope_FC_TS <- summary(model_FC_TS)$tTable["TS_3_gapfilled", "Value"]
+p_FC_TS <- summary(model_FC_TS)$tTable["TS_3_gapfilled", "p-value"]
+
+fitted_vals <- fitted(model_FC_TS)
+observed_vals <- df_avg_FC_growing$FC[!is.na(df_avg_FC_growing$FC) & 
+                                       !is.na(df_avg_FC_growing$TS_3_gapfilled)]
+r2_pseudo_FC_TS <- cor(observed_vals, fitted_vals)^2
+
+pred_data_FC_TS <- data.frame(
+  TS_3_gapfilled = seq(min(df_avg_FC_growing$TS_3_gapfilled, na.rm = TRUE),
+                       max(df_avg_FC_growing$TS_3_gapfilled, na.rm = TRUE),
+                       length.out = 100)
+)
+
+pred_vals_FC_TS <- predict(model_FC_TS, newdata = pred_data_FC_TS)
+pred_data_FC_TS$fit <- pred_vals_FC_TS
+
+#SE for line
+X <- model.matrix(~ TS_3_gapfilled, data = pred_data_FC_TS)
+vcov_matrix <- vcov(model_FC_TS)
+pred_data_FC_TS$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_FC_TS$lower <- pred_data_FC_TS$fit - 1.96 * pred_data_FC_TS$se
+pred_data_FC_TS$upper <- pred_data_FC_TS$fit + 1.96 * pred_data_FC_TS$se
+
+#Plot
+plot_FC_TS <- ggplot(df_avg_FC_growing, aes(x = TS_3_gapfilled, y = FC)) +
+  geom_ribbon(data = pred_data_FC_TS, 
+              aes(x = TS_3_gapfilled, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_data_FC_TS, 
+            aes(x = TS_3_gapfilled, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  annotate("text", 
+           x = max(df_avg_FC_growing$TS_3_gapfilled, na.rm = TRUE) - 
+             0.05 * diff(range(df_avg_FC_growing$TS_3_gapfilled, na.rm = TRUE)),
+           y = max(df_avg_FC_growing$FC, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.2f\nSlope = %.2f\np < 0.001", 
+                          r2_pseudo_FC_TS, slope_FC_TS),
+           hjust = 1, vjust = 1, size = 5, fontface = "bold") +
+  labs(x = "Soil Temp GF (°C)", 
+        y = expression(bold("CO"[2]*" Flux (µmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  scale_color_manual(values = year_colors) +
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+print(plot_FC_TS)
+
+
+
+# ----------------------------------------------------------------------------
+# Plot 3: CO2 Flux vs Latent Heat Flux (LE)
+# ----------------------------------------------------------------------------
+
+model_FC_LE <- gls(FC ~ LE, 
+                   data = df_avg_FC_growing,
+                   correlation = corAR1(form = ~ 1),
+                   na.action = na.omit)
+
+slope_FC_LE <- summary(model_FC_LE)$tTable["LE", "Value"]
+p_FC_LE <- summary(model_FC_LE)$tTable["LE", "p-value"]
+
+fitted_vals <- fitted(model_FC_LE)
+observed_vals <- df_avg_FC_growing$FC[!is.na(df_avg_FC_growing$FC) & 
+                                       !is.na(df_avg_FC_growing$LE)]
+r2_pseudo_FC_LE <- cor(observed_vals, fitted_vals)^2
+
+pred_data_FC_LE <- data.frame(
+  LE = seq(min(df_avg_FC_growing$LE, na.rm = TRUE),
+           max(df_avg_FC_growing$LE, na.rm = TRUE),
+           length.out = 100)
+)
+
+pred_vals_FC_LE <- predict(model_FC_LE, newdata = pred_data_FC_LE)
+pred_data_FC_LE$fit <- pred_vals_FC_LE
+
+#SE for line
+X <- model.matrix(~ LE, data = pred_data_FC_LE)
+vcov_matrix <- vcov(model_FC_LE)
+pred_data_FC_LE$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_FC_LE$lower <- pred_data_FC_LE$fit - 1.96 * pred_data_FC_LE$se
+pred_data_FC_LE$upper <- pred_data_FC_LE$fit + 1.96 * pred_data_FC_LE$se
+
+#plot
+plot_FC_LE <- ggplot(df_avg_FC_growing, aes(x = LE, y = FC)) +
+  geom_ribbon(data = pred_data_FC_LE, 
+              aes(x = LE, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_data_FC_LE, 
+            aes(x = LE, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  annotate("text", 
+           x = max(df_avg_FC_growing$LE, na.rm = TRUE) - 
+             0.05 * diff(range(df_avg_FC_growing$LE, na.rm = TRUE)),
+           y = max(df_avg_FC_growing$FC, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.2f\nSlope = %.2f\np < 0.001", 
+                          r2_pseudo_FC_LE, slope_FC_LE),
+           hjust = 1, vjust = 1, size = 5, fontface = "bold") +
+  labs(x = expression(bold("Latent Heat (W m"^-2*")")), 
+    y = expression(bold("CO"[2]*" Flux (µmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  scale_color_manual(values = year_colors) +
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+print(plot_FC_LE)
+
+
+
+
+# ----------------------------------------------------------------------------
+# Plot 4: CO2 Flux vs Sensible Heat Flux (H)
+# ----------------------------------------------------------------------------
+
+
+model_FC_H <- gls(FC ~ H, 
+                  data = df_avg_FC_growing,
+                  correlation = corAR1(form = ~ 1),
+                  na.action = na.omit)
+
+slope_FC_H <- summary(model_FC_H)$tTable["H", "Value"]
+p_FC_H <- summary(model_FC_H)$tTable["H", "p-value"]
+
+fitted_vals <- fitted(model_FC_H)
+observed_vals <- df_avg_FC_growing$FC[!is.na(df_avg_FC_growing$FC) & 
+                                       !is.na(df_avg_FC_growing$H)]
+r2_pseudo_FC_H <- cor(observed_vals, fitted_vals)^2
+
+pred_data_FC_H <- data.frame(
+  H = seq(min(df_avg_FC_growing$H, na.rm = TRUE),
+          max(df_avg_FC_growing$H, na.rm = TRUE),
+          length.out = 100)
+)
+
+pred_vals_FC_H <- predict(model_FC_H, newdata = pred_data_FC_H)
+pred_data_FC_H$fit <- pred_vals_FC_H
+
+#SE for line
+X <- model.matrix(~ H, data = pred_data_FC_H)
+vcov_matrix <- vcov(model_FC_H)
+pred_data_FC_H$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_FC_H$lower <- pred_data_FC_H$fit - 1.96 * pred_data_FC_H$se
+pred_data_FC_H$upper <- pred_data_FC_H$fit + 1.96 * pred_data_FC_H$se
+
+#plot
+
+plot_FC_H <- ggplot(df_avg_FC_growing, aes(x = H, y = FC)) +
+  geom_ribbon(data = pred_data_FC_H, 
+              aes(x = H, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_data_FC_H, 
+            aes(x = H, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  annotate("text", 
+           x = max(df_avg_FC_growing$H, na.rm = TRUE) - 
+             0.05 * diff(range(df_avg_FC_growing$H, na.rm = TRUE)),
+           y = max(df_avg_FC_growing$FC, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.2f\nSlope = %.2f\np < 0.001", 
+                          r2_pseudo_FC_H, slope_FC_H),
+           hjust = 1, vjust = 1, size = 5, fontface = "bold") +
+  labs(x = expression(bold("Sensible Heat Flux (W m"^-2*")")), 
+      y = expression(bold("CO"[2]*" Flux (µmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  scale_color_manual(values = year_colors) +
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+print(plot_FC_H)
+
+
+
+
+# ----------------------------------------------------------------------------
+# Plot 5: CO2 Flux vs Soil Heat Flux (G)
+# ----------------------------------------------------------------------------
+
+
+model_FC_G <- gls(FC ~ G_1_1_1, 
+                  data = df_avg_FC_growing,
+                  correlation = corAR1(form = ~ 1),
+                  na.action = na.omit)
+
+slope_FC_G <- summary(model_FC_G)$tTable["G_1_1_1", "Value"]
+p_FC_G <- summary(model_FC_G)$tTable["G_1_1_1", "p-value"]
+
+fitted_vals <- fitted(model_FC_G)
+observed_vals <- df_avg_FC_growing$FC[!is.na(df_avg_FC_growing$FC) & 
+                                       !is.na(df_avg_FC_growing$G_1_1_1)]
+r2_pseudo_FC_G <- cor(observed_vals, fitted_vals)^2
+
+pred_data_FC_G <- data.frame(
+  G_1_1_1 = seq(min(df_avg_FC_growing$G_1_1_1, na.rm = TRUE),
+                max(df_avg_FC_growing$G_1_1_1, na.rm = TRUE),
+                length.out = 100)
+)
+
+pred_vals_FC_G <- predict(model_FC_G, newdata = pred_data_FC_G)
+pred_data_FC_G$fit <- pred_vals_FC_G
+
+#SE for line
+X <- model.matrix(~ G_1_1_1, data = pred_data_FC_G)
+vcov_matrix <- vcov(model_FC_G)
+pred_data_FC_G$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_FC_G$lower <- pred_data_FC_G$fit - 1.96 * pred_data_FC_G$se
+pred_data_FC_G$upper <- pred_data_FC_G$fit + 1.96 * pred_data_FC_G$se
+
+
+#Make legend big here, to use for the combined plot 
+plot_FC_G <- ggplot(df_avg_FC_growing, aes(x = G_1_1_1, y = FC)) +
+  geom_ribbon(data = pred_data_FC_G, 
+              aes(x = G_1_1_1, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_data_FC_G, 
+            aes(x = G_1_1_1, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  annotate("text", 
+           x = max(df_avg_FC_growing$G_1_1_1, na.rm = TRUE) - 
+             0.05 * diff(range(df_avg_FC_growing$G_1_1_1, na.rm = TRUE)),
+           y = max(df_avg_FC_growing$FC, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.2f\nSlope = %.2f\np < 0.001", 
+                          r2_pseudo_FC_G, slope_FC_G),
+           hjust = 1, vjust = 1, size = 5, fontface = "bold") +
+  labs(x = expression(bold("Soil Heat Flux (W m"^-2*")")), 
+        y = expression(bold("CO"[2]*" Flux (µmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  scale_color_manual(values = year_colors) +
+  guides(color = guide_legend(override.aes = list(size = 7)))+
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    legend.position = "right",
+    legend.key.size = unit(1.4, "cm"),
+    panel.grid.minor = element_blank()
+  )
+
+print(plot_FC_G)
+
+
+# ----------------------------------------------------------------------------
+# Plot 6: CO2 Flux vs RH
+# ----------------------------------------------------------------------------
+
+
+model_FC_RH <- gls(FC ~ RH, 
+                  data = df_avg_FC_growing,
+                  correlation = corAR1(form = ~ 1),
+                  na.action = na.omit)
+
+slope_FC_RH <- summary(model_FC_RH)$tTable["RH", "Value"]
+p_FC_RH <- summary(model_FC_RH)$tTable["RH", "p-value"]
+
+fitted_vals <- fitted(model_FC_RH)
+observed_vals <- df_avg_FC_growing$FC[!is.na(df_avg_FC_growing$FC) & 
+                                       !is.na(df_avg_FC_growing$RH)]
+r2_pseudo_FC_RH <- cor(observed_vals, fitted_vals)^2
+
+pred_data_FC_RH <- data.frame(
+  RH = seq(min(df_avg_FC_growing$RH, na.rm = TRUE),
+                max(df_avg_FC_growing$RH, na.rm = TRUE),
+                length.out = 100)
+)
+
+pred_vals_FC_RH <- predict(model_FC_RH, newdata = pred_data_FC_RH)
+pred_data_FC_RH$fit <- pred_vals_FC_RH
+
+#SE for line
+X <- model.matrix(~ RH, data = pred_data_FC_RH)
+vcov_matrix <- vcov(model_FC_RH)
+pred_data_FC_RH$se <- sqrt(diag(X %*% vcov_matrix %*% t(X)))
+pred_data_FC_RH$lower <- pred_data_FC_RH$fit - 1.96 * pred_data_FC_RH$se
+pred_data_FC_RH$upper <- pred_data_FC_RH$fit + 1.96 * pred_data_FC_RH$se
+
+
+#Make legend big here, to use for the combined plot 
+plot_FC_RH <- ggplot(df_avg_FC_growing, aes(x = RH, y = FC)) +
+  geom_ribbon(data = pred_data_FC_RH, 
+              aes(x = RH, y = fit, ymin = lower, ymax = upper),
+              fill = "darkgreen", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_data_FC_RH, 
+            aes(x = RH, y = fit),
+            color = "darkgreen", size = 1.2, inherit.aes = FALSE) +
+  geom_point(aes(color = factor(year)), size = 2, alpha = 0.5) +
+  annotate("text", 
+           x = max(df_avg_FC_growing$RH, na.rm = TRUE) - 
+             0.05 * diff(range(df_avg_FC_growing$RH, na.rm = TRUE)),
+           y = max(df_avg_FC_growing$FC, na.rm = TRUE) * 0.95,
+           label = sprintf("R² = %.3f\nSlope = %.4f\np < 0.001", 
+                          r2_pseudo_FC_RH, slope_FC_RH),
+           hjust = 1, vjust = 1, size = 5, fontface = "bold") +
+  labs(x = expression(bold("Soil Heat Flux (W m"^-2*")")), 
+        y = expression(bold("CO"[2]*" Flux (µmol m"^-2*" s"^-1*")")),
+       color = "Year") +
+  scale_color_manual(values = year_colors) +
+  guides(color = guide_legend(override.aes = list(size = 7)))+
+  theme_bw(base_size = 16) +
+  theme(
+    axis.title = element_text(size = 18, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 16, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    legend.position = "right",
+    legend.key.size = unit(1.4, "cm"),
+    panel.grid.minor = element_blank()
+  )
+
+print(plot_FC_RH)
+
+
+```
+
+
+#### FC combined fig
+*leaving out CO2 vs RH because the R2 is so low (<0.001)
+```{r}
+# ============================================================================
+# COMBINING PLOTS WITH GRIDEXTRA (SHARED LEGEND)
+# ============================================================================
+
+# Function to extract legend from a ggplot
+get_legend <- function(myplot) {
+  tmp <- ggplot_gtable(ggplot_build(myplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+# Extract legend from one plot
+legend_plot <- get_legend(plot_FC_G)
+
+# Remove legends from all FC plots
+plot_FC_TA_no_leg <- plot_FC_TA + theme(legend.position = "none")
+plot_FC_TS_no_leg <- plot_FC_TS + theme(legend.position = "none")
+plot_FC_LE_no_leg <- plot_FC_LE + theme(legend.position = "none")
+plot_FC_H_no_leg <- plot_FC_H + theme(legend.position = "none")
+plot_FC_G_no_leg <- plot_FC_G + theme(legend.position = "none")
+
+# Combine FC plots (3 columns x 2 rows, legend in 6th position)
+combined_FC <- grid.arrange(
+  plot_FC_TA_no_leg, 
+  plot_FC_TS_no_leg, 
+  plot_FC_LE_no_leg,
+  plot_FC_H_no_leg, 
+  plot_FC_G_no_leg, 
+  legend_plot,
+  ncol = 3, 
+  nrow = 2,
+  top = textGrob(expression(bold("CO"[2]*" Flux - Growing Season: Significant Relationships")), 
+                 gp = gpar(fontsize = 20))
+)
+
+# Display combined FC figure
+print(combined_FC)
+
+```
+
+#Save combined_CH4
+```{r}
+  ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Seasonal_FC_Met_Relationships_Growing_Season_combined_winteryear.png", combined_FC,
+         width = 14, height = 10, dpi = 600) 
+```
+
+#end script 
+
+
+
