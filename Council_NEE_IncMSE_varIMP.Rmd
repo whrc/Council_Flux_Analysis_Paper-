@@ -39,6 +39,8 @@ library(randomForest)
 
 Sys.setenv(TZ='UTC')
 ```
+
+
 #ERA dataset 
 ####Prepping the era dataset to use to train RF too -- calc vpd and RF for SWC gapfilling, just like in the processing steps 
 ```{r}
@@ -1108,30 +1110,30 @@ varImpPlot(site.nee_5.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 
 #             %IncMSE
-# RH        121.96975
-# WS         86.82912
-# WD         68.20478
-# TS_3_1_1  100.24873
-# SWC_3_1_1 117.70336
-# LE         52.41112
-# H         154.07507
+# RH        122.73374
+# WS         83.23936
+# WD         69.43337
+# TS_3_1_1  102.72641
+# SWC_3_1_1 119.41172
+# LE         51.24301
+# H         151.65335
 
 ```
-##### reduced site model 6 - removing TS-SWC interact, TA, VPD, NETRAD, G, LE
+##### reduced site model 6 - removing TS-SWC interact, TA, VPD, NETRAD, swapping out G for TS_3
 ```{r}
-#TS_3 is highest, but going to remove G first since it's likely collinear with that and TS is more important than G 
+#TS_3 has highest VIF, but going to remove G first since it's likely collinear with that and TS is more important than G --> now swapping G for TS_3 to see how the models compare 
 
-site.nee_6.cc <- randomForest(FC ~ RH + WS + WD + TS_3_1_1 + SWC_3_1_1 + H,
+site.nee_6.cc <- randomForest(FC ~ RH + WS + WD + G_1_1_1 + SWC_3_1_1 + LE + H,
                              data = df_cc,
                              ntree = 850,
                              importance = TRUE)
 
 
- vif_model <- lm(FC ~  RH + WS + WD + TS_3_1_1 + SWC_3_1_1 + H , data = df_cc)
+ vif_model <- lm(FC ~  RH + WS + WD + G_1_1_1 + SWC_3_1_1 + LE + H , data = df_cc)
 # 
  vif(vif_model) 
- #       RH        WS        WD  TS_3_1_1 SWC_3_1_1         H 
- # 1.156992  1.068443  1.091549  2.000034  1.329149  1.709968 
+ #       RH        WS        WD   G_1_1_1 SWC_3_1_1        LE         H 
+ # 1.143595  1.213776  1.087944  1.924822  1.142018  3.440685  3.069713 
 
 # Extract variable importance
 importance_values <- importance(site.nee_6.cc, type = 1)  # type = 1 for %IncMSE
@@ -1143,15 +1145,197 @@ print(importance_values)
 varImpPlot(site.nee_6.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #             %IncMSE
-# RH        127.43755
-# WS        116.99332
-# WD         74.86786
-# TS_3_1_1  130.14902
-# SWC_3_1_1 137.83171
-# H         365.52095
+# RH        112.48551
+# WS         87.39789
+# WD         62.73399
+# G_1_1_1    85.72770
+# SWC_3_1_1 150.12893
+# LE         60.47228
+# H         152.22809
+
+
+#TS_3 still has higher VIF so seems removing it and keeping G is better choice 
+
+```
+
+
+##### reduced site model 7 - removing TS-SWC interact, TA, VPD, NETRAD, TS_3, LE
+```{r}
+
+site.nee_7.cc <- randomForest(FC ~ RH + WS + WD + G_1_1_1 + SWC_3_1_1 + H,
+                             data = df_cc,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(FC ~  RH + WS + WD + G_1_1_1  + SWC_3_1_1 + H , data = df_cc)
+# 
+ vif(vif_model) 
+ #       RH        WS        WD   G_1_1_1 SWC_3_1_1         H 
+ # 1.135161  1.075422  1.063509  1.743391  1.079040  1.783052 
+
+# Extract variable importance
+importance_values <- importance(site.nee_7.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(site.nee_7.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#            %IncMSE
+# RH        138.15333
+# WS        112.36072
+# WD         74.31461
+# G_1_1_1   108.59882
+# SWC_3_1_1 180.89799
+# H         391.26671
+
+```
+##### reduced site model 8 - removing TS-SWC interact, TA, VPD, NETRAD, LE, swapping G & TS_3
+```{r}
+
+site.nee_8.cc <- randomForest(FC ~ RH + WS + WD + TS_3_1_1 + SWC_3_1_1 + H,
+                             data = df_cc,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(FC ~  RH + WS + WD + TS_3_1_1  + SWC_3_1_1 + H , data = df_cc)
+# 
+ vif(vif_model) 
+ #       RH        WS        WD  TS_3_1_1 SWC_3_1_1         H 
+ # 1.156992  1.068443  1.091549  2.000034  1.329149  1.709968 
+
+# Extract variable importance
+importance_values <- importance(site.nee_8.cc, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(site.nee_8.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#             %IncMSE
+# RH        134.01296
+# WS        117.77302
+# WD         73.13618
+# TS_3_1_1  133.75025
+# SWC_3_1_1 143.20605
+# H         357.38775
+
+
+#TS_3 VIF =2, slightly higher than G, indicates maybe G is better choice 
+
+
+```
+#Comparing models 7 (using G) and 8 (using TS_3)
+```{r}
+# Compare OOB error (lower is better)
+site.nee_8.cc$mse[length(site.nee_8.cc$mse)]  #  1.609279 --> with TS_3, slightly lower * 
+site.nee_7.cc$mse[length(site.nee_7.cc$mse)]  # 1.655677 --> with G 
+
+# Rsq (higher is better)
+site.nee_8.cc$rsq[length(site.nee_8.cc$rsq)] # 0.74853 -- slightly higher
+site.nee_7.cc$rsq[length(site.nee_7.cc$rsq)] # 0.7412798
+
+# Compare directly
+cat("Model 8 (soil temp) OOB MSE:", site.nee_8.cc$mse[500], "\n")
+cat("Model 7 (ground heat flux) OOB MSE:", site.nee_7.cc$mse[500], "\n")
+cat("Model 8 (soil temp) R²:", site.nee_8.cc$rsq[500], "\n")
+cat("Model 7 (ground heat flux) R²:", site.nee_7.cc$rsq[500], "\n")
+
+#indicates that using soil temp may be only marginally better, but it should have been taken out in the stepwise models due to highest VIF in model 4 so going to go with the model with G 
+```
+#Final site model figure 
+
+
+##### reduced site model 7 - removing TS-SWC interact, TA, VPD, NETRAD, TS_3, LE
+```{r}
+
+site.nee_7.cc_final <- randomForest(FC ~ RH + WS + WD + G_1_1_1 + SWC_3_1_1 + H,
+                             data = df_cc,
+                             ntree = 850,
+                             importance = TRUE)
+
+
+ vif_model <- lm(FC ~  RH + WS + WD + G_1_1_1  + SWC_3_1_1 + H , data = df_cc)
+
+ vif(vif_model) 
+ #     RH        WS        WD   G_1_1_1 SWC_3_1_1         H 
+ # 1.135161  1.075422  1.063509  1.743391  1.079040  1.783052 
+
+# Extract variable importance
+importance_values <- importance(site.nee_7.cc_final, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(site.nee_7.cc_final, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+
+#             %IncMSE
+# RH        124.10086
+# WS        117.33983
+# WD         77.52539
+# G_1_1_1   104.46828
+# SWC_3_1_1 179.15371
+# H         380.73183
 
 ```
 
 
 
 
+#Figure for final model 
+
+```{r}
+# 1. Extract importance table 
+imp <- importance(site.nee_7.cc_final, type = 1)
+imp_df <- data.frame(
+  Variable = rownames(imp),
+  IncMSE = imp[, 1]
+)
+
+#Rename some variables
+imp_df$Variable <- dplyr::recode(
+  imp_df$Variable,
+  SWC_3_1_1 = "SWC",
+  G_1_1_1 = "G"
+)
+
+#plot
+NEE_incMSE <- ggplot(imp_df, aes(x = reorder(Variable, IncMSE), y = IncMSE)) +
+ geom_point(size = 5, pch = 1, stroke = 1.5) + #stroke changes thickness of circle shape 
+  coord_flip() +
+  labs(
+    x = "",
+    y = "%IncMSE",
+    title = "NEE: Variable Importance"
+  ) +
+  scale_y_continuous(limits = c(50, 400),  # Adjust these limits as needed
+      breaks = seq(50, 400, by = 50))+
+  theme_bw() +
+ theme(
+   axis.text = element_text(color = "black", size = 12, face = "bold"),
+   axis.title = element_text(color = "black", size = 14, face = "bold"),
+   plot.title = element_text(color = "black", size = 16, face = "bold", hjust = 0.5),
+    panel.grid.major.x = element_blank(), #removes vertical grid lines 
+     panel.grid.minor = element_blank(), #removes minor gridlines
+    panel.grid.major.y = element_line(linewidth = 0.8, linetype = "dotted", color = "darkgrey")
+ ) 
+ 
+  
+ NEE_incMSE 
+
+
+```
+
+
+#Save 
+```{r}
+# #Save CH4 seasonal budgets 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/NEE_incMSE_siteData.png",NEE_incMSE,
+       width = 7, height = 4, dpi = 600)
+
+```
