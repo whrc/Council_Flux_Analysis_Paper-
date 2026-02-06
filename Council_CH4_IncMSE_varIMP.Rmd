@@ -1064,11 +1064,11 @@ varImpPlot(site.fch4_7.cc , type = 1, main = "CH4: Variable Importance (%IncMSE)
 ```
 
 
-#Final site model 
-#reduced site model 6 - removing TS-SWC interact, TA, VPD, NETRAD, LE, TS_3
+#Final site model Figure 
+###reduced site model 6 - removing TS-SWC interact, TA, VPD, NETRAD, LE, TS_3
 ```{r}
 #removing highest VIF from full mode, TS_SWC interact 
-site.fch4_6.cc <- randomForest(FCH4 ~ RH + WS + WD + SWC_3_1_1 + H + G_1_1_1,
+site.fch4_6.cc_final <- randomForest(FCH4 ~ RH + WS + WD + SWC_3_1_1 + H + G_1_1_1,
                              data = df_cc,
                              ntree = 950,
                              importance = TRUE)
@@ -1081,21 +1081,71 @@ site.fch4_6.cc <- randomForest(FCH4 ~ RH + WS + WD + SWC_3_1_1 + H + G_1_1_1,
  # 1.178018  1.089946  1.067877  1.102029  1.826196  1.781593 
  
 # Extract variable importance
-importance_values <- importance(site.fch4_6.cc , type = 1)  # type = 1 for %IncMSE
+importance_values <- importance(site.fch4_6.cc_final , type = 1)  # type = 1 for %IncMSE
 
 # Print the importance values
 print(importance_values)
 
 # Plot the importance values
-varImpPlot(site.fch4_6.cc , type = 1, main = "CH4: Variable Importance (%IncMSE)")
+varImpPlot(site.fch4_6.cc_final , type = 1, main = "CH4: Variable Importance (%IncMSE)")
 
-#             %IncMSE
-# RH         95.77339
-# WS        110.53777
-# WD        191.46842
-# SWC_3_1_1 192.61154
-# H         133.68959
-# G_1_1_1   106.52867
+#            %IncMSE
+# RH        100.3556
+# WS        115.9017
+# WD        181.7566
+# SWC_3_1_1 184.5585
+# H         137.4339
+# G_1_1_1   102.6790
 
+
+```
+#Figure for final model 
+
+```{r}
+# 1. Extract importance table 
+imp <- importance(site.fch4_6.cc_final, type = 1)
+imp_df <- data.frame(
+  Variable = rownames(imp),
+  IncMSE = imp[, 1]
+)
+
+#Rename some variables
+imp_df$Variable <- dplyr::recode(
+  imp_df$Variable,
+  SWC_3_1_1 = "SWC",
+  G_1_1_1 = "G"
+)
+
+#plot
+CH4_incMSE <- ggplot(imp_df, aes(x = reorder(Variable, IncMSE), y = IncMSE)) +
+ geom_point(size = 5, pch = 1, stroke = 1.5) + #stroke changes thickness of circle shape 
+  coord_flip() +
+  labs(
+    x = "",
+    y = "%IncMSE",
+    title = "CH4: Variable Importance"
+  ) +
+  theme_bw() +
+ theme(
+   axis.text = element_text(color = "black", size = 12, face = "bold"),
+   axis.title = element_text(color = "black", size = 14, face = "bold"),
+   plot.title = element_text(color = "black", size = 16, face = "bold", hjust = 0.5),
+    panel.grid.major.x = element_blank(), #removes vertical grid lines 
+     panel.grid.minor = element_blank(), #removes minor gridlines
+    panel.grid.major.y = element_line(linewidth = 0.8, linetype = "dotted", color = "darkgrey")
+ ) 
+ 
+  
+ CH4_incMSE 
+
+
+```
+
+
+#Save 
+```{r}
+# #Save CH4 seasonal budgets 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/CH4_incMSE_siteData.png",CH4_incMSE,
+       width = 7, height = 4, dpi = 600)
 
 ```
