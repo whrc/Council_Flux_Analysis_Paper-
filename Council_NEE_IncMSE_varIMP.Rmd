@@ -861,9 +861,9 @@ varImpPlot(rf.nee_12.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.3.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
 
-df_cc = df[complete.cases(df$FC, df$TA, df$WD, df$WD_Cardinal, df$RH, df$NETRAD, df$WS, df$TS_3_1_1, df$SWC_3_1_1, df$H, df$LE, df$VPD, df$G_1_1_1),]
+df_cc = df[complete.cases(df$FC, df$TA, df$WD, df$WD_Cardinal, df$RH, df$SW_IN, df$WS, df$TS_3_1_1, df$SWC_3_1_1, df$H, df$LE, df$VPD, df$G_1_1_1),]
 
-sum(is.na(df_cc$TA))
+sum(is.na(df_cc$SW_IN))
 
 #SWC-soil temp interaction term 
 
@@ -878,7 +878,7 @@ df_cc$TS_SWC_interact <- df_cc$TS_3_1_1 * df_cc$SWC_3_1_1
 
 library(Boruta)
 
-boruta = Boruta(FC ~ TA + RH + NETRAD + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1 + TS_SWC_interact, data = df_cc, doTrace = 2,maxRuns = 100)
+boruta = Boruta(FC ~ TA + RH + SW_IN + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1 + TS_SWC_interact, data = df_cc, doTrace = 2,maxRuns = 100)
 boruta$finalDecision #indicates all above are confirmed important variables via a list 
 plot(boruta,las = 2) 
 
@@ -890,22 +890,23 @@ plot(boruta,las = 2)
 ```{r}
 library(randomForest)
 
-site.nee_full.cc <- randomForest(FC ~ TA + RH + NETRAD + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1 + TS_SWC_interact,
+site.nee_full.cc <- randomForest(FC ~ TA + RH + SW_IN + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1 + TS_SWC_interact,
                              data = df_cc,
                              ntree = 850,
                              importance = TRUE)
 
 
- vif_model <- lm(FC ~ TA + RH + NETRAD + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1 + TS_SWC_interact, data = df_cc)
+ vif_model <- lm(FC ~ TA + RH + SW_IN + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1 + TS_SWC_interact, data = df_cc)
 # 
  vif(vif_model) 
-      #        TA              RH          NETRAD              WS              WD 
-      # 12.886858        3.632409        7.657315        1.234438        1.133425 
+      #   TA              RH           SW_IN              WS              WD 
+      # 12.878279        3.635034        6.179417        1.231184        1.134066 
       #  TS_3_1_1       SWC_3_1_1             VPD              LE               H 
-      # 31.915917        1.915787        9.239496        4.614354        6.577908 
+      # 32.789734        2.044560        9.336989        4.329498        5.868555 
       #   G_1_1_1 TS_SWC_interact 
-      #  5.030924       22.905156 
-
+      #  5.004937       23.051551 
+ 
+ 
 # Extract variable importance
 importance_values <- importance(site.nee_full.cc, type = 1)  # type = 1 for %IncMSE
 
@@ -915,19 +916,19 @@ print(importance_values)
 # Plot the importance values
 varImpPlot(site.nee_full.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
-#                   %IncMSE
-# TA               36.31930
-# RH               69.54475
-# NETRAD           52.25117
-# WS               68.91734
-# WD               59.13761
-# TS_3_1_1         42.03677
-# SWC_3_1_1        85.17108
-# VPD              39.45211
-# LE               44.36129
-# H               108.84766
-# G_1_1_1          56.27644
-# TS_SWC_interact  46.44852
+#                 %IncMSE
+# TA              36.90495
+# RH              73.40355
+# SW_IN           43.82108
+# WS              67.93020
+# WD              55.87808
+# TS_3_1_1        42.66102
+# SWC_3_1_1       79.21003
+# VPD             43.79284
+# LE              44.78493
+# H               93.76022
+# G_1_1_1         58.05021
+# TS_SWC_interact 34.99044
 
 
 ```
@@ -939,19 +940,19 @@ varImpPlot(site.nee_full.cc, type = 1, main = "NEE: Variable Importance (%IncMSE
 ```{r}
 #TS_3 had highest VIF, but want to see what it is when interaction is removed first 
 
-site.nee_1.cc <- randomForest(FC ~ TA + RH + NETRAD + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1,
+site.nee_1.cc <- randomForest(FC ~ TA + RH + SW_IN + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1,
                              data = df_cc,
                              ntree = 850,
                              importance = TRUE)
 
 
- vif_model <- lm(FC ~ TA + RH + NETRAD + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1, data = df_cc)
+ vif_model <- lm(FC ~ TA + RH + SW_IN + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1, data = df_cc)
 # 
  vif(vif_model) 
-#        TA        RH    NETRAD        WS        WD  TS_3_1_1 SWC_3_1_1       VPD        LE 
-# 12.794332  3.572429  7.656663  1.232958  1.127200  7.999954  1.669048  9.239237  4.473738 
+#       TA        RH     SW_IN        WS        WD  TS_3_1_1 SWC_3_1_1       VPD        LE 
+# 12.736759  3.577458  6.139650  1.229386  1.127361  8.210856  1.761249  9.335307  4.233116 
 #         H   G_1_1_1 
-#  6.461418  4.940612 
+#  5.632546  4.932024 
 
 # Extract variable importance
 importance_values <- importance(site.nee_1.cc, type = 1)  # type = 1 for %IncMSE
@@ -963,36 +964,36 @@ print(importance_values)
 varImpPlot(site.nee_1.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #             %IncMSE
-# TA         45.49422
-# RH         67.55248
-# NETRAD     53.86749
-# WS         63.32259
-# WD         58.38580
-# TS_3_1_1   53.47171
-# SWC_3_1_1 104.26215
-# VPD        38.63950
-# LE         43.59465
-# H         106.20982
-# G_1_1_1    54.58217
+# TA         44.58526
+# RH         80.91754
+# SW_IN      44.68218
+# WS         67.24901
+# WD         54.63567
+# TS_3_1_1   55.71407
+# SWC_3_1_1 100.21239
+# VPD        43.00630
+# LE         47.87899
+# H          95.05690
+# G_1_1_1    53.92212
 
 ```
 
 ##### reduced site model 2 - removing TS-SWC interact, TA 
 ```{r}
 
-site.nee_2.cc <- randomForest(FC ~ RH + NETRAD + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1,
+site.nee_2.cc <- randomForest(FC ~ RH + SW_IN + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1,
                              data = df_cc,
                              ntree = 850,
                              importance = TRUE)
 
 
- vif_model <- lm(FC ~  RH + NETRAD + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1, data = df_cc)
+ vif_model <- lm(FC ~  RH + SW_IN + WS + WD + TS_3_1_1 + SWC_3_1_1 + VPD + LE + H + G_1_1_1, data = df_cc)
 # 
  vif(vif_model) 
- #       RH    NETRAD        WS        WD  TS_3_1_1 SWC_3_1_1       VPD        LE         H 
- # 3.114736  7.250680  1.232892  1.112406  5.785780  1.570598  7.372138  4.462798  6.136320 
+ # RH     SW_IN        WS        WD  TS_3_1_1 SWC_3_1_1       VPD        LE         H 
+ # 3.137800  5.840385  1.229386  1.108140  5.854800  1.643164  7.649409  4.229193  5.383255 
  #  G_1_1_1 
- # 4.168524 
+ # 4.167477 
 
 # Extract variable importance
 importance_values <- importance(site.nee_2.cc, type = 1)  # type = 1 for %IncMSE
@@ -1004,16 +1005,16 @@ print(importance_values)
 varImpPlot(site.nee_2.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #             %IncMSE
-# RH         71.14664
-# NETRAD     52.95026
-# WS         66.08729
-# WD         55.72278
-# TS_3_1_1   71.83652
-# SWC_3_1_1  99.44655
-# VPD        42.95709
-# LE         47.75469
-# H         100.01788
-# G_1_1_1    55.11054
+# RH         74.25941
+# SW_IN      41.72186
+# WS         71.51393
+# WD         59.09287
+# TS_3_1_1   72.61439
+# SWC_3_1_1 100.57794
+# VPD        45.17363
+# LE         47.27929
+# H          83.46191
+# G_1_1_1    60.68640
 
 ```
 
@@ -1021,17 +1022,17 @@ varImpPlot(site.nee_2.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 ##### reduced site model 3 - removing TS-SWC interact, TA, VPD
 ```{r}
 
-site.nee_3.cc <- randomForest(FC ~ RH + NETRAD + WS + WD + TS_3_1_1 + SWC_3_1_1 + LE + H + G_1_1_1,
+site.nee_3.cc <- randomForest(FC ~ RH + SW_IN + WS + WD + TS_3_1_1 + SWC_3_1_1 + LE + H + G_1_1_1,
                              data = df_cc,
                              ntree = 850,
                              importance = TRUE)
 
 
- vif_model <- lm(FC ~  RH + NETRAD + WS + WD + TS_3_1_1 + SWC_3_1_1 + LE + H + G_1_1_1, data = df_cc)
+ vif_model <- lm(FC ~  RH + SW_IN + WS + WD + TS_3_1_1 + SWC_3_1_1 + LE + H + G_1_1_1, data = df_cc)
 # 
  vif(vif_model) 
- #       RH    NETRAD        WS        WD  TS_3_1_1 SWC_3_1_1        LE         H   G_1_1_1 
- # 1.175159  7.155105  1.227465  1.111692  4.129575  1.531578  4.427206  5.933628  3.430182 
+ #  RH     SW_IN        WS        WD  TS_3_1_1 SWC_3_1_1        LE         H   G_1_1_1 
+ # 1.183011  5.554493  1.224268  1.106890  4.118946  1.622857  4.213928  5.048610  3.426896 
 
 # Extract variable importance
 importance_values <- importance(site.nee_3.cc, type = 1)  # type = 1 for %IncMSE
@@ -1043,20 +1044,20 @@ print(importance_values)
 varImpPlot(site.nee_3.cc, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
 #             %IncMSE
-# RH         92.43777
-# NETRAD     57.66059
-# WS         74.59249
-# WD         61.47223
-# TS_3_1_1   74.11995
-# SWC_3_1_1 109.80209
-# LE         46.08318
-# H         105.98553
-# G_1_1_1    66.47696
+# RH        101.92605
+# SW_IN      43.26408
+# WS         67.13157
+# WD         58.12550
+# TS_3_1_1   70.11697
+# SWC_3_1_1 109.04488
+# LE         44.72757
+# H          87.72577
+# G_1_1_1    62.15405
 
 
 ```
 
-##### reduced site model 4 - removing TS-SWC interact, TA, VPD, NETRAD
+##### reduced site model 4 - removing TS-SWC interact, TA, VPD, SW_IN
 ```{r}
 
 site.nee_4.cc <- randomForest(FC ~ RH + WS + WD + TS_3_1_1 + SWC_3_1_1 + LE + H + G_1_1_1,
