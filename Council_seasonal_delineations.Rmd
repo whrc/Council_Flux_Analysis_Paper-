@@ -1483,6 +1483,98 @@ plots_2020$fluxes    # Display GPP, RECO, NEE, and CH4 plot
 
 
 
+#Season Length Figure 
+
+#Number of days within season 
+```{r}
+library(tidyverse)
+
+# Count days per season per winter_year
+season_counts <- df_avg %>%
+  filter(!is.na(season) & !is.na(winter_year)) %>%
+  filter(winter_year != "2023", winter_year != "2016") %>%
+  group_by(winter_year, season) %>%
+  summarise(n_days = n(), .groups = "drop")
+
+# Plot
+ggplot(season_counts, aes(x = factor(winter_year), y = n_days, fill = season)) +
+  geom_col() +
+  facet_wrap(~season) +
+  labs(
+    x = "Winter Year",
+    y = "Number of Days",
+    title = "Days per Season by Winter Year"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    strip.text = element_text(face = "bold", size = 11)
+  )
+```
+
+
+
+
+#Adjusting the winter label 
+```{r}
+
+# Order seasons (if not already done)
+season_counts <- season_counts%>%
+  mutate(season = factor(season, levels = c("Growing Season", "Fall Senescence", "Winter")))
+
+
+
+# Create the continuous winter year label
+season_counts <- season_counts %>%
+  mutate(x_label = ifelse(season == "Winter", 
+                         paste0(winter_year, " - ", winter_year + 1),
+                         as.character(winter_year)))
+
+# Plot
+season_length_fig <- ggplot(season_counts, aes(x = x_label, y = n_days, fill = season)) +
+  geom_col() +
+  facet_wrap(~season, scales = "free_x") +  # Add scales = "free_x" to allow scales to differ
+  #manually set color 
+  scale_fill_manual(values = c(
+     "Growing Season" = "#4caf50",    # Green
+    "Fall Senescence" = "#ff7f50",   # Salmon
+    "Winter" = "#5b9bd5"   #Blue
+    )) +              
+
+  labs(
+    x = "Year",
+    y = "Number of Days",
+    title = "Days per Season by Year",
+    subtitle = "Features continuous winters spanning from one year into following year"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    strip.text = element_text(face = "bold", size = 11),
+        plot.subtitle = element_text(size = 10, face = "italic"),
+  )
+
+season_length_fig
+
+
+```
+
+
+
+#Save seasonal lengths figure 
+
+```{r}
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_season_length_fig.png", season_length_fig, 
+        width = 8, height = 5, dpi = 600)
+```
+
+
+
+
+
+
+
+
 
 
 #Additional met vars that might help with seasonal delineations - Council had a lot of missing light data / no snow data
