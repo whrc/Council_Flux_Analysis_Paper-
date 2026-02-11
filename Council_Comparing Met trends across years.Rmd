@@ -1464,6 +1464,8 @@ winteryear_colors <- c("2017" = "#E41A1C",  # Red
 seasonal_summary_all$winteryear_factor <- as.factor(seasonal_summary_all$winter_year)
 ```
 
+
+
 # %gapfill of other met variables 
 ```{r}
 gapfill_summary <- df_avg %>%
@@ -2102,9 +2104,9 @@ p_SWC_nf <- ggplot(seasonal_summary_all %>%
     plot.title = element_text(face = "bold", size = 14),
     axis.title.x = element_text(face = "bold", size = 12),
     axis.title.y = element_text(face = "bold", size = 12),
-    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
-    axis.text.y = element_text(face = "bold"),
-    strip.text = element_text(face = "bold", size = 11),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", size = 12),
+    axis.text.y = element_text(face = "bold", size = 12),
+    strip.text = element_text(face = "bold", size = 12),
     legend.position = "none"
   )
 
@@ -2364,6 +2366,63 @@ print(p_G)
 
 #note, SE is present but some error bars are so small compared to the scale of the fig they appear as if they're not showing up...but if you change scale = "free", you can see them, this just doesn't maintain consistent axis ranges among seasons
 ```
+#Combined Air T and soil T 
+```{r}
+#combined plot: gapfilled air and soil temp 
+
+p_TA.TS <- ggplot(seasonal_summary_all %>%
+                 filter(winter_year >= 2017 & winter_year <= 2022)) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+
+  #Air T - circles 
+  geom_point(aes(x = winter_year, y = TA_gapfilled_mean, color = winteryear_factor, group = winter_year), 
+             size = 3) +
+  geom_errorbar(aes(x = winter_year, ymin = TA_gapfilled_mean - TA_gapfilled_se, 
+                    ymax = TA_gapfilled_mean + TA_gapfilled_se, color = "black"), # color = winteryear_factor),
+                width = 0.3, linewidth = 0.7, alpha = 1 ) +
+#Soil T - triangles 
+  geom_point(aes(x = winter_year, y = TS_3_gapfilled_mean, color = winteryear_factor, group = winter_year), 
+             size = 3, pch = 17) +
+  geom_errorbar(aes(x = winter_year, ymin = TS_3_gapfilled_mean - TS_3_gapfilled_se, 
+                    ymax = TS_3_gapfilled_mean + TS_3_gapfilled_se, color = "black"), # color = winteryear_factor),
+                 width = 0.3, linewidth = 0.7, alpha = 1 ) +
+  
+facet_wrap(~ season, ncol = 3, scales = "free_x") +  #free_x needed to allow different axis labels among the panels, otherwise they will all be the same for each panel 
+  
+  scale_color_manual(values = winteryear_colors) +
+  #scale_x_continuous(breaks = 2017:2022) +  #same axis labels for all panels 
+  
+  #custom axis labels that are different among the panels 
+  facetted_pos_scales( 
+    x = list(
+      season == "Growing Season" ~ scale_x_continuous(breaks = 2017:2022),
+      season == "Fall Senescence" ~ scale_x_continuous(breaks = 2017:2022),
+      season == "Winter" ~ scale_x_continuous(breaks = 2017:2022, 
+                                               labels = c("2017 - 2018", "2018 - 2019", 
+                                                         "2019 - 2020", "2020 - 2021", 
+                                                         "2021 - 2022", "2022 - 2023"))
+    )
+  ) +
+  
+  labs(title = "Mean Seasonal Time Series (2017-2022)",
+       x = "Year", 
+       y = "Temperature (°C)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", size = 12),
+    axis.text.y = element_text(face = "bold", size = 12),
+    strip.text = element_text(face = "bold", size = 12),
+    legend.position = "none"
+  )
+
+p_TA.TS
+
+
+
+```
 
 
 
@@ -2374,19 +2433,19 @@ library(grid)
 library(ggplot2)
 
 # Remove titles from all plots
-p_TA <- p_TA + labs(title = NULL)
-p_TS <- p_TS + labs(title = NULL)
+# p_TA <- p_TA + labs(title = NULL)
+# p_TS <- p_TS + labs(title = NULL)
 p_SWC_nf <- p_SWC_nf + labs(title = NULL)
 p_VPD <- p_VPD + labs(title = NULL)
 p_RH <- p_RH + labs(title = NULL)
-p_H <- p_H + labs(title = NULL)
-p_LE <- p_LE + labs(title = NULL)
-p_G <- p_G + labs(title = NULL)
+#p_H <- p_H + labs(title = NULL)
+#p_LE <- p_LE + labs(title = NULL)
+#p_G <- p_G + labs(title = NULL)
 
 
 # Extract the legend from one of your existing plots
 # First, temporarily modify one plot to show the legend
-p_with_legend <- p_TA + 
+p_with_legend <- p_TA.TS + 
   theme(legend.position = "right") +
   scale_color_manual(values = winteryear_colors, name = "Year")
 
@@ -2402,7 +2461,7 @@ legend <- get_legend(p_with_legend)
 
 # Arrange all your existing plots with the shared legend
 seasonal_MeanMet_by_winteryr <- grid.arrange(
-  arrangeGrob(p_TA, p_TS, p_SWC_nf, p_VPD, p_RH, p_H, p_LE, p_G, ncol = 2),
+  arrangeGrob(p_TA.TS, p_SWC_nf, p_VPD, p_RH, ncol = 2), # p_H, p_LE, p_G,
   legend,
   ncol = 2,
   widths = c(10, 1.5),
@@ -4303,11 +4362,25 @@ p_RH_with_stats
 library(ggh4x) #allow customizing facet panel axis labels 
 
 # Create a dataframe with statistics for each season
+
+# Linear Reg results
+# vpd_stats <- data.frame(
+#   season = c("Growing Season", "Fall Senescence"), #order of labels for panels in facetwrap
+#   r2 = c(0.84, 0.95),  # Replace with your actual adj R² values - Fall, Growing, Winter 
+#   slope = c(0.81, 0.63),  # Replace with your actual slopes - Fall, Growing, Winter 
+#   p_value = c(0.0066, 0.0007),  # Replace with your actual p-values - Fall, Growing, Winter 
+#   #mann_kendall_p = c(0.027, 0.024),
+#   #mann_kendall_tau = c(1.00, 0.87),
+#   x = c(2017, 2017),  # x position for text
+#   y = c(10, 10)  # y position for text - adjust based on your data range
+# )
+
+# Mann-Kendall time series stats 
 vpd_stats <- data.frame(
   season = c("Growing Season", "Fall Senescence"), #order of labels for panels in facetwrap
-  r2 = c(0.84, 0.95),  # Replace with your actual adj R² values - Fall, Growing, Winter 
-  slope = c(0.81, 0.63),  # Replace with your actual slopes - Fall, Growing, Winter 
-  p_value = c(0.0066, 0.0007),  # Replace with your actual p-values - Fall, Growing, Winter 
+  mk_tau = c(0.87, 0.87),  # Replace with your actual adj R² values - Fall, Growing, Winter 
+  slope = c(0.90, 0.66),  # Replace with your actual slopes - Fall, Growing, Winter 
+  p_value = c(0.02, 0.02),  # Replace with your actual p-values - Fall, Growing, Winter 
   #mann_kendall_p = c(0.027, 0.024),
   #mann_kendall_tau = c(1.00, 0.87),
   x = c(2017, 2017),  # x position for text
@@ -4318,19 +4391,19 @@ vpd_stats <- data.frame(
 vpd_stats <- vpd_stats %>%
   mutate(season_ordered = factor(season,
                                 levels = c("Growing Season", "Fall Senescence")),
-    label = paste0("adj R² = ", round(r2, 2), "\n",
-                    "Slope = ", round(slope, 2), "\n",
-                    "p = ", ifelse(p_value < 0.001, "< 0.001", sprintf("%.3f", p_value))
+    label = paste0("MK tau = ", round(mk_tau, 2), "\n",
+                    "Sens Slope = ", round(slope, 2), "\n",
+                    "p = ", ifelse(p_value < 0.001, "< 0.001", sprintf("%.2f", p_value))
                         #"LM_p = ", format.pval(p_value, digits = 3), "\n",
                         #"Mann-Kendall_tau =", round(mann_kendall_tau, 2), "\n",
                         #"Mann-Kendall_p =", format.pval(mann_kendall_p, digits = 3)))
   )) 
 
 # Add to plot
-p_VPD_lm <- ggplot(seasonal_summary_all %>%
-                     filter(winter_year != "2016", winter_year != "2023", season != "Winter") %>%
+p_VPD_mk <- ggplot(seasonal_summary_all %>%
+                     filter(winter_year != "2016", winter_year != "2023") %>%
                      mutate(season_ordered = factor(season,
-                                                    levels = c("Growing Season", "Fall Senescence"))),
+                                                    levels = c("Growing Season", "Fall Senescence", "Winter"))),
                    aes(x = winter_year, y = VPD_mean, color = winteryear_factor)) +
   geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
   geom_point(size = 2.5) +
@@ -4348,17 +4421,17 @@ p_VPD_lm <- ggplot(seasonal_summary_all %>%
             color = "black", size = 4, hjust = 0, vjust = 1,
             inherit.aes = FALSE) +
 #facet_wrap(~factor(season, levels = c("Growing Season", "Fall Senescence", "Winter")), ncol = 3, scales = "free_x") + #sets order of panels, opens x-axis to being customizable 
-  facet_wrap(~season_ordered, ncol = 2, scales = "free_x") + 
+  facet_wrap(~season_ordered, ncol = 3, scales = "free_x") + 
   
    #custom axis labels that are different among the panels 
   facetted_pos_scales( 
     x = list(
       season_ordered == "Growing Season" ~ scale_x_continuous(breaks = 2017:2022),
-      season_ordered == "Fall Senescence" ~ scale_x_continuous(breaks = 2017:2022)
-      # season_ordered == "Winter" ~ scale_x_continuous(breaks = 2017:2022, 
-      #                                          labels = c("2017 - 2018", "2018 - 2019", 
-      #                                                    "2019 - 2020", "2020 - 2021", 
-      #                                                    "2021 - 2022", "2022 - 2023"))
+      season_ordered == "Fall Senescence" ~ scale_x_continuous(breaks = 2017:2022),
+       season_ordered == "Winter" ~ scale_x_continuous(breaks = 2017:2022, 
+                                               labels = c("2017 - 2018", "2018 - 2019",
+                                                         "2019 - 2020", "2020 - 2021",
+                                                         "2021 - 2022", "2022 - 2023"))
     )
   ) +
   
@@ -4381,13 +4454,19 @@ p_VPD_lm <- ggplot(seasonal_summary_all %>%
     legend.position = "none"
   )
 
-p_VPD_lm
+#p_VPD_lm
+
+p_VPD_mk
+
 ```
 
 #Save figure 
 ```{r}
+#linear reg results 
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_VPD_trends_stats.png", p_VPD_lm, 
+#         width = 7, height = 5, dpi = 600)
 
-ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_VPD_trends_stats.png", p_VPD_lm, 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_VPD_trends_statsMK.png", p_VPD_mk, 
         width = 7, height = 5, dpi = 600)
 ```
 
@@ -4396,11 +4475,24 @@ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper
 #Best way to add unique text to each panel in the facet_wrapped figure is to create a dataframe with the info you want to add to each panel 
 
 # Create a dataframe with statistics for each season
+#Linear Reg results 
+# rh_stats <- data.frame(
+#   season = c("Growing Season", "Fall Senescence", "Winter"),
+#   r2 = c(0.96, 0.97, 0.86),  # Replace with your actual adj R² values - Fall, Growing, Winter 
+#   slope = c(-6.59, -7.52, -9.70),  # Replace with your actual slopes - Fall, Growing, Winter 
+#   p_value = c(0.0004, 0.0002, 0.005),  # Replace with your actual p-values - Fall, Growing, Winter 
+#  # mann_kendall_p = c(0.01, 0.01, 0.01),
+#  # mann_kendall_tau = c(-1.00, -1.00, -1.00),
+#   x = c(2018, 2018, 2018),  # x position for text
+#   y = c(100, 100, 100)  # y position for text - adjust based on your data range
+# )
+
+#Mann-Kendall timeseries results 
 rh_stats <- data.frame(
   season = c("Growing Season", "Fall Senescence", "Winter"),
-  r2 = c(0.96, 0.97, 0.86),  # Replace with your actual adj R² values - Fall, Growing, Winter 
-  slope = c(-6.59, -7.52, -9.70),  # Replace with your actual slopes - Fall, Growing, Winter 
-  p_value = c(0.0004, 0.0002, 0.005),  # Replace with your actual p-values - Fall, Growing, Winter 
+  mk_tau = c(-1, -1, -1),  # Replace with your actual adj R² values - Fall, Growing, Winter 
+  slope = c(-6.06, -7.12, -9.69),  # Replace with your actual slopes - Fall, Growing, Winter 
+  p_value = c(0.01, 0.01, 0.01),  # Replace with your actual p-values - Fall, Growing, Winter 
  # mann_kendall_p = c(0.01, 0.01, 0.01),
  # mann_kendall_tau = c(-1.00, -1.00, -1.00),
   x = c(2018, 2018, 2018),  # x position for text
@@ -4413,17 +4505,16 @@ rh_stats <- rh_stats %>%
                           levels = c("Growing Season", "Fall Senescence", "Winter")),
     label = paste0(#"adj R² = ", round(r2, 2), "\n",
                         #"Slope = ", round(slope, 2), "\n",
-                        "adj R² = ", r2, "\n",
-                        "Slope = ", slope, "\n",
-                         "p = ", ifelse(p_value < 0.001, "< 0.001", sprintf("%.3f", p_value))
-                       # "p = ", format.pval(p_value, digits = 1, eps = 0.001)
+                        "MK tau = ", mk_tau, "\n",
+                        "Sens Slope = ", slope, "\n",
+                         "p = ", ifelse(p_value < 0.001, "< 0.001", sprintf("%.2f", p_value))
                        # "LM_p = ", format.pval(p_value, digits = 4, scientific = FALSE) #, "\n", 
-                       # "Mann-Kendall_tau =", round(mann_kendall_tau, 2), "\n",
-                       # "Mann-Kendall_p =", format.pval(mann_kendall_p, digits = 4)
+                       # "MK_tau =", round(mann_kendall_tau, 2), "\n",
+                       # "p =", format.pval(mann_kendall_p, digits = 4)
                        ))
 
 # Add to plot
-p_rh_lm <- ggplot(seasonal_summary_all %>%
+p_rh_mk <- ggplot(seasonal_summary_all %>%
                     filter(winter_year != "2016", winter_year != "2023") %>%
                      mutate(season_ordered = factor(season,
                                                     levels = c("Growing Season", "Fall Senescence", "Winter"))),
@@ -4479,15 +4570,21 @@ p_rh_lm <- ggplot(seasonal_summary_all %>%
     legend.position = "none"
   )
 
-p_rh_lm
+#p_rh_lm
+
+p_rh_mk
 ```
 
 
 #Save figure 
 
 ```{r}
+#LM results 
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_RH_trends_stats.png", p_rh_lm, 
+#         width = 7, height = 5, dpi = 600) 
 
-ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_RH_trends_stats.png", p_rh_lm, 
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_RH_trends_statsMK.png", p_rh_mk, 
         width = 7, height = 5, dpi = 600) 
 ```
 
@@ -4569,11 +4666,141 @@ p_swc_nf_lm
 ```
 
 #Save figure 
-
 ```{r}
 
 ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_SWC.nf_trends_stats.png", p_swc_nf_lm, 
         width = 7, height = 5, dpi = 600) 
+```
+#**Combined figure with stats 
+
+###Arrange figures into one 
+```{r}
+library(gridExtra)
+library(grid)
+library(ggplot2)
+
+# Remove titles from all plots
+p_SWC_nf <- p_SWC_nf + labs(title = NULL) #+ theme(plot.margin = ggplot2::margin(5, 5, 0, 5, "pt")) # top, right, bottom, left
+p_VPD_mk <- p_VPD_lm + labs(title = NULL)
+p_rh_mk <- p_rh_lm + labs(title = NULL)
+p_TA.TS <- p_TA.TS + theme(plot.title = element_blank())
+
+
+# Extract the legend from one of your existing plots
+# First, temporarily modify one plot to show the legend
+p_with_legend <- p_TA.TS + 
+  theme(legend.position = "right",
+        scale_color_manual(values = winteryear_colors, name = "Year"))
+
+# Function to extract legend
+get_legend <- function(myggplot) {
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+legend <- get_legend(p_with_legend)
+
+# Arrange all your existing plots with the shared legend
+seasonal_MeanMet_by_winteryr.MK <- grid.arrange(
+  arrangeGrob(p_TA.TS, p_SWC_nf, p_VPD_mk, p_rh_mk, ncol = 2), # p_H, p_LE, p_G,
+  legend,
+  ncol = 2,
+  widths = c(10, 1.5),
+  top = textGrob("Seasonal Means Time Series (2017-2022)", 
+                 gp = gpar(fontsize = 16, fontface = "bold"))
+)
+
+
+```
+#trying to resize panels 
+```{r}
+library(patchwork)
+
+# Remove titles
+p_SWC_nf <- p_SWC_nf + labs(title = NULL)
+p_VPD_mk <- p_VPD_lm + labs(title = NULL)
+p_rh_mk <- p_rh_lm + labs(title = NULL)
+p_TA.TS <- p_TA.TS + labs(title = NULL)
+
+# Remove legends from all (we'll add shared legend later)
+p_SWC_noleg <- p_SWC_nf + theme(legend.position = "none")
+p_VPD_noleg <- p_VPD_mk + theme(legend.position = "none")
+p_rh_noleg <- p_rh_mk + theme(legend.position = "none")
+p_TA_noleg <- p_TA.TS + theme(legend.position = "none")
+
+# Extract legend from one plot
+library(cowplot)
+legend <- get_legend(p_TA.TS + theme(legend.position = "right", scale_color_manual(values = winteryear_colors, name = "Year")))
+
+# Combine with fixed widths
+combined <- (p_TA_noleg | p_SWC_noleg) /
+            (p_VPD_noleg | p_rh_noleg) +
+  plot_layout(
+    widths = c(1, 1),  # Equal widths for left and right columns
+    heights = c(1, 1)  # Equal heights for top and bottom rows
+  ) +
+  plot_annotation(
+    title = "Seasonal Means Time Series (2017-2022)",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+    )
+  )
+
+# Add legend to the side
+final_plot <- combined + legend +
+  plot_layout(widths = c(10, 1))
+
+print(final_plot)
+
+# ggsave("seasonal_means_combined.png", final_plot, 
+#        width = 14, height = 10, dpi = 300, bg = "white")
+```
+```{r}
+library(patchwork)
+library(cowplot)
+
+# Remove legends from all plots
+p_TA_noleg <- p_TA.TS + labs(title = NULL) + theme(legend.position = "none")
+p_SWC_noleg <- p_SWC_nf + labs(title = NULL) + theme(legend.position = "none")
+p_VPD_noleg <- p_VPD_mk + labs(title = NULL) + theme(legend.position = "none")
+p_rh_noleg <- p_rh_mk + labs(title = NULL) + theme(legend.position = "none")
+
+# Extract legend
+legend <- get_legend(p_TA.TS + 
+                       scale_color_manual(values = winteryear_colors, name = "Year") +
+                       theme(legend.position = "right"))
+
+# Combine plots in 2x2 grid
+combined <- (p_TA_noleg + p_SWC_noleg) / 
+            (p_VPD_noleg + p_rh_noleg) +
+  plot_annotation(
+    title = "Seasonal Means Time Series (2017-2022)",
+    theme = theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+  )
+
+# Add legend
+final_plot <- wrap_plots(combined, as_ggplot(legend), 
+                         ncol = 2, 
+                         widths = c(10, 1))
+
+print(final_plot)
+
+
+```
+
+
+
+#Save figure 
+```{r}
+#LineaR REG 
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_MeanMet_vars_by_winteryear_plot_reduced.png", seasonal_MeanMet_by_winteryr.2, 
+#         width = 15, height = 7, dpi = 600)
+
+#MK
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_MeanMet_vars_by_winteryear_plot_reducedMK.png", final_plot, 
+        width = 15, height = 8, dpi = 600)
 ```
 
 
