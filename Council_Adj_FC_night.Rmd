@@ -1,0 +1,157 @@
+---
+title: "Adjusting_FC_night" #Adjusting FC_night from original cutoff of SW-IN = 0 to SW_IN < 20 
+output: html_document
+date: "2026-04-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+library(car)
+
+Sys.setenv(TZ='UTC')
+```
+
+#Load data
+
+```{r}
+
+# #half-hourly dataframe --> gapfilled - corrected seasons, winter-yr
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.3.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+#daily avg dataframe --> gapfilled - updated seasons, sWC-nf, winter-year
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.5.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+```
+
+#These versions of the dataset already have timestamp in POSIXct and already have a date variable, but leaving here for reference 
+
+#Create useable timestamp variable 
+```{r}
+# df$TIMESTAMP_END = as.character(df$TIMESTAMP_END)
+# df$TIMESTAMP_START = as.character(df$TIMESTAMP_START)
+# 
+# df$TIMESTAMP_END = as.POSIXct(df$TIMESTAMP_END, tz="UTC", format = "%Y%m%d%H%M")
+# df$TIMESTAMP_START = as.POSIXct(df$TIMESTAMP_START, tz="UTC", format = "%Y%m%d%H%M")
+# 
+
+```
+
+
+
+#reduce datasets to just time/day, FC, FC_F, and SW_IN
+```{r}
+# Reduced half-hourly dataset
+df_reduced <- df %>%
+  select(TIMESTAMP_END, FC, FC_F, SW_IN)
+
+
+df_reduced$date = as.Date(df$TIMESTAMP_END)
+
+
+```
+
+
+#Create FC_night in the half-hourly cleaned Ameriflux-prepped dataset from step 6
+```{r}
+# Filter CO2 Flux data by incoming shortwave values to get nighttime fluxes
+
+#Add to orig df
+df <- df %>%
+  mutate(FC_night20 = ifelse(SW_IN <= 20, FC, NA)) #variable for not gapfilled
+
+df <- df %>%
+  mutate(FC_night20_F = ifelse(SW_IN <= 20, FC_F, NA)) #variable for gapfilled 
+
+#=============================================
+
+#Add to reduced df for easier averaging and merging with orig df_avg 
+df_reduced <- df_reduced %>%
+  mutate(FC_night20 = ifelse(SW_IN <= 20, FC, NA)) #variable for not gapfilled
+
+df_reduced <- df_reduced %>%
+  mutate(FC_night20_F = ifelse(SW_IN <= 20, FC_F, NA)) #variable for gapfilled 
+  
+
+```
+
+
+
+#Average by day to create continuous daily averages - NOTE: need to make sure to use "date" for openAir and timeAverage code to work*
+```{r}
+library(openair)
+#need at least 10% data to create avg for FC_night 
+
+#average dataframe with lighter threshold to get better nighttime data coverage
+df_avg_night <- as.data.frame(date)
+df_avg_night <-timeAverage(df_reduced, avg.time = "day", data.thresh = 10)
+
+#Make sure date classes match 
+class(df_avg$date)
+class(df_avg_night$date)
+
+#merge with orig df_avg; change date class to match orig df_avg 
+df_avg <- df_avg %>%
+  left_join(df_avg_night %>% 
+              mutate(date = as.IDate(date)) %>%
+              select(date, FC_night20, FC_night20_F),
+            by = "date")
+
+
+```
+
+
+#check out the averages to make sure they look reasonable / screen 
+
+```{r}
+
+plot(df$date, df$FC_night20_F)
+
+plot(df_avg$date, df_avg$FC_night20_F)
+
+plot(df_avg$TS_3_1_1, df_avg$FC_night_F)
+plot(df_avg$TA_ERA5, df_avg$FC_night_F)
+
+```
+
+# Save Data
+
+```{r}
+#these dataframes now include FC_night and FC_night_F 
+
+#half-hourly df with night fluxes -- added ".2" to indicated from updated SWC
+write.csv(x = df,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.4.csv',quote = F,row.names = F)
+
+#daily avg df with night fluxes -- added ".2" to indicated from updated SWC
+write.csv(x = df_avg,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.6.csv',quote = F,row.names = F)
+
+
+```
+
+
+
+
