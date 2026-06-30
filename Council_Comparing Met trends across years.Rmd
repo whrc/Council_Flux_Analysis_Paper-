@@ -94,7 +94,7 @@ annual_temps2 <- df_avg %>%
     )
 
 
-#sd(FC, na.rm = TRUE)/sqrt(sum(!is.na(FC)))
+
 print(annual_temps2)
 
 
@@ -243,8 +243,6 @@ library(dplyr)
 library(lubridate)
 
 #Annual and seasonal summaries with SE 
-
-#no SE for CO2 and CH4 fluxes as these are sums **** then we calc averages with SE for the met variables 
 
 # Annual summaries with standard errors
 # Annual summaries with total C budget
@@ -507,10 +505,10 @@ library(writexl)
 
 write_xlsx(seasonal_budgets, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_budgets2.xlsx")
 
-#Write table to CSV
-# base R, no additional packages needed)
-# write.csv(seasonal_budgets, "seasonal_budgets.csv", row.names = FALSE)
 
+```
+
+```{r}
 
 # Create a new table with combined mean ± SE format
 seasonal_budgets_formatted <- seasonal_budgets %>%
@@ -547,8 +545,10 @@ annual_budgets_formatted <- annual_budgets %>%
   dplyr::select(year, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5, TA_GF, TS3_GF)
 
 annual_budgets_formatted
+```
 
 # Save to Excel
+```{r}
 write_xlsx(annual_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_budgets_formatted2.xlsx")
 
 ```
@@ -663,6 +663,8 @@ annual_budgets_formatted_nf
 write_xlsx(annual_budgets_formatted_nf, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_budgets_formatted_nf.xlsx")
 
 ```
+
+
 
 
 #Comparison plots - comparison of monthly met variable means across years 
@@ -2366,7 +2368,8 @@ print(p_G)
 
 #note, SE is present but some error bars are so small compared to the scale of the fig they appear as if they're not showing up...but if you change scale = "free", you can see them, this just doesn't maintain consistent axis ranges among seasons
 ```
-#Combined Air T and soil T 
+
+#Air T + soil T combined into same fig
 ```{r}
 #combined plot: gapfilled air and soil temp 
 
@@ -2374,22 +2377,23 @@ p_TA.TS <- ggplot(seasonal_summary_all %>%
                  filter(winter_year >= 2017 & winter_year <= 2022)) +
   geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
 
-  #Air T - circles 
-  geom_point(aes(x = winter_year, y = TA_gapfilled_mean, color = winteryear_factor, group = winter_year), 
+  #== Air T - circles ===================
+  geom_point(aes(x = winter_year, y = TA_gapfilled_mean, color = winteryear_factor, shape = "Gap-filled Air Temperature", group = winter_year), 
              size = 3) +
   geom_errorbar(aes(x = winter_year, ymin = TA_gapfilled_mean - TA_gapfilled_se, 
                     ymax = TA_gapfilled_mean + TA_gapfilled_se, color = "black"), # color = winteryear_factor),
                 width = 0.3, linewidth = 0.7, alpha = 1 ) +
-#Soil T - triangles 
-  geom_point(aes(x = winter_year, y = TS_3_gapfilled_mean, color = winteryear_factor, group = winter_year), 
-             size = 3, pch = 17) +
+  
+#=== Soil T - triangles =============================
+  geom_point(aes(x = winter_year, y = TS_3_gapfilled_mean, color = winteryear_factor, shape = "Gap-filled Soil Temperature", group = winter_year, pch = 17),
+             size = 3) +
   geom_errorbar(aes(x = winter_year, ymin = TS_3_gapfilled_mean - TS_3_gapfilled_se, 
                     ymax = TS_3_gapfilled_mean + TS_3_gapfilled_se, color = "black"), # color = winteryear_factor),
                  width = 0.3, linewidth = 0.7, alpha = 1 ) +
   
 facet_wrap(~ season, ncol = 3, scales = "free_x") +  #free_x needed to allow different axis labels among the panels, otherwise they will all be the same for each panel 
   
-  scale_color_manual(values = winteryear_colors) +
+  scale_color_manual(values = winteryear_colors, name = "Year") +
   #scale_x_continuous(breaks = 2017:2022) +  #same axis labels for all panels 
   
   #custom axis labels that are different among the panels 
@@ -2406,7 +2410,8 @@ facet_wrap(~ season, ncol = 3, scales = "free_x") +  #free_x needed to allow dif
   
   labs(title = "Mean Seasonal Time Series (2017-2022)",
        x = "Year", 
-       y = "Temperature (°C)") +
+       y = "Temperature (°C)"
+       ) +
   theme_bw() +
   theme(
     plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
@@ -2415,7 +2420,7 @@ facet_wrap(~ season, ncol = 3, scales = "free_x") +  #free_x needed to allow dif
     axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", size = 12),
     axis.text.y = element_text(face = "bold", size = 12),
     strip.text = element_text(face = "bold", size = 12),
-    legend.position = "none"
+    legend.position = "right"
   )
 
 p_TA.TS
@@ -2423,6 +2428,7 @@ p_TA.TS
 
 
 ```
+
 
 
 
@@ -3497,7 +3503,7 @@ test_seasonal_trends <- function(data, var_name, var_label, units) {
       next
     }
     
-    # Test normality (Shapiro-Wilk) - tests normality of raw data, but for this we want residuals 
+    # Test normality (Shapiro-Wilk) - tests residuals 
     
     # Linear regression
     lm_model <- lm(y_vals ~ x_vals)
@@ -4347,11 +4353,6 @@ p_RH_with_stats
 
 
 
-
-
-
-
-
 #Manual annotations of stats for each panel 
 
 
@@ -4411,8 +4412,14 @@ p_VPD_mk <- ggplot(seasonal_summary_all %>%
                     ymax = VPD_mean + VPD_se),
                 width = 0.2, linewidth = 0.8, color = "black") +
   
-  # Add trend line
-  geom_smooth(aes(group = season), method = "lm", se = TRUE, 
+  # Add trend line - all panels 
+# geom_smooth(aes(group = season), method = "lm", se = TRUE, 
+#               color = "black", linewidth = 0.8, alpha = 0.2) +
+  
+  # Add trend line ONLY for Growing Season and Fall Senescence - panels with sig trends
+  geom_smooth(data = . %>% filter(season %in% c("Growing Season", "Fall Senescence")), #the "data = ." means use the same dataset as indicated in ggplot 
+              aes(group = season), 
+              method = "lm", se = TRUE, 
               color = "black", linewidth = 0.8, alpha = 0.2) +
   
   # Add manual annotations
@@ -4588,9 +4595,7 @@ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper
         width = 7, height = 5, dpi = 600) 
 ```
 
-#* TO DO SWC in growing with borderline sig 
-
-#SWC-NF borderline sig  
+#SWC-NF borderline sig  in lm, but not sig in MK - using MK results 
 ```{r}
 #Best way to add unique text to each panel in the facet_wrapped figure is to create a dataframe with the info you want to add to each panel 
 
@@ -4681,9 +4686,9 @@ library(ggplot2)
 
 # Remove titles from all plots
 p_SWC_nf <- p_SWC_nf + labs(title = NULL) #+ theme(plot.margin = ggplot2::margin(5, 5, 0, 5, "pt")) # top, right, bottom, left
-p_VPD_mk <- p_VPD_lm + labs(title = NULL)
-p_rh_mk <- p_rh_lm + labs(title = NULL)
-p_TA.TS <- p_TA.TS + theme(plot.title = element_blank())
+p_VPD_mk <- p_VPD_mk + labs(title = NULL)
+p_rh_mk <- p_rh_mk + labs(title = NULL)
+p_TA.TS <- p_TA.TS + theme(plot.title = element_blank(), legend.position = "none")
 
 
 # Extract the legend from one of your existing plots
@@ -4714,14 +4719,15 @@ seasonal_MeanMet_by_winteryr.MK <- grid.arrange(
 
 
 ```
+
 #trying to resize panels 
 ```{r}
 library(patchwork)
 
 # Remove titles
 p_SWC_nf <- p_SWC_nf + labs(title = NULL)
-p_VPD_mk <- p_VPD_lm + labs(title = NULL)
-p_rh_mk <- p_rh_lm + labs(title = NULL)
+p_VPD_mk <- p_VPD_mk + labs(title = NULL)
+p_rh_mk <- p_rh_mk + labs(title = NULL)
 p_TA.TS <- p_TA.TS + labs(title = NULL)
 
 # Remove legends from all (we'll add shared legend later)
@@ -4760,11 +4766,12 @@ print(final_plot)
 ```{r}
 library(patchwork)
 library(cowplot)
+library(ggpubr)
 
 # Remove legends from all plots
-p_TA_noleg <- p_TA.TS + labs(title = NULL) + theme(legend.position = "none")
-p_SWC_noleg <- p_SWC_nf + labs(title = NULL) + theme(legend.position = "none")
-p_VPD_noleg <- p_VPD_mk + labs(title = NULL) + theme(legend.position = "none")
+p_TA_noleg <- p_TA.TS + labs(title = NULL) + theme(legend.position = "none", axis.text.x = element_blank())
+p_SWC_noleg <- p_SWC_nf + labs(title = NULL) + theme(legend.position = "none", axis.text.x = element_blank())
+p_VPD_noleg <- p_VPD_mk + labs(title = NULL) + theme(legend.position = "none", axis.text.x = element_blank())
 p_rh_noleg <- p_rh_mk + labs(title = NULL) + theme(legend.position = "none")
 
 # Extract legend
@@ -4772,20 +4779,21 @@ legend <- get_legend(p_TA.TS +
                        scale_color_manual(values = winteryear_colors, name = "Year") +
                        theme(legend.position = "right"))
 
-# Combine plots in 2x2 grid
-combined <- (p_TA_noleg + p_SWC_noleg) / 
-            (p_VPD_noleg + p_rh_noleg) +
+# Combine plots in 2x2 grid  (use "=" for side by side, use "/" for stacking)
+combined <- (p_TA_noleg) / (p_SWC_noleg) / 
+            (p_VPD_noleg) / (p_rh_noleg) +
   plot_annotation(
     title = "Seasonal Means Time Series (2017-2022)",
     theme = theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
   )
 
 # Add legend
-final_plot <- wrap_plots(combined, as_ggplot(legend), 
-                         ncol = 2, 
-                         widths = c(10, 1))
+final_plot <- wrap_plots(combined, as_ggplot(legend),
+                         ncol = 2,
+                         widths = c(10, 2))
 
 print(final_plot)
+
 
 
 ```
@@ -4800,7 +4808,7 @@ print(final_plot)
 
 #MK
 ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_MeanMet_vars_by_winteryear_plot_reducedMK.png", final_plot, 
-        width = 15, height = 8, dpi = 600)
+        width = 12, height = 18, dpi = 600)
 ```
 
 
@@ -4808,7 +4816,7 @@ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper
 #Mann-Kendall timeseries analysis - streamlined function code from Claude with lm, mann-kendall, & spearman corr checks for cross-referencing and comparisons 
 
 
-####Correcting the kendall's rank corr to mann-kendall test for timeseries data 
+####Correcting the kendall's rank corr to mann-kendall test for timeseries data --streamlined by Claude
 
 ```{r}
 # Tests for significant trends in environmental variables by season (2017-2022)
@@ -5124,11 +5132,237 @@ write_xlsx(supp_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flu
 ```
 
 
+#annual budgets of all vars - timeseries 
+```{r}
+# Seasonal Trends Faceted by Season - All Variables
+
+library(ggplot2)
+library(dplyr)
+
+# Prepare seasonal summaries for all variables (2017-2022)
+annual_met <- df_avg %>%
+ # filter(winter_year >= 2017 & winter_year <= 2022) %>%
+group_by(winter_year) %>%
+  summarise(
+    # VPD
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    
+    # RH - relative humidity 
+    RH_mean = mean(RH, na.rm = TRUE),
+    RH_se = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    
+    # Sensible heat
+    H_mean = mean(H, na.rm = TRUE),
+    H_se = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    
+    # Latent heat
+    LE_mean = mean(LE, na.rm = TRUE),
+    LE_se = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    
+    # Ground heat
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    G_se = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    
+    
+    
+    .groups = 'drop'
+  )
+
+# Define consistent year colors
+winteryear_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+# Convert year to factor for consistent color mapping
+annual_met$winteryear_factor <- as.factor(annual_met$winter_year)
+
+
+annual_summary_met <- df_avg %>%
+  filter(winter_year %in% 2017:2022) %>%
+  group_by(winter_year) %>%
+  summarise(
+    TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    SWC_3_nf_mean = mean(SWC_3_nf, na.rm = TRUE),
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    RH_mean = mean(RH, na.rm = TRUE),
+    H_mean = mean(H, na.rm = TRUE),
+    LE_mean = mean(LE, na.rm = TRUE),
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+annual_summary_met
+
+
+#MK stats - loop coding help from claude 
+
+library(Kendall)
+library(trend)
+
+# List of variables to test
+vars <- c("TA_gapfilled_mean", "TS_3_gapfilled_mean", "SWC_3_nf_mean",
+          "VPD_mean", "RH_mean", "H_mean", "LE_mean", "G_mean")
+
+# Run Mann-Kendall and Sen's slope for each variable
+mk_results <- lapply(vars, function(v) {
+  x <- na.omit(annual_summary_met[[v]])
+  mk <- MannKendall(x)
+  ss <- sens.slope(x)
+  
+  data.frame(
+    variable   = v,
+    tau        = round(as.numeric(mk$tau), 3),
+    p_value    = round(as.numeric(mk$sl), 3),
+    sens_slope = round(as.numeric(ss$estimates), 3)
+  )
+})
+
+# Combine into one clean table
+mk_results_df <- do.call(rbind, mk_results)
+print(mk_results_df)
+
+#VPD and RH are sig 
+
+```
+
+#Save table 
+```{r}
+# Export to CSV
+# write.csv(supp_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/seasonal_met_trends_statisticscsv2", row.names = FALSE)
+
+write_xlsx(mk_results_df, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_annual_met_timeseries_statistics.xlsx")
+```
+
+#Figures
+
+#annual RH timeseries 
+```{r}
+# RH 
+annual_RH_stats<- ggplot(annual_met  %>%
+                    filter(winter_year != "2016", winter_year != "2023"),
+                    aes(x = winter_year, y = RH_mean, color = winteryear_factor)) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  geom_point(size = 2.5) +
+  geom_errorbar(aes(ymin = RH_mean - RH_se, 
+                    ymax = RH_mean + RH_se),
+                width = 0.2, linewidth = 0.8, color = "black") +
+  
+  # Add trend line
+  geom_smooth(method = "lm", se = TRUE, 
+              color = "black", linewidth = 0.8, alpha = 0.2) +
+  
+
+    scale_color_manual(
+    values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
+               "2020" = "#d62728", "2021" = "#9467bd", "2022" = "#8c564b"),
+    name = "Year"
+  ) +
+  
+  #scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(x = "Year", y = "RH (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(face = "bold", size = 12),
+    axis.text.y = element_text(face = "bold", size = 12),
+    legend.position = "none"
+  ) +
+  
+# annotate("text", x = 2021, y = 70,
+#          label = expression(atop("MK tau = -1.00",
+#                             atop("Sens slope = -6.32",
+#                                  "p = 0.01"))),
+#          size = 4.5)
+
+  annotate("text", x = 2021, y = 70,
+         label = "MK tau = -1.00\nSens slope = -6.32\np = 0.01",
+         size = 4.5, fontface = "bold")
+
+
+annual_RH_stats
+
+```
+#annual VPD timeseries 
+```{r}
+# VPD 
+annual_VPD_stats<- ggplot(annual_met  %>%
+                    filter(winter_year != "2016", winter_year != "2023"),
+                    aes(x = winter_year, y = VPD_mean, color = winteryear_factor)) +
+  geom_hline(yintercept = 0, color = "black", linewidth = 0.5) +
+  geom_point(size = 2.5) +
+  geom_errorbar(aes(ymin = VPD_mean - VPD_se, 
+                    ymax = VPD_mean + VPD_se),
+                width = 0.2, linewidth = 0.8, color = "black") +
+  
+  # Add trend line
+  geom_smooth(method = "lm", se = TRUE, 
+              color = "black", linewidth = 0.8, alpha = 0.2) +
+  
+
+    scale_color_manual(
+    values = c("2017" = "#1f77b4", "2018" = "#ff7f0e", "2019" = "#2ca02c", 
+               "2020" = "#d62728", "2021" = "#9467bd", "2022" = "#8c564b"),
+    name = "Year"
+  ) +
+  
+  #scale_x_continuous(breaks = 2017:2022) +
+  
+  labs(x = "Year", y = "VPD (%)") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(face = "bold", size = 12),
+    axis.text.y = element_text(face = "bold", size = 12),
+    legend.position = "none"
+  ) +
+  
+# annotate("text", x = 2021, y = 70,
+#          label = expression(atop("MK tau = -1.00",
+#                             atop("Sens slope = -6.32",
+#                                  "p = 0.01"))),
+#          size = 4.5)
+
+  annotate("text", x = 2018, y = 7,
+         label = "MK tau = 0.87\nSens slope = 0.89\np = 0.02",
+         size = 4.5, fontface = "bold")
+
+
+annual_VPD_stats
+```
+#combine
+
+```{r}
+library(patchwork)
+
+annual_RH_VPD_timeseries <- annual_RH_stats + annual_VPD_stats
+
+annual_RH_VPD_timeseries
+```
+
+
+
+
+#Save figure 
+```{r}
+
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/annual_RH_VPD_timeseries_stats.png", annual_RH_VPD_timeseries, 
+        width = 10, height = 5, dpi = 600) 
+```
 
 
 #Trying to automate visuals that use the appropriate test (linear reg for slope, R2, p or mann-kendall for tau, sens-slope, and mk p) - code from Claude 
 
-#this isn't the best diagnostic for this small dataset because n=6, so everything is coming up as normal/homogeneity of var when it may or may not be. Best to use non-parametric here but leaving this code becuase it's a good reference for automation of the residual plotting 
+#this isn't the best diagnostic for this small dataset because n=6, so everything is coming up as normal/homogeneity of var when it may or may not be. Best to use non-parametric here but leaving this code because it's a good reference for automation of the residual plotting 
 
 ```{r}
 # VISUALIZATION: Seasonal Trends Over Time (2017-2022)
@@ -5411,8 +5645,6 @@ cat("- Red lines = Linear regression (normal residuals)\n")
 cat("- Green lines = Sen's slope (non-normal residuals)\n")
 cat("- Statistics shown match the recommended test\n")
 ```
-
-
 
 
 
