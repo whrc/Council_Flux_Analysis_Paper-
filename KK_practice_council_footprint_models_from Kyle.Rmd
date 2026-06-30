@@ -140,6 +140,7 @@ tiles <- get_tiles(tower_buffer,
 plot(tiles)
 plot(st_geometry(tower_point), add = TRUE, col = "red", pch = 17, cex = 1)
 
+get_credit("Esri.WorldImagery") #for credit/citations
 
 ```
 #Save map image from MapTiles 
@@ -264,8 +265,11 @@ points(tower_lon, tower_lat, col = "red", pch = 17, cex = 2)
 plotRGB(image_1000m, main = "1000m radius")
 points(tower_lon, tower_lat, col = "red", pch = 17, cex = 2)
 par(mfrow = c(1, 1))
+```
+
 
 # Save your preferred version
+```{r}
 writeRaster(image_400m, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Footprint_site_satellite_georeferenced_400m.tif", overwrite = TRUE)
 ```
 
@@ -419,7 +423,9 @@ tower.area = crop(x = tower_area_utm,y = c(xmin,xmax,ymin,ymax))
 
 
 plotRGB(tower_area_utm)
+```
 
+```{r}
 # Save your preferred version
 writeRaster(tower_area_utm, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Council_Footprint_site_satellite_georeferenced_500mUTM.tif", overwrite = TRUE)
 
@@ -511,6 +517,7 @@ ggplot(data = percent.df)+
 sub_winter <- subset(df, season == "Winter")
 sub_fall <- subset(df, season == "Fall Senescence")
 sub_growing <- subset(df, season == "Growing Season")
+
 ```
 
 
@@ -888,7 +895,7 @@ df_cumulative <- df_latlon %>%
 summary(df_cumulative$cumsum_pct)  # Should go from ~0 to 100
 
 # ============================================================================
-# PLOT LIKE THE EXAMPLE
+# PLOT 
 # ============================================================================
 
 plot_cumulative <- ggplot() +
@@ -1134,22 +1141,24 @@ gs_final <- ggplot() +
   ggnewscale::new_scale_fill() +
   
   # Transparent filled background
-  geom_raster(data = df_cumulative,
-              aes(x = x, y = y, fill = z),
-              alpha = 0.5) + #transparency - closer to 0 = more transparent
-  
-  scale_fill_viridis_c(
-    name = "Per-Cell Contribution",
-    direction = -1,  # Reverse so yellow = high
-    limits = c(0, 100),  # Force range from 0-100
-    breaks = seq(10, 100, by = 10),  # 10, 20, 30, ..., 100
-    labels = seq(100, 10, by = -10),  # 100, 90, 80, ..., 10 (reversed)
-    guide = guide_colorbar(
-      barwidth = 1,
-      barheight = 10,
-      title.position = "top"
-    )
-  ) +
+  # geom_raster(data = df_cumulative,
+  #             aes(x = x, y = y, fill = z),
+  #             alpha = 0.5) + #transparency - closer to 0 = more transparent
+  # 
+  # scale_fill_viridis_c(
+  #   # name = "Per-Cell Contribution",
+  #   # direction = -1,  # Reverse so yellow = high
+  #   name = "Footprint",
+  #   direction = 1,  
+  #   limits = c(0, 100),  # Force range from 0-100
+  #   # breaks = seq(10, 100, by = 10),  # 10, 20, 30, ..., 100
+  #   # labels = seq(100, 10, by = -10),  # 100, 90, 80, ..., 10 (reversed)
+  #   guide = guide_colorbar(
+  #     barwidth = 1,
+  #     barheight = 10,
+  #     title.position = "top"
+  #   )
+  # ) +
   
   ggnewscale::new_scale_color() +
   
@@ -1169,18 +1178,25 @@ gs_final <- ggplot() +
   #     linewidth = 3,        # Thicker lines in legend
   #     alpha = 1             # Full opacity
   #   )
-  #   # keywidth = unit(2, "cm"),   # ← Wider legend keys
-  #   # keyheight = unit(0.8, "cm")  # ← Taller legend keys
+  #   # keywidth = unit(2, "cm"),   #  Wider legend keys
+  #   # keyheight = unit(0.8, "cm")  #  Taller legend keys
   # )) +
   # 
   
   #White contour lines for contribution area 30, 60, 90%
       geom_contour(data = df_cumulative,
-               aes(x = x, y = y, z = cumsum_pct),
+               aes(x = x, y = y, z = cumsum_pct, color = after_stat(level)),
                breaks = c(30, 60, 90),
-               color = "white",
-               linewidth = 0.5) +
+               #color = "white",
+               #color = "cumsum_pct",
+               linewidth = 1) +
 
+  scale_color_viridis_c(
+    name = "Contour\nLevel (%)",
+    direction = -1,
+   guide = "none"  # Hide since it's the same as fill
+  ) +
+  
   geom_point(aes(x = tower_lon, y = tower_lat),
              color = "red", size = 3, shape = 17) + #2 = open triangle 
   
@@ -1225,7 +1241,7 @@ gs_final <- ggplot() +
    text_size = 12,         # Text size (default is ~10)
     text_face = "bold",     # Bold text
     text_col = "black"),
-  location = "br",      # top-left (or "tr", "bl", "br")
+  location = "tr",      # top-left (or "tr", "bl", "br")
     which_north = "true", # or "grid"
     height = unit(1.5, "cm"),
     width = unit(1.5, "cm"),
@@ -1493,6 +1509,7 @@ plot4_winter <- ggplot() +
 
 print(plot4_winter)
 ```
+
 #80% contour with transparent fills and contour lines 
 ```{r}
 plot4_combo_winter <- ggplot() +
@@ -1538,6 +1555,8 @@ print(plot4_combo_winter)
 
 
 ```
+
+
 # Cumulative contribution 
 ```{r}
 library(terra)
@@ -1633,12 +1652,12 @@ print(plot_cumulative_winter)
 winter_final <- ggplot() +
   geom_spatraster_rgb(data = image_400m, maxcell = 5e5) +
   
-  ggnewscale::new_scale_fill() +
+  #ggnewscale::new_scale_fill() +
   
   # Transparent filled background
-  geom_raster(data = df_cumulative_winter,
-              aes(x = x, y = y, fill = z),
-              alpha = 0.5) + #transparency - closer to 0 = more transparent
+  # geom_raster(data = df_cumulative_winter,
+  #             aes(x = x, y = y, fill = z),
+  #             alpha = 0.5) + #transparency - closer to 0 = more transparent
   
 
   #vertical scale for individual figure use 
@@ -1656,53 +1675,60 @@ winter_final <- ggplot() +
   # ) +
   
   #horizontal scale for combined figure use 
-    scale_fill_viridis_c(
-  name = "Per-Cell Contribution",
-  direction = -1,
-  limits = c(0, 100),
-  breaks = seq(0, 100, by = 10),
-  labels = seq(100, 0, by = -10),
-  oob = scales::squish, #squishes scale to set limits above; so color bar doesn't exceed 100%
- # expand = c(0, 0), #try to constrict the scale going beyond 100%
-  guide = guide_colorbar(
-    barwidth = unit(9, "cm"),    # WIDE 
-    barheight = unit(0.3, "cm"),  # SHORT 
-    title.position = "top",
-    title.hjust = 0.5,
-    frame.colour = "black",        # Optional: add border to see exact ends
-    ticks.colour = "black"         # Optional: add tick marks
-  )
-) +
+#     scale_fill_viridis_c(
+#   name = "Footprint",
+#   direction = 1,
+#   limits = c(0, 100),
+#    breaks = seq(0, 100, by = 10),
+#    # labels = seq(100, 0, by = -10),
+#   oob = scales::squish, #squishes scale to set limits above; so color bar doesn't exceed 100%
+#  expand = c(0, 0), #try to constrict the scale going beyond 100%
+#   guide = guide_colorbar(
+#     barwidth = unit(9, "cm"),    # WIDE
+#     barheight = unit(0.3, "cm"),  # SHORT
+#     title.position = "top",
+#     title.hjust = 0.5,
+#     frame.colour = "black",        # Optional: add border to see exact ends
+#     ticks.colour = "black"         # Optional: add tick marks
+#   )
+# ) +
   
-  ggnewscale::new_scale_color() +
+  #ggnewscale::new_scale_color() +
   
-  #   geom_contour(data = df_cumulative_winter,
-  #    aes(x = x, y = y, z = cumsum_pct, color = factor(after_stat(level))), #uses % cumulative and makes the % contribution breaks chosen a factor so you can use discrete scale 
-  #             breaks = c(30, 60, 90),  # cumulative
-  #             linewidth = 1) +
-  # 
-  # scale_color_viridis_d(  #d for discrete
-  #     direction = -1, #reverse colors 
-  #     name = "% Contribution Contours",
-  #      # breaks = c(30, 60, 90),   # Show only these in legend
-  # labels = c("30%", "60%", "90%"),  # Label them
-  # #guide = "none"  # Hide this legend
-  #   guide = guide_legend(
-  #     override.aes = list(
-  #     linewidth = 3,        # Thicker lines in legend
-  #     alpha = 1             # Full opacity
-  #   )
-    # keywidth = unit(2, "cm"),   # ← Wider legend keys
-    # keyheight = unit(0.8, "cm")  # ← Taller legend keys
-  # )) +
+    geom_contour(data = df_cumulative_winter,
+     aes(x = x, y = y, z = cumsum_pct, color = factor(after_stat(level))), #uses % cumulative and makes the % contribution breaks chosen a factor so you can use discrete scale
+              breaks = c(90, 60, 30),  # cumulative
+              linewidth = 1) +
+
+  scale_color_viridis_d(  #d for discrete
+      direction = -1, #reverse colors
+      # name = "% Contribution Contours",
+      name = "Footprint",
+       # breaks = c(30, 60, 90),   # Show only these in legend
+  labels = c("90%", "60%", "30%"),  # Label them
+  #guide = "none"  # Hide this legend
+    guide = guide_legend(
+      override.aes = list(
+      linewidth = 3,        # Thicker lines in legend
+      alpha = 1),             # Full opacity
+    
+  keywidth = unit(2, "cm"),   # ← Wider legend keys
+  keyheight = unit(0.8, "cm")  # ← Taller legend keys
+  )) +
   
   
   #white contour lines for contribution area 30, 60, 90%
-    geom_contour(data = df_cumulative_winter,
-               aes(x = x, y = y, z = cumsum_pct),
-               breaks = c(30, 60, 90),
-               color = "white",
-               linewidth = 0.5) +
+  #   geom_contour(data = df_cumulative_winter,
+  #              aes(x = x, y = y, z = cumsum_pct, color = after_stat(level)),
+  #              breaks = c(30, 60, 90),
+  #              #color = "white",
+  #              linewidth = 0.5) +
+  # 
+  # scale_color_viridis_c(
+  #   name = "Contour\nLevel (%)",
+  #   direction = -1,
+  #   #guide = "none"  # Hide since it's the same as fill
+  # ) +
   
   geom_point(aes(x = tower_lon, y = tower_lat),
              color = "red", size = 3, shape = 17) + #2 = open triangle 
@@ -1737,7 +1763,7 @@ winter_final <- ggplot() +
     text_col = "black",
     line_col = "black",       #line color if you chose ticks 
       # Positioning
-   pad_x = unit(0.5, "cm"),  # Distance from left edge
+   pad_x = unit(0.5, "cm")  # Distance from left edge
   # pad_y = unit(0.5, "cm")   # Distance from bottom edge
   ) +
   
@@ -1748,11 +1774,11 @@ winter_final <- ggplot() +
    text_size = 12,         # Text size (default is ~10)
     text_face = "bold",     # Bold text
     text_col = "black"),
-  location = "br",      # top-left (or "tr", "bl", "br")
+  location = "tr",      # top-left (or "tr", "bl", "br")
     which_north = "true", # or "grid"
     height = unit(1.5, "cm"),
     width = unit(1.5, "cm"),
-   text_cex = 0.9, #text size 
+   text_cex = 0.9 #text size 
    # Positioning
    #pad_x = unit(0.1, "cm"),  # Distance from edge
   # pad_y = unit(0.5, "cm")   # Distance from bottom edge
@@ -1823,10 +1849,10 @@ winter_final3 <- ggplot() +
   ggnewscale::new_scale_fill() +
   
   # Replace geom_raster with geom_contour_filled
-  geom_contour_filled(data = df_cumulative_winter,
-                     aes(x = x, y = y, z = z),
-                     alpha = 0.5,
-                     breaks = seq(0, 100, by = 10)) +  # ← Control bins manually here
+  # geom_contour_filled(data = df_cumulative_winter,
+  #                    aes(x = x, y = y, z = z),
+  #                    alpha = 0.5,
+  #                    breaks = seq(0, 100, by = 10)) +  # ← Control bins manually here
   
   scale_fill_viridis_d(  # ← Must be _d for contour_filled
     name = "Per-Cell Contribution",
@@ -1966,7 +1992,7 @@ ggplot(data = percent.df_fall)+
 
 
 
-#transform the coordinates to raster files - winter
+#transform the coordinates to raster files - fall
 ```{r}
 #check the coord ref system of your image and the fp dataframe and make sure they match* 
 
@@ -2258,24 +2284,25 @@ fall_final <- ggplot() +
   ggnewscale::new_scale_fill() +
   
   # Transparent filled background
-  geom_raster(data = df_cumulative_fall,
-              aes(x = x, y = y, fill = z),
-              alpha = 0.5) + #transparency - closer to 0 = more transparent
-  
-  scale_fill_viridis_c(
-    name = "Per-Cell Contribution",
-    direction = -1,  # Reverse so yellow = high
-    limits = c(0, 100),  # Force range from 0-100
-    breaks = seq(10, 100, by = 10),  # 10, 20, 30, ..., 100
-    labels = seq(100, 10, by = -10),  # 100, 90, 80, ..., 10 (reversed)
-    guide = guide_colorbar(
-      barwidth = 1,
-      barheight = 10,
-      title.position = "top"
-    )
-  ) +
-  
-  ggnewscale::new_scale_color() +
+  # geom_raster(data = df_cumulative_fall,
+  #             aes(x = x, y = y, fill = z),
+  #             alpha = 0.5) + #transparency - closer to 0 = more transparent
+  # 
+  # scale_fill_viridis_c(
+  #   name = "Footprint",
+  #   #direction = -1,  # Reverse so yellow = high
+  #   direction = 1, 
+  #   limits = c(0, 100),  # Force range from 0-100
+  #   breaks = seq(10, 100, by = 10),  # 10, 20, 30, ..., 100
+  #   #labels = seq(100, 10, by = -10),  # 100, 90, 80, ..., 10 (reversed)
+  #   guide = guide_colorbar(
+  #     barwidth = 1,
+  #     barheight = 10,
+  #     title.position = "top"
+  #   )
+  # ) +
+  # 
+  # ggnewscale::new_scale_color() +
   
 #Contour lines 
   
@@ -2303,10 +2330,16 @@ fall_final <- ggplot() +
   #White contour lines 
    # White cumulative contour lines (like the journal)
   geom_contour(data = df_cumulative_fall,
-               aes(x = x, y = y, z = cumsum_pct),
+               aes(x = x, y = y, z = cumsum_pct, color = after_stat(level)),
                breaks = c(30, 60, 90),
-               color = "white",
-               linewidth = 0.5) +
+               #color = "white",
+               linewidth = 1) +
+  
+  scale_color_viridis_c(
+    name = "Contour\nLevel (%)",
+    direction = -1,
+    guide = "none"  # Hide since it's the same as fill
+  ) +
   
   # Manual text labels on the contours for 30, 60, 90%
   # annotate("text", x = tower_lon - 0.0008, y = tower_lat + 0.0005,
@@ -2361,7 +2394,7 @@ fall_final <- ggplot() +
    text_size = 12,         # Text size (default is ~10)
     text_face = "bold",     # Bold text
     text_col = "black"),
-  location = "br",      # top-left (or "tr", "bl", "br")
+  location = "tr",      # top-left (or "tr", "bl", "br")
     which_north = "true", # or "grid"
     height = unit(1.5, "cm"),
     width = unit(1.5, "cm"),
@@ -2542,15 +2575,51 @@ final_combined <- plot_grid(
 
 print(final_combined)
 
+# See how many components there are
+length(legend)
+
+# Plot each one to see which is which
+ggdraw(legend[[1]])
+ggdraw(legend[[2]])
 
 
 ```
+```{r}
+library(patchwork)
+
+# Remove legends from growing season and fall
+gs_noleg <- gs_final + theme(legend.position = "none")
+fall_noleg <- fall_final + theme(legend.position = "none")
+
+# Keep legend on winter, set to bottom
+winter_leg <- winter_final + theme(
+  legend.position = "bottom",
+  legend.direction = "horizontal",
+  legend.box = "horizontal"
+)
+
+# Combine with patchwork
+final_combined <- (gs_noleg | fall_noleg | winter_leg) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.box = "horizontal")
+
+print(final_combined)
+```
+
+
+
 #Save 
 
 ```{r}
-ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/footprint_combined_seasonal.png", final_combined, 
-        width = 8, height = 4.3, dpi = 600)
+#With footprint contour shading 
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/footprint_combined_seasonal_footprintarea.png", final_combined, 
+#         width = 8, height = 4.3, dpi = 600)
 
+#Without contour shading, only contour lines 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/footprint_combined_seasonal_footprintarea2.png", final_combined, 
+        width = 8, height = 4.3, dpi = 600)
 ```
 
 
@@ -2582,6 +2651,505 @@ print(final_combined)
 ```
 
 
+#ALL - footprint - total average 
+
+
+```{r}
+library(FREddyPro)
+
+fp_all = Average(#fetch = 250,         #can add a custom fetch or leave blank  - takes avg of entire dataset, can take footprint to hour or an avg you determine 
+             height = 2.650,         #height of tower / measurement height 
+             grid = 100,           #size of grid cells in footprint (resolution) (100 x 100)
+             speed = df$WS,        #wind speed
+             direction = df$WD,    #wind direction
+             uStar = df$USTAR,     #ustar
+             zol = df$ZL,          #monin okubov length  (air upward movement with temp )
+             sigmaV = df$V_SIGMA)  #standard deviation of V wind direction
+
+#see materials on diff models kyle sent - flat sfc without big landscape differences used here but there are other model types 
+
+#calculate set percentage of footprint - freddypro package * 
+#calculates the area contributing 80% of measured flux; 80% contour line 
+percent.fp_all = calculatePercentFootprint(ftp = fp_all,percent = 80)  
+
+#prob flux came from any spot in that grid - meters - fig below shows where most fluxes come from, mot within the 280 m range around the tower 
+
+#create dataframes of footprint points - export from list to x and y points (matrices of exact locations and probability values)  -- the x and y are the conical coords the veg map is in to allow for plotting over the veg map 
+
+
+fpdf_all = exportFootprintPoints(ftp = fp_all,xcoord = spatial.tower@coords[1] ,ycoord = spatial.tower@coords[2] )
+
+percent.df_all = exportFootprintPoints(ftp = percent.fp_all,xcoord = spatial.tower@coords[1], ycoord = spatial.tower@coords[2])
+
+#Shows probability of fluxes coming from a larger region; purple = basically outside of the 80% footprint 
+ggplot(data = fpdf_all)+
+  geom_raster(aes(x,y,fill = z*100))+ #z*100 converts probability to percentage 
+  scale_fill_viridis_c()+ #purple = very low probability, yellow = high probability 
+  theme(legend.position = "bottom")
+
+#Shows the 80% footprint, 
+ggplot(data = percent.df_all)+
+  geom_raster(aes(x,y,fill = z),interpolate = T)+ #interpolate = T smooths out 
+  scale_fill_viridis_c(na.value = "transparent",direction = -1)+ #reverses colors but this shows that purple = outside edge of 80% footprint probability -- contribution boundary at 80% and represents the "effective fetch" (important for relating landscape features to fluxes*)
+  theme(legend.position = "bottom")
+
+
+ sum(fpdf_all$z) #--> double check probability (z) amounts to ~1
+
+
+```
+
+
+
+#transform the coordinates to raster files - all 
+```{r}
+#check the coord ref system of your image and the fp dataframe and make sure they match* 
+
+#check st coord ref system --> lat/long from MapTiles 
+print(st)
+
+#print coord ref system from the % footprint dataframe --> in UTM, so need to convert to make them the same
+print(head(percent.df_all))
+
+# Use UTM CRS (because percent.df_all has UTM coordinates):
+utm_crs <- CRS("+init=epsg:32603")
+r_all = rasterFromXYZ(xyz = percent.df_all, crs = utm_crs) 
+
+#r = rasterFromXYZ(xyz = percent.df_all,crs = st) #converts footprint dataframe to raster obj, uses coord ref system from "st" which references the spatial tower image 
+#r2 = projectRaster(from = r,crs = st) #assigns coord reference system (from image) -- **MAKE SURE it's in the coord system you want. For Maptiles, crs is in lat/long already, not UTM
+
+r2_all = projectRaster(from = r_all,crs = utm_crs) 
+
+df2_all = as.data.frame(r2_all,xy=T)
+
+print(crs(r_all))
+print(crs(r2_all))
+
+# Now check:
+print(crs(r_all))
+print(extent(r_all))
+
+
+```
+
+
+
+
+#get satellite imagery for plotting
+
+```{r}
+# Check CRS
+print(crs(image_400m)) #already lat/long
+print(crs(tower_area_utm)) #UTM
+
+rll_all = projectRaster(from = r_all,crs = latlon) #change % to lat/long so you can see the majority of the footprint over sat imagery
+
+#check 
+ print(crs(rll_all)) #lat/long
+ print(extent(rll_all)) #lat/long
+ 
+df_latlon_all <- as.data.frame(rll_all, xy = TRUE)
+ head(df_latlon_all)
+summary(df_latlon_all$x)  # Should be around -163.7
+summary(df_latlon_all$y)  # Should be around 64.86
+#check plot is in lat/long 
+names(df_latlon_all) #x, y, z where z is probability 
+plot(rll_all, main = "Footprint in Lat/Lon")
+
+```
+
+#Plots - all
+```{r}
+library(terra)
+library(tidyterra)
+library(ggplot2)
+library(ggnewscale)
+
+#Footprint over satellite image (ggmap equivalent)
+
+plot1_all <- ggplot() +
+  # Satellite basemap (replaces ggmap
+  geom_spatraster_rgb(data = image_400m, maxcell = 5e5) + #maxcell = parameter controlling how many raster cells to display; 5e5 = 5000,000 raster cells 
+  
+  # Footprint overlay (replaces layer_spatial(rll))
+  geom_raster(data = df_latlon_all,
+              aes(x = x, y = y, fill = z),  # Use "layer" column
+              alpha = 0.6) +
+  
+  scale_fill_viridis_c(
+    name = "Footprint",
+    na.value = 'transparent'
+  ) +
+  
+  # Add tower location
+  geom_point(aes(x = tower_lon, y = tower_lat),
+             color = "red", size = 4, shape = 17) +
+  
+  coord_sf() +
+  labs(
+    title = "Avg all Footprint",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  theme_minimal()
+
+print(plot1_all)
+
+
+# ============================================================================
+
+# PLOT 2: Image + footprint raster (new_scale_fill version)
+
+
+plot2_all <- ggplot() +
+  # Satellite image (replaces layer_spatial(tower.area))
+  geom_spatraster_rgb(data = image_400m, maxcell = 5e5) +
+  
+  # New fill scale for footprint
+  ggnewscale::new_scale_fill() +
+  
+  # Footprint (replaces geom_raster with percent.df)
+  geom_raster(data = df_latlon_all,
+              aes(x = x, y = y, fill = z)) +
+  
+  scale_fill_viridis_c(
+    name = "Probability",
+    na.value = 'transparent'
+  ) +
+  
+  coord_sf() +
+  labs(title = "Footprint with Two Fill Scales") +
+  theme_minimal()
+
+print(plot2_all)
+
+
+# ============================================================================
+# PLOT 3: Image + footprint contour lines
+# ============================================================================
+
+plot3_all <- ggplot() +
+  # Satellite image
+  geom_spatraster_rgb(data = image_400m, maxcell = 5e5) +
+  
+  # New color scale for contours
+  ggnewscale::new_scale_color() +
+  
+  # Contour lines (replaces geom_contour with percent.df)
+  geom_contour(data = df_latlon_all,
+               aes(x = x, y = y, z = z, color = after_stat(level)),
+               bins = 10,  # Adjust number of contour lines
+               linewidth = 1) +
+  
+  scale_color_viridis_c(
+    name = "Contour Level",
+    na.value = 'transparent'
+  ) +
+  
+  # Tower
+  geom_point(aes(x = tower_lon, y = tower_lat),
+             color = "red", size = 4, shape = 17) +
+  
+  coord_sf() +
+  labs(title = "Footprint Contours") +
+  theme_minimal()
+
+print(plot3_all)
+
+
+
+```
+
+#80% contour
+```{r}
+# Create raster from 80% contour
+r_80_all <- rasterFromXYZ(xyz = percent.df_all, crs = utm_crs)
+
+# Project to lat/lon
+rll_80_all <- projectRaster(from = r_80_all, crs = latlon)
+
+# Convert to data frame
+df_80_latlon_all <- as.data.frame(rll_80_all, xy = TRUE)
+
+# Plot just the 80% boundary as a line
+plot4_all <- ggplot() +
+  geom_spatraster_rgb(data = image_400m, maxcell = 5e5) +
+  
+  # 80% contour as path/line
+  # geom_path(data = df_80_latlon %>% filter(!is.na(z)),
+  #           aes(x = x, y = y),
+  #           color = "yellow", linewidth = 2) +
+  
+  # Or as filled contour
+  geom_contour_filled(data = df_80_latlon_all,
+                     aes(x = x, y = y, z = z)) +
+  
+  geom_point(aes(x = tower_lon, y = tower_lat),
+             color = "red", size = 4, shape = 17) +
+  
+  coord_sf() +
+  labs(title = "80% Footprint Contour") +
+  theme_minimal()
+
+print(plot4_all)
+
+
+```
+
+# Cumulative contribution 
+```{r}
+library(terra)
+library(tidyverse)
+library(tidyterra)
+library(ggnewscale)
+
+# ============================================================================
+# CALCULATE CUMULATIVE CONTRIBUTION CONTOURS
+# ============================================================================
+
+# Start with your full footprint data (not the 80% subset)
+
+# Calculate cumulative contribution
+df_cumulative_all <- df_latlon_all %>%
+  filter(!is.na(z)) %>%
+  arrange(desc(z)) %>%  # Sort by highest contribution first
+  mutate(
+    cumsum_raw = cumsum(z),
+    cumsum_pct = (cumsum_raw / sum(z)) * 100  # Cumulative percentage
+  ) %>%
+  arrange(x, y)  # Re-sort for plotting
+
+# Check
+summary(df_cumulative_all$cumsum_pct)  # Should go from ~0 to 100
+
+# ============================================================================
+# PLOT LIKE THE EXAMPLE
+# ============================================================================
+
+plot_cumulative_all <- ggplot() +
+  # Satellite basemap
+  geom_spatraster_rgb(data = image_400m, maxcell = 5e5) +
+  
+  ggnewscale::new_scale_fill() +
+  
+  # Color gradient showing per-cell contribution (semi-transparent)
+  geom_raster(data = df_cumulative_all,
+              aes(x = x, y = y, fill = z),
+              alpha = 0.5) +
+  scale_fill_viridis_c(
+    name = "% Contribution",
+    labels = scales::percent_format(scale = 1) #,
+    #guide = "none"  # Hide this legend if you want
+  ) +
+  
+  # WHITE CONTOUR LINES showing cumulative contribution
+  geom_contour(data = df_cumulative_all,
+               aes(x = x, y = y, z = cumsum_pct),
+               breaks = c(30, 60, 90),  # cumulative
+               #color = "white",
+               linewidth = 0.5) +
+  
+  # # Add labels to contours
+  # geom_text_contour(data = df_cumulative,
+  #                   aes(x = x, y = y, z = cumsum_pct),
+  #                  # breaks = c(50, 70, 90),
+  #                   breaks = c(10, 20, 30, 40, 50, 60, 70, 80, 90), 
+  #                   color = "white",
+  #                   size = 4,
+  #                   stroke = 0.2) +
+  
+  # Tower point
+  geom_point(aes(x = tower_lon, y = tower_lat),
+             color = "red", size = 4, shape = 17) +
+  
+  # Scale bar
+  annotation_scale(location = "bl", width_hint = 0.2) +
+  
+  # North arrow
+  # annotation_north_arrow(location = "tl", 
+  #                       style = north_arrow_fancy_orienteering) +
+  
+  coord_sf() +
+  labs(title = "Council EC Footprint - Cumulative Contribution") +
+  theme_minimal() +
+  theme(
+    plot.background = element_rect(fill = "white"),
+    panel.background = element_rect(fill = "white")
+  )
+
+print(plot_cumulative_all)
+
+
+```
+
+#Final ALL fig 
+
+```{r}
+#fill color by per-cell contribution; contour lines by % contribution 
+
+all_final <- ggplot() +
+  geom_spatraster_rgb(data = image_400m, maxcell = 5e5) +
+  
+  # ggnewscale::new_scale_fill() +
+  
+  # Transparent filled background
+  # geom_raster(data = df_cumulative_all,
+  #             aes(x = x, y = y, fill = z),
+  #             alpha = 0.5) + #transparency - closer to 0 = more transparent
+  
+  # scale_fill_viridis_c(
+  #   name = "Footprint",
+  #   #direction = -1,  # Reverse so yellow = high
+  #   direction = 1, 
+  #   limits = c(0, 100),  # Force range from 0-100
+  #   breaks = seq(10, 100, by = 10),  # 10, 20, 30, ..., 100
+  #   #labels = seq(100, 10, by = -10),  # 100, 90, 80, ..., 10 (reversed)
+  #   guide = guide_colorbar(
+  #     barwidth = 1,
+  #     barheight = 10,
+  #     title.position = "top"
+  #   )
+  # ) +
+  
+  ggnewscale::new_scale_color() +
+  
+#Contour lines 
+  
+  #   geom_contour(data = df_cumulative_all,
+  #    aes(x = x, y = y, z = cumsum_pct, color = factor(after_stat(level))), #uses % cumulative and makes the % contribution breaks chosen a factor so you can use discrete scale 
+  #             breaks = c(30, 60, 90),  # cumulative
+  #             linewidth = 1) +
+  # 
+  # scale_color_viridis_d(  #d for discrete
+  #    # direction = -1, #reverse colors 
+  #     name = "% Contribution Contours",
+  #      # breaks = c(30, 60, 90),   # Show only these in legend
+  # labels = c("30%", "60%", "90%"),  # Label them
+  # #guide = "none"  # Hide this legend
+  #   guide = guide_legend(
+  #     override.aes = list(
+  #     linewidth = 3,        # Thicker lines in legend
+  #     alpha = 1             # Full opacity
+  #   )
+  #   # keywidth = unit(2, "cm"),   # ← Wider legend keys
+  #   # keyheight = unit(0.8, "cm")  # ← Taller legend keys
+  # )) +
+  
+  
+  #White contour lines 
+
+  # geom_contour(data = df_cumulative_all,
+  #              aes(x = x, y = y, z = cumsum_pct, color = after_stat(level)),
+  #              breaks = c(30, 60, 90),
+  #              #color = "white",
+  #              linewidth = 1) +
+  # 
+  # scale_color_viridis_c(
+  #   #name = "Contour\nLevel (%)",
+  #   name = "Footprint",
+  #   direction = -1 #,
+  #   #guide = "none"  # Hide since it's the same as fill
+  # ) +
+    # Manual text labels on the contours for 30, 60, 90%
+  # annotate("text", x = tower_lon - 0.0008, y = tower_lat + 0.0005,
+  #          label = "30%", color = "white", fontface = "bold", size = 3) +
+  # annotate("text", x = tower_lon - 0.0015, y = tower_lat + 0.001,
+  #          label = "60%", color = "white", fontface = "bold", size = 3) +
+  # annotate("text", x = tower_lon - 0.0025, y = tower_lat + 0.0018,
+  #          label = "90%", color = "white", fontface = "bold", size = 3) +
+  
+  geom_contour(data = df_cumulative_all,
+               aes(x = x, y = y, z = cumsum_pct, color = factor(after_stat(level))),
+               breaks = c(30, 60, 90),
+               linewidth = 1) +
+  
+  scale_color_viridis_d(
+    direction = -1,
+    name = "Footprint",
+    labels = c("90%", "60%", "30%"),
+    guide = guide_legend(
+      override.aes = list(
+        linewidth = 3,
+        alpha = 1
+      )
+    )
+  ) +
+  
+
+  
+  
+  geom_point(aes(x = tower_lon, y = tower_lat),
+             color = "red", size = 3, shape = 17) + #2 = open triangle 
+  
+  #coord_sf() +  #positions things around the figure on the outside border; padding around image
+  coord_sf(expand = FALSE) +  # Remove padding around plot, places scale bar and compass within fig
+ # labs(title = "Mean EC Footprint - all") +
+  labs(title = "Mean Footprint for Study Period") +
+  theme_minimal() +
+  theme(   #removes the gridlines behind the image 
+      panel.grid = element_blank(),
+  panel.background = element_blank(),
+  # axis.title.x = element_blank(),  # Remove "x" label
+  # axis.title.y = element_blank()   # Remove "y" label
+   axis.title = element_blank(),  #Removes both "x" and "y" labels at once 
+  axis.text = element_blank(),  #removes both axis tick labels 
+  plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+  legend.title = element_text(face = "bold", size = 14),
+  legend.text = element_text(face = "bold", size = 12)
+  ) +
+  
+#Add scale bar 
+# Scale bar
+  annotation_scale(
+    location = "bl",      # bottom-left (or "br", "tl", "tr")
+    width_hint = 0.2,     # Width as fraction or % of plot
+    style = "ticks",        # ticks or bar (black and white bars)
+    line_width = 3,       #thicker tick marks and line
+    height = unit(0.15, "cm"), #bar height 
+    text_cex = 1, #text size 
+    text_face = "bold", #bold
+    text_col = "black",
+    line_col = "black",       #line color if you chose ticks 
+      # Positioning
+   pad_x = unit(0.5, "cm"),  # Distance from left edge
+  # pad_y = unit(0.5, "cm")   # Distance from bottom edge
+  ) +
+  
+# Add North arrow
+  annotation_north_arrow(
+  style = north_arrow_fancy_orienteering(fill = c("black", "black"), # Style option (see below)
+  line_col = "black",
+   text_size = 12,         # Text size (default is ~10)
+    text_face = "bold",     # Bold text
+    text_col = "black"),
+  location = "br",      # top-left (or "tr", "bl", "br")
+    which_north = "true", # or "grid"
+    height = unit(1.5, "cm"),
+    width = unit(1.5, "cm"),
+   text_cex = 0.9, #text size 
+   # Positioning
+   #pad_x = unit(0.1, "cm"),  # Distance from edge
+  # pad_y = unit(0.5, "cm")   # Distance from bottom edge
+ 
+  ) 
+
+print(all_final)
+
+
+```
+
+#Save 
+
+```{r}
+#with footprint shading 
+# ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/footprint_mean_total_footprintarea.png", all_final, 
+#         width = 8, height = 4.3, dpi = 600)
+
+#no shading, only contour lines 
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/footprint_mean_total_footprintarea2.png", all_final, 
+        width = 8, height = 4.3, dpi = 600)
+
+```
 
 
 
@@ -3046,6 +3614,22 @@ print(plot3_nov2019.2)
 
 
 
+
+
+```
+
+#Identify high methane dates to check outside of Nov2019
+
+
+```{r}
+df_highCH4 <- df_avg %>%
+    filter(TS_3_gapfilled < 0.5 ) 
+
+df_highCH4$FCH4_umol <- df_highCH4$FCH4/1000
+
+
+df_highCH4_dates <- df_highCH4 %>%
+    filter(FCH4_umol > 0.01 ) 
 
 
 ```
