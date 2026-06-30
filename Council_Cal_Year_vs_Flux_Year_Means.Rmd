@@ -1,0 +1,846 @@
+---
+title: "Council_Cal_Year_vs_Flux_Year_means" #Calendar year budgets & means; "Flux Year" (winter year) budgets and means 
+output: html_document
+date: "2026-05-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+library(dplyr)
+
+#install.packages("writexl")
+library(writexl)
+
+
+Sys.setenv(TZ='UTC')
+```
+
+# Set working directory and then Load data
+
+
+```{r}
+#with gapfilled soil and air temp columns; SWC 3
+# #half-hourly, gf (corrected seasons, Nov'25)
+df = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023_for analysis.2.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+#daily avg dataframe --> gapfilled - updated seasons Nov 2025; added winter year Dec 2025
+df_avg = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.5.csv',na.strings = c('-9999','NA','NaN','NAN','-7999'))
+
+
+```
+
+
+#====Calendar Year=======================
+
+#Table: seasonal and annual total C budget & met variable tables 
+```{r}
+# Load necessary packages
+library(dplyr)
+library(lubridate)
+
+#Annual and seasonal summaries with SE 
+
+#no SE for CO2 and CH4 fluxes as these are sums **** then we calc averages with SE for the met variables 
+
+# Annual summaries with standard errors
+# Annual summaries with total C budget
+annual_budgets <- df_avg %>%
+  group_by(year = year(date)) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+    mean_TS_ERA5 = mean(TS_ERA5, na.rm = TRUE),
+    se_TS_ERA5 = sd(TS_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TS_ERA5))),
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+    mean_TA_ERA5 = mean(TA_ERA5, na.rm = TRUE),
+    se_TA_ERA5 = sd(TA_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TA_ERA5))),
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+   se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled))))
+      )
+
+print(annual_budgets)
+
+# Seasonal summaries with total C budget
+seasonal_budgets <- df_avg %>%
+  group_by(year = year(date), season) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+    mean_TS_ERA5 = mean(TS_ERA5, na.rm = TRUE),
+    se_TS_ERA5 = sd(TS_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TS_ERA5))),
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+    mean_TA_ERA5 = mean(TA_ERA5, na.rm = TRUE),
+    se_TA_ERA5 = sd(TA_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TA_ERA5))),
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+    se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled)))),
+    days = n()
+  )
+
+
+print(seasonal_budgets)
+
+
+```
+# cal year seasonal pub table 
+```{r}
+# Create a new table with combined mean ± SE format
+cal_seasonal_budgets_formatted <- seasonal_budgets %>%
+  mutate(
+    soil_temp = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    soil_moisture = sprintf("%.2f ± %.2f", mean_soil_moisture, se_soil_moisture),
+    air_temp = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    TS_ERA5 = sprintf("%.2f ± %.2f", mean_TS_ERA5, se_TS_ERA5),
+    TA_ERA5 = sprintf("%.2f ± %.2f", mean_TA_ERA5, se_TA_ERA5),
+    TA_GF = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    TS3_GF = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+  ) %>%
+  dplyr::select(year, season, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5, TA_GF, TS3_GF, days)
+
+cal_seasonal_budgets_formatted
+```
+#save table 
+```{r}
+# Save to Excel
+write_xlsx(cal_seasonal_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/cal_yr_seasonal_budgets_formatted.xlsx")
+```
+
+#cal year annual pub table 
+```{r}
+#Annual budgets 
+# Create a new table with combined mean ± SE format
+cal_annual_budgets_formatted <- annual_budgets %>%
+  mutate(
+    soil_temp = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    soil_moisture = sprintf("%.2f ± %.2f", mean_soil_moisture, se_soil_moisture),
+    air_temp = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    TS_ERA5 = sprintf("%.2f ± %.2f", mean_TS_ERA5, se_TS_ERA5),
+    TA_ERA5 = sprintf("%.2f ± %.2f", mean_TA_ERA5, se_TA_ERA5),
+    TA_GF = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    TS3_GF = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+  ) %>%
+  dplyr::select(year, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5, TA_GF, TS3_GF)
+
+cal_annual_budgets_formatted
+```
+
+```{r}
+# Save to Excel
+write_xlsx(annual_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/cal_yr_annual_budgets_formatted2.xlsx")
+
+```
+
+# % gapfilled vs observed for TS3 and TA
+
+```{r}
+# Calculate percentages for Air Temperature (TA)
+#HH - year, season 
+TA_summaryHH <- df %>%
+   filter( year != 2023) %>%
+  group_by(year, season) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TA_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TA_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TA_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Air_Temperature")
+
+#daily avg - year, season
+TA_summary <- df_avg %>%
+   filter( year != 2023) %>%
+  group_by(year, season) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TA_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TA_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TA_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Air_Temperature")
+TA_summary
+
+#HH - year only 
+TA_summaryHH_annual <- df %>%
+   filter( year != 2023) %>%
+  group_by(year) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TA_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TA_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TA_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Air_Temperature")
+
+#daily avg - year only
+TA_summary_annual <- df_avg %>%
+   filter( year != 2023) %>%
+  group_by(year) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TA_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TA_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TA_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Air_Temperature")
+
+
+# Calculate percentages for Soil Temperature (TS_3_1_1)
+
+#HH - year, season 
+TS_summaryHH <- df %>%
+  filter( year != 2023) %>%
+  group_by(year, season) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TS_3_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TS_3_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TS_3_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Soil_Temperature")
+
+
+#daily avg - year, season 
+TS_summary <- df_avg %>%
+   filter( year != 2023) %>%
+  group_by(year, season ) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TS_3_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TS_3_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TS_3_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Soil_Temperature")
+
+#HH - year only 
+TS_summaryHH_annual <- df %>%
+  filter( year != 2023) %>%
+  group_by(year) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TS_3_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TS_3_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TS_3_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Soil_Temperature")
+
+
+#daily avg - year only 
+TS_summary_annual <- df_avg %>%
+   filter( year != 2023) %>%
+  group_by(year, season ) %>%
+  summarise(
+    total_records = n(),
+    observed_count = sum(TS_3_gapfilled_flag == "observed", na.rm = TRUE),
+    gapfilled_count = sum(TS_3_gapfilled_flag == "gapfilled", na.rm = TRUE),
+    missing_count = sum(is.na(TS_3_gapfilled)),
+    observed_percent = round((observed_count / total_records) * 100, 1),
+    gapfilled_percent = round((gapfilled_count / total_records) * 100, 1),
+    missing_percent = round((missing_count / total_records) * 100, 1)
+  ) %>%
+  mutate(variable = "Soil_Temperature")
+
+```
+
+#Add % gapfilled (from HH datasets) to seasonal and annual averages table - all SWC
+
+```{r}
+# Join the season, year datasets, adding only the gapfilled_percent column 
+cal_seasonal_budgets_with_gapfill <- seasonal_budgets %>%
+  left_join(TA_summaryHH %>% select(year, season, TA_gapfill_percent = gapfilled_percent), 
+            by = c("year", "season")) %>%
+   left_join(TS_summaryHH %>% select(year, season, TS3_gapfill_percent = gapfilled_percent), 
+            by = c("year", "season"))
+
+# Check the result
+print(cal_seasonal_budgets_with_gapfill)
+
+
+# Join the annual datasets, adding only the gapfilled_percent column
+cal_annual_budgets_with_gapfill <- seasonal_budgets %>%
+  left_join(TA_summaryHH_annual %>% select(year, TA_gapfill_percent = gapfilled_percent), 
+            by = c("year")) %>%
+   left_join(TS_summaryHH_annual %>% select(year, TS3_gapfill_percent = gapfilled_percent), 
+            by = c("year"))
+
+# Check the result
+print(cal_annual_budgets_with_gapfill)
+
+
+# ~~~~~~~~~~~~~Add to formatted tables ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#Annual 
+# Join the annual datasets, adding only the gapfilled_percent column
+cal_annual_budgets_formatted2 <- cal_annual_budgets_formatted %>%
+  left_join(TA_summaryHH_annual %>% select(year, TA_gapfill_percent = gapfilled_percent), 
+            by = c("year")) %>%
+   left_join(TS_summaryHH_annual %>% select(year, TS3_gapfill_percent = gapfilled_percent), 
+             by = c("year"))
+
+# Check the result
+print(cal_annual_budgets_formatted2)
+
+
+#Seasonal 
+
+# Join the seasonal datasets, adding only the gapfilled_percent column
+cal_seasonal_budgets_formatted2 <- cal_seasonal_budgets_formatted %>%
+  left_join(TA_summaryHH %>% select(year, season, TA_gapfill_percent = gapfilled_percent), 
+            by = c("year", "season")) %>%
+   left_join(TS_summaryHH %>% select(year, season, TS3_gapfill_percent = gapfilled_percent), 
+            by = c("year", "season"))
+
+# Check the result
+print(cal_seasonal_budgets_formatted2)
+
+```
+
+
+
+# Save to Excel
+```{r}
+#annual 
+write_xlsx(cal_annual_budgets_formatted2, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/cal_year_annual_budgetsGF_formatted.xlsx")
+
+#seasonal 
+write_xlsx(cal_seasonal_budgets_formatted2, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/cal_year_seasonal_budgetsGF_formatted.xlsx")
+
+```
+
+#Winter adjustments based on proportions from 2018-2019 winter 
+
+#Winter adj based on daily mean flux of growing season 
+
+#FCH4 - daily mean winter adj 
+
+#based on 2019 dailg avg growing season fluxes, winter daily avg CH4 flux can be ~44% of growing season daily avg flux (0.445) --> multiply winter daily avg fluxes by 0.445 & re-calc the daily avg CH4 flux to get an adjusted potential winter daily avg flux 
+
+```{r}
+# CH4 in nano-moles of CH4/m^2/s)
+#Net CH4 Flux - gapfilled
+
+# Calculate 0.445 (~44%) of daily average CH4 flux (FCH4_F) during growing season season with standard error
+
+seasonal_FCH4_summary_gf_winteradjCH4 <- df_avg %>%
+  filter(season == "Growing Season") %>%
+  group_by(year, season) %>%
+  summarize(
+    mean_flux = mean(FCH4_F*0.445, na.rm = TRUE),
+    se_flux = sd(FCH4_F*0.445, na.rm = TRUE)/sqrt(sum(!is.na(FCH4_F))),
+    n_days = n()  # number of days per season
+  )
+
+#renaming the ~44% of growing season avg variable name 
+seasonal_FCH4_summary_gf_winteradjCH4$season[seasonal_FCH4_summary_gf_winteradjCH4$season=="Growing Season"] <- "Winter Adj FCHF DailyAvg"
+
+
+seasonal_FCH4_summary_gf_winteradjCH4 
+
+# Format the results with mean ± SE
+seasonal_FCH4_summary_gf_winteradjCH4_formatted <- seasonal_FCH4_summary_gf_winteradjCH4 %>%
+  mutate(
+    flux = sprintf("%.2f ± %.2f", mean_flux, se_flux)
+  ) %>%
+  select(season, flux)
+         
+seasonal_FCH4_summary_gf_winteradjCH4_formatted
+```
+
+#save table 
+```{r}
+# # Save to Excel
+library(writexl)
+write_xlsx(seasonal_FCH4_summary_gf_winteradjCH4_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteradj_dailyAvg_FCH4_summary_gf.xlsx")
+
+```
+
+# NEE - daily flux winter-adj
+
+#based on 2019 dailg avg growing season fluxes, winter daily avg CO2 flux can be ~47% of growing season daily avg flux (0.473) --> multiply winter daily avg fluxes by 0.473 & re-calc the daily avg flux to get an adjusted potential winter daily avg flux 
+
+```{r}
+#FC in umol/m2/s
+
+# Calculate 0.473 (~47%) of daily average daily NEE (FC_F) during growing season season with standard error
+
+seasonal_NEE_summary_gf_winteradjNEE <- df_avg %>%
+  filter(season == "Growing Season") %>%
+  group_by(year, season) %>%
+  summarize(
+    mean_flux = abs(mean(FC_F*0.473, na.rm = TRUE)),
+    se_flux = sd(FC_F*0.473, na.rm = TRUE)/sqrt(sum(!is.na(FC_F))),
+    n_days = n()  # number of days per season
+  )
+
+#renaming the ~47% of growing season avg variable name 
+seasonal_NEE_summary_gf_winteradjNEE$season[seasonal_NEE_summary_gf_winteradjNEE$season=="Growing Season"] <- "Winter Adj NEE DailyAvg"
+
+
+seasonal_NEE_summary_gf_winteradjNEE 
+
+# Format the results with mean ± SE
+seasonal_NEE_summary_gf_winteradjNEE_formatted <- seasonal_NEE_summary_gf_winteradjNEE  %>%
+  mutate(
+    flux = sprintf("%.2f ± %.2f", mean_flux, se_flux)
+  ) %>%
+  select(season, flux)
+         
+seasonal_NEE_summary_gf_winteradjNEE_formatted
+```
+
+#save table 
+```{r}
+# # Save to Excel
+# library(writexl)
+write_xlsx(seasonal_NEE_summary_gf_winteradjNEE_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteradj_dailyAvg_NEE_summary_gf.xlsx")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#=========================
+
+#Cal year 
+
+```{r}
+# Seasonal Trends Faceted by Season - All Variables
+
+library(ggplot2)
+library(dplyr)
+
+# Prepare seasonal summaries for all variables (2017-2022)
+seasonal_summary_all <- df_avg %>%
+ # filter(winter_year >= 2017 & winter_year <= 2022) %>%
+group_by(winter_year, season) %>%
+  summarise(
+    # ERA5 GF Air temperature (gap-filled)
+    TA_gapfilled_mean = mean(TA_gapfilled, na.rm = TRUE),
+    TA_gapfilled_se = sd(TA_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TA_gapfilled))),
+    
+    # measured Air temperature 
+    TA_mean = mean(TA, na.rm = TRUE),
+    TA_se = sd(TA, na.rm = TRUE) / sqrt(sum(!is.na(TA))),
+    
+    # ERA5 GF Soil temperature (gap-filled only)
+    TS_3_gapfilled_mean = mean(TS_3_gapfilled, na.rm = TRUE),
+    TS_3_gapfilled_se = sd(TS_3_gapfilled, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_gapfilled))),
+    
+    # Measured Soil temperature 
+    TS_3_mean = mean(TS_3_1_1, na.rm = TRUE),
+    TS_3_se = sd(TS_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(TS_3_1_1))),
+    
+    # Soil moisture
+    # SWC_3_mean = mean(SWC_3_1_1, na.rm = TRUE),
+    # SWC_3_se = sd(SWC_3_1_1, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_1_1))),
+    
+    # Soil moisture - unfrozen, excluding winter and when soil temp is <= 2 deg
+    SWC_3_nf_mean = mean(SWC_3_nf, na.rm = TRUE),
+    SWC_3_nf_se = sd(SWC_3_nf, na.rm = TRUE) / sqrt(sum(!is.na(SWC_3_nf))),
+    
+    # VPD
+    VPD_mean = mean(VPD, na.rm = TRUE),
+    VPD_se = sd(VPD, na.rm = TRUE) / sqrt(sum(!is.na(VPD))),
+    
+    # RH - relative humidity 
+    RH_mean = mean(RH, na.rm = TRUE),
+    RH_se = sd(RH, na.rm = TRUE) / sqrt(sum(!is.na(RH))),
+    
+    # Sensible heat
+    H_mean = mean(H, na.rm = TRUE),
+    H_se = sd(H, na.rm = TRUE) / sqrt(sum(!is.na(H))),
+    
+    # Latent heat
+    LE_mean = mean(LE, na.rm = TRUE),
+    LE_se = sd(LE, na.rm = TRUE) / sqrt(sum(!is.na(LE))),
+    
+    # Ground heat
+    G_mean = mean(G_1_1_1, na.rm = TRUE),
+    G_se = sd(G_1_1_1, na.rm = TRUE) / sqrt(sum(!is.na(G_1_1_1))),
+    
+    
+    
+    .groups = 'drop'
+  )
+
+# Define consistent year colors
+winteryear_colors <- c("2017" = "#E41A1C",  # Red
+                 "2018" = "#377EB8",  # Blue
+                 "2019" = "#4DAF4A",  # Green
+                 "2020" = "#984EA3",  # Purple
+                 "2021" = "#FF7F00",  # Orange
+                 "2022" = "#A65628")  # Brown
+
+# Convert year to factor for consistent color mapping
+seasonal_summary_all$winteryear_factor <- as.factor(seasonal_summary_all$winter_year)
+```
+
+
+
+# %gapfill of other met variables 
+```{r}
+gapfill_summary <- df_avg %>%
+  # Just group directly by winter_year (which already exists!)
+  group_by(winter_year, season) %>%
+  summarise(
+    # Total days 
+    total_days = n(),
+    
+    
+    #Air temp
+    VPD_measured = sum(!is.na(VPD)),
+    VPD_missing = sum(is.na(VPD)),
+    VPD_pct_missing = round((VPD_missing / total_days) * 100, 1),
+    VPD_pct_coverage = round((VPD_measured / total_days) * 100, 1),
+    
+    #Soil temp
+    VPD_measured = sum(!is.na(VPD)),
+    VPD_missing = sum(is.na(VPD)),
+    VPD_pct_missing = round((VPD_missing / total_days) * 100, 1),
+    VPD_pct_coverage = round((VPD_measured / total_days) * 100, 1),
+    
+    
+  #SWC_nf (SWC above 2degC)
+    SWC_nf_measured = sum(!is.na(SWC_3_nf)),
+    SWC_nf_missing = sum(is.na(SWC_3_nf)),
+    SWC_nf_pct_missing = round((SWC_nf_missing / total_days) * 100, 1),
+    SWC_nf_pct_coverage = round((SWC_nf_measured / total_days) * 100, 1),
+  
+    #VPD
+    VPD_measured = sum(!is.na(VPD)),
+    VPD_missing = sum(is.na(VPD)),
+    VPD_pct_missing = round((VPD_missing / total_days) * 100, 1),
+    VPD_pct_coverage = round((VPD_measured / total_days) * 100, 1),
+  
+      #RH
+    RH_measured = sum(!is.na(RH)),
+    RH_missing = sum(is.na(RH)),
+    RH_pct_missing = round((RH_missing / total_days) * 100, 1),
+    RH_pct_coverage = round((RH_measured / total_days) * 100, 1),
+  
+     #H
+    H_measured = sum(!is.na(H)),
+    H_missing = sum(is.na(H)),
+    H_pct_missing = round((H_missing / total_days) * 100, 1),
+    H_pct_coverage = round((H_measured / total_days) * 100, 1),
+  
+     #LE
+    LE_measured = sum(!is.na(LE)),
+    LE_missing = sum(is.na(LE)),
+    LE_pct_missing = round((LE_missing / total_days) * 100, 1),
+    LE_pct_coverage = round((LE_measured / total_days) * 100, 1),
+  
+      #G
+    G_1_1_1_measured = sum(!is.na(G_1_1_1)),
+    G_1_1_1_missing = sum(is.na(G_1_1_1)),
+    G_1_1_1_pct_missing = round((G_1_1_1_missing / total_days) * 100, 1),
+    G_1_1_1_pct_coverage = round((G_1_1_1_measured / total_days) * 100, 1),
+    
+    
+    
+    .groups = "drop"
+  ) 
+
+
+# Display summary
+print(gapfill_summary)
+
+#only % coverage / % missing 
+gapfill_summary2 <- gapfill_summary %>%
+  select(
+    winter_year,
+         season,
+         total_days,
+        # ends_with("pct_missing"), 
+         ends_with("pct_coverage")
+  )
+
+gapfill_summary2
+
+```
+
+```{r}
+#full summary  
+write_xlsx(gapfill_summary, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_met_vars_data_coverage.xlsx")
+
+#full summary  
+write_xlsx(gapfill_summary2, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_met_vars_gapfill_pct.xlsx")
+
+```
+
+
+#Make formatted table of seasonal means and % coverage of other met variables 
+```{r}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+
+# ============================================================================
+# COMBINE SEASONAL MEANS WITH DATA COVERAGE
+# ============================================================================
+
+# Join the two datasets
+combined_table <- seasonal_summary_all %>%
+  select(-starts_with("TA"), -starts_with("TS_3")) %>%
+  filter(winter_year != "2016") %>%
+  left_join(gapfill_summary2, by = c("winter_year", "season")) %>%
+  # Create formatted columns: "mean ± SE (coverage%)"
+  mutate(
+
+    # Soil Moisture (non-frozen)
+    `SWC_3_nf` = sprintf("%.2f ± %.2f (%.1f%%)", 
+                         SWC_3_nf_mean, SWC_3_nf_se, SWC_nf_pct_coverage),
+    
+    # VPD
+    `VPD` = sprintf("%.2f ± %.2f (%.1f%%)", 
+                    VPD_mean, VPD_se, VPD_pct_coverage),
+    
+    # Relative Humidity
+    `RH` = sprintf("%.2f ± %.2f (%.1f%%)", 
+                   RH_mean, RH_se, RH_pct_coverage),
+    
+    # Sensible Heat
+    `H` = sprintf("%.2f ± %.2f (%.1f%%)", 
+                  H_mean, H_se, H_pct_coverage),
+    
+    # Latent Heat
+    `LE` = sprintf("%.2f ± %.2f (%.1f%%)", 
+                   LE_mean, LE_se, LE_pct_coverage),
+    
+    # Ground Heat Flux
+    `G` = sprintf("%.2f ± %.2f (%.1f%%)", 
+                  G_mean, G_se, G_1_1_1_pct_coverage)
+  ) %>%
+  # Select only the formatted columns
+  select(winter_year, season, total_days,
+                  `SWC_3_nf`, `VPD`, `RH`, `H`, `LE`, `G`)
+
+# View the table
+print(combined_table)
+
+
+# Rename columns for publication
+# pub_table <- combined_table %>%
+#   rename(
+#     `Year` = winter_year,
+#     `Season` = season,
+#     `Days` = total_days,
+#     `Air Temp GF (°C)` = TA_gapfilled,
+#     `Air Temp Meas (°C)` = TA,
+#     `Soil Temp GF (°C)` = TS_3_gapfilled,
+#     `Soil Temp Meas (°C)` = TS_3,
+#     `Soil Moisture (%)` = SWC_3_nf,
+#     `VPD (hPa)` = VPD,
+#     `RH (%)` = RH,
+#     `H (W/m²)` = H,
+#     `LE (W/m²)` = LE,
+#     `G (W/m²)` = G
+#   )
+
+
+```
+
+#save table of mean met vars with % data coverage
+```{r}
+# Save to Excel
+write_xlsx(combined_table, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_met_var_means_pct_coverage_formatted.xlsx")
+```
+
+# ===========================================
+
+# "Flux Year" (winter year)
+
+
+#Table: seasonal and annual total C budget & met variable tables 
+```{r}
+# Load necessary packages
+library(dplyr)
+library(lubridate)
+
+#Annual and seasonal summaries with SE 
+
+#no SE for CO2 and CH4 fluxes as these are sums **** then we calc averages with SE for the met variables 
+
+# Annual summaries with standard errors
+# Annual summaries with total C budget
+WY_annual_budgets <- df_avg %>%
+  group_by(year = winter_year) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+    mean_TS_ERA5 = mean(TS_ERA5, na.rm = TRUE),
+    se_TS_ERA5 = sd(TS_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TS_ERA5))),
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+    mean_TA_ERA5 = mean(TA_ERA5, na.rm = TRUE),
+    se_TA_ERA5 = sd(TA_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TA_ERA5))),
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+   se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled))))
+      )
+
+print(WY_annual_budgets)
+
+# Seasonal summaries with total C budget
+WY_seasonal_budgets <- df_avg %>%
+  group_by(year = winter_year, season) %>%
+  filter(year != 2023) %>% #removing 2023 due to incomplete year data 
+  summarize(
+    CO2_budget = sum(FC_F * (60*60*24*(1/1000000)*12), na.rm = TRUE),
+    CH4_budget = sum(FCH4_F * (60*60*24*(1/1000000000)*12), na.rm = TRUE),
+    total_C_budget = CO2_budget + CH4_budget,  # Adding total C budget
+    mean_soil_temp = mean(TS_3_1_1, na.rm = TRUE),
+    se_soil_temp = sd(TS_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(TS_3_1_1))),
+    mean_TS_ERA5 = mean(TS_ERA5, na.rm = TRUE),
+    se_TS_ERA5 = sd(TS_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TS_ERA5))),
+    mean_soil_moisture = mean(SWC_3_1_1, na.rm = TRUE),
+    se_soil_moisture = sd(SWC_3_1_1, na.rm = TRUE)/sqrt(sum(!is.na(SWC_3_1_1))),
+    mean_TA = mean(TA, na.rm = TRUE),
+    se_TA = sd(TA, na.rm = TRUE)/sqrt(sum(!is.na(TA))),
+    mean_TA_ERA5 = mean(TA_ERA5, na.rm = TRUE),
+    se_TA_ERA5 = sd(TA_ERA5, na.rm = TRUE)/sqrt(sum(!is.na(TA_ERA5))),
+    mean_TA_gapfilled   = mean(TA_gapfilled, na.rm = TRUE),  
+    se_TA_gapfilled   = sd(TA_gapfilled, na.rm = TRUE)/sqrt(sum(!is.na(TA_gapfilled))), 
+    mean_TS_3_gapfilled = mean(TS_3_gapfilled, na.rm = TRUE), 
+    se_TS_3_gapfilled = sd(TS_3_gapfilled, na.rm = TRUE /sqrt(sum(!is.na(TS_3_gapfilled)))),
+    days = n()
+  )
+
+
+print(WY_seasonal_budgets)
+
+
+```
+
+
+# cal year seasonal pub table 
+```{r}
+# Create a new table with combined mean ± SE format
+WY_seasonal_budgets_formatted <- WY_seasonal_budgets %>%
+  mutate(
+    soil_temp = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    soil_moisture = sprintf("%.2f ± %.2f", mean_soil_moisture, se_soil_moisture),
+    air_temp = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    TS_ERA5 = sprintf("%.2f ± %.2f", mean_TS_ERA5, se_TS_ERA5),
+    TA_ERA5 = sprintf("%.2f ± %.2f", mean_TA_ERA5, se_TA_ERA5),
+    TA_GF = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    TS3_GF = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+  ) %>%
+  dplyr::select(year, season, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5, TA_GF, TS3_GF, days)
+
+WY_seasonal_budgets_formatted
+
+```
+
+
+#save table 
+```{r}
+# Save to Excel
+write_xlsx(WY_seasonal_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_seasonal_budgets_formatted.xlsx")
+```
+
+#Winter year annual pub table 
+```{r}
+#Annual budgets 
+# Create a new table with combined mean ± SE format
+WY_annual_budgets_formatted <- WY_annual_budgets %>%
+  mutate(
+    soil_temp = sprintf("%.2f ± %.2f", mean_soil_temp, se_soil_temp),
+    soil_moisture = sprintf("%.2f ± %.2f", mean_soil_moisture, se_soil_moisture),
+    air_temp = sprintf("%.2f ± %.2f", mean_TA, se_TA),
+    TS_ERA5 = sprintf("%.2f ± %.2f", mean_TS_ERA5, se_TS_ERA5),
+    TA_ERA5 = sprintf("%.2f ± %.2f", mean_TA_ERA5, se_TA_ERA5),
+    TA_GF = sprintf("%.2f ± %.2f", mean_TA_gapfilled, se_TA_gapfilled),
+    TS3_GF = sprintf("%.2f ± %.2f", mean_TS_3_gapfilled, se_TS_3_gapfilled),
+  ) %>%
+  dplyr::select(year, CO2_budget, CH4_budget, total_C_budget, soil_temp, soil_moisture, air_temp, TS_ERA5, TA_ERA5, TA_GF, TS3_GF)
+
+WY_annual_budgets_formatted 
+```
+
+```{r}
+# Save to Excel
+write_xlsx(WY_annual_budgets_formatted, "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/winteryear_annual_budgets_formatted.xlsx")
+
+```
